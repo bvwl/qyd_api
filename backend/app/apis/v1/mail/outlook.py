@@ -88,6 +88,8 @@ async def check_email_status(
         update_time_end: str | int | None = Query(
             None, description='更新时间结束 (支持 YYYY-MM-DD / YYYY-MM-DD HH:mm:ss / 13位时间戳)'),
 ):
+    if not any([ create_time_start, create_time_end, update_time_start, update_time_end]):
+        return BaseOut(message="请选择时间范围")
     background_tasks.add_task(check_and_update_emails_logic, status, email_type, create_time_start, create_time_end,
                               update_time_start, update_time_end)
     return BaseOut(message="开始检查邮箱状态")
@@ -108,6 +110,7 @@ async def check_and_update_emails_logic(
 ) -> int:
     emails = await email_info_crud.get_multi(
         status=status,
+        limit=10000,
         email_type=email_type,
         create_time_start=parse_time(create_time_start),
         create_time_end=parse_time(create_time_end, True),

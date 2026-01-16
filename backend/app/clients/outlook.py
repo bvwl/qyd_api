@@ -2,6 +2,7 @@ import time
 import base64
 import hashlib
 import os
+import traceback
 from urllib.parse import urlencode, parse_qs, urlparse
 from typing import Tuple, Dict, List
 from pydantic import BaseModel, Field
@@ -70,7 +71,8 @@ class AzureAuthManager(Req):
         self.proxy = None
         self.client_id = None
         self.access_token = None
-        self.refresh_token = None
+        # 使用 refresh_token_value 存储实际的 refresh_token，避免与方法名冲突
+        self.refresh_token_value = None
 
     # 读取配置
     async def read_config(self) -> int:
@@ -93,7 +95,7 @@ class AzureAuthManager(Req):
         if mail_info:
             self.client_id = mail_info.client_id
             self.access_token = mail_info.access_token
-            self.refresh_token = mail_info.refresh_token
+            self.refresh_token_value = mail_info.refresh_token
             server = await mail_info.server_info
             if server:
                 host = server.domain or server.host
@@ -104,9 +106,9 @@ class AzureAuthManager(Req):
                 elif 30000 <= port < 40000:
                     self.proxy = f"socks5://cqrxy:Zpaily88@{host}:{port}"
 
-        if self.client_id and not self.access_token and not self.refresh_token:
+        if self.client_id and not self.access_token and not self.refresh_token_value:
             return 2
-        elif not self.client_id and not self.access_token and not self.refresh_token:
+        elif not self.client_id and not self.access_token and not self.refresh_token_value:
             return 0
         return 1
 
@@ -187,26 +189,26 @@ class AzureAuthManager(Req):
             if "error" in qs:
                 error_code = qs["error"][0]
                 error_desc = qs.get("error_description", ["未知错误"])[0]
-                logger.error(f"❌ 授权失败: {error_code} - {error_desc}")
+                logger.error(f"[{self.email}] ❌ 授权失败: {error_code} - {error_desc}")
                 return 0
 
             if "code" not in qs:
-                logger.error("\n❌ 错误: 未找到授权码。请确认复制了完整的跳转链接。")
+                logger.error(f"\n[{self.email}] ❌ 错误: 未找到授权码。请确认复制了完整的跳转链接。")
                 return 0
 
             code = qs["code"][0]
         except Exception as e:
             # 简单的错误提示优化
             if "invalid_scope" in str(e):
-                logger.error("\n❌ 错误: 权限范围无效。这通常是因为该账号类型不支持某些请求的权限。")
-            logger.error(f"❌ 解析 URL 失败: {e}")
+                logger.error(f"\n[{self.email}] ❌ 错误: 权限范围无效。这通常是因为该账号类型不支持某些请求的权限。")
+            logger.error(f"[{self.email}] ❌ 解析 URL 失败: {e}")
             return 0
 
-        logger.info("已获取授权码，正在请求 Token...")
+        logger.info(f"[{self.email}] 已获取授权码，正在请求 Token...")
 
         bol = await self.read_config()
         if bol == 0:
-            logger.error("未找到授权信息")
+            logger.error(f"[{self.email}] 未找到授权信息")
             return 0
             
         # 使用 Code 换取 Token
@@ -229,7 +231,7 @@ class AzureAuthManager(Req):
         if status_code >= 500:
             raise Exception(f"请求失败: {status_code}")
         elif status_code != 200:
-            logger.error(f"❌ 响应状态码: {status_code}")
+            logger.error(f"[{self.email}] ❌ 响应状态码: {status_code}")
             return 0
             
         # 更新数据库
@@ -254,17 +256,17 @@ class AzureAuthManager(Req):
         当 Access Token 过期 (通常 1 小时) 时调用。
         :return: 1 (成功) 或 0 (失败)
         """
-        bol = await self.read_config() # 确保配置已加载，此处应 await
-        if bol != 1:
-            logger.error("未找到授权信息")
+        bol = await self.read_config()
+        if bol != 1 or not self.refresh_token_value:
+            logger.error(f"[{self.email}] 未找到授权信息")
             return 0
             
-        logger.info("Token 即将过期或已过期，正在刷新...")
+        logger.info(f"[{self.email}] Token 即将过期或已过期，正在刷新...")
         token_url = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
         data = {
             "client_id": self.client_id,
             "scope": " ".join(self.SCOPES),
-            "refresh_token": self.refresh_token,
+            "refresh_token": self.refresh_token_value,
             "grant_type": "refresh_token", # 刷新令牌模式
         }
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
@@ -276,20 +278,20 @@ class AzureAuthManager(Req):
         if status_code >= 500:
             raise Exception(f"请求失败: {status_code}")
         elif status_code != 200:
-            logger.error(f"❌ 响应状态码: {status_code}")
+            logger.error(f"[{self.email}] ❌ 响应状态码: {status_code}")
             return 0
             
-        logger.success("✅ Token 刷新成功！")
+        logger.success(f"[{self.email}] ✅ Token 刷新成功！")
         access_token = content.get("access_token")
         refresh_token = content.get("refresh_token")
         
         # 更新内存和数据库
         self.access_token = access_token
-        self.refresh_token = refresh_token or self.refresh_token
+        self.refresh_token_value = refresh_token or self.refresh_token_value
         email_info = await EmailInfo.get_or_none(email=self.email)
         if email_info:
             email_info.access_token = access_token
-            email_info.refresh_token = refresh_token or self.refresh_token
+            email_info.refresh_token = refresh_token or self.refresh_token_value
             await email_info.save()
         return 1
 
@@ -314,7 +316,7 @@ class AzureAuthManager(Req):
         if status_code >= 500:
             raise Exception(f"请求失败: {status_code}")
         if status_code != 200:
-            logger.error(f"❌ 响应状态码: {status_code}")
+            logger.error(f"[{self.email}] ❌ 响应状态码: {status_code}")
             return 0
         return content
 
@@ -340,7 +342,7 @@ class AzureAuthManager(Req):
         if status_code >= 500:
             raise Exception(f"请求失败: {status_code}")
         if status_code != 200:
-            logger.error(f"❌ 响应状态码: {status_code}")
+            logger.error(f"[{self.email}] ❌ 响应状态码: {status_code}")
             return 0
         return content
 
@@ -361,7 +363,7 @@ class AzureAuthManager(Req):
         if status_code >= 500:
             raise Exception(f"请求失败: {status_code}")
         elif status_code != 201:
-            logger.error(f"❌ 响应状态码: {status_code}")
+            logger.error(f"[{self.email}] ❌ 响应状态码: {status_code}")
             return 0
         return 1
 
@@ -406,9 +408,9 @@ class AzureAuthManager(Req):
         if status_code >= 500:
             raise Exception(f"请求失败: {status_code}")
         elif status_code != 202:
-            logger.error(f"❌ 响应状态码: {status_code}")
+            logger.error(f"[{self.email}] ❌ 响应状态码: {status_code}")
             return 0
-        logger.success("✅ 邮件发送成功！")
+        logger.success(f"[{self.email}] ✅ 邮件发送成功！")
         return 1
 
     # 获取邮件主逻辑
@@ -429,45 +431,51 @@ class AzureAuthManager(Req):
         :param top: API 单次查询的邮件数量
         :return: 邮件列表 或 0 (无匹配)
         """
-        # 加载环境
-        await self.read_config()
+        try:
+            # 加载环境
+            await self.read_config()
 
-        # 刷新令牌
-        if not await self.refresh_token():
-            return 0
-
-        # 检查垃圾邮件
-        junk_msgs = await self.get_messages(folder_id='junkemail', top=top)
-        if junk_msgs and 'value' in junk_msgs:
-            for msg in junk_msgs['value']:
-                logger.info(msg['subject'])
-                # 移动到收件箱
-                bol = await self.move_message(msg['id'], 'inbox')
-                if bol:
-                    logger.info(f"[{self.email}] 移动邮件 {msg['id']} 成功")
-                else:
-                    logger.info(f"[{self.email}] 移动邮件 {msg['id']} 失败")
-
-        # 获取收件箱邮件
-        out_list = []
-        inbox_msgs = await self.get_messages(folder_id='inbox', top=top)
-        if inbox_msgs and 'value' in inbox_msgs:
-            for i, msg in enumerate(inbox_msgs["value"], 1):
-                from_addr = msg.get('from', {}).get('emailAddress', {}).get('address')
-                content = msg.get('body', {}).get('content', '')
-                # 匹配发件人
-                if from_email in from_addr:
-                    out_list.append({
-                        "from_email": from_addr,
-                        'title': msg.get('subject'),
-                        "content": content
-                    })
-                if i >= num:
-                    break
-            if not out_list:
+            # 刷新令牌
+            if not await self.refresh_token():
                 return 0
-            return out_list
-        return 0
+
+            # 检查垃圾邮件
+            junk_msgs = await self.get_messages(folder_id='junkemail', top=top)
+            # 防御：只在返回为 dict 且包含 value 时再遍历
+            if isinstance(junk_msgs, dict) and 'value' in junk_msgs:
+                for msg in junk_msgs.get('value', []):
+                    logger.info(f"[{self.email}] {msg.get('subject')}")
+                    # 移动到收件箱
+                    bol = await self.move_message(msg.get('id'), 'inbox')
+                    if bol:
+                        logger.info(f"[{self.email}] 移动邮件 {msg.get('id')} 成功")
+                    else:
+                        logger.info(f"[{self.email}] 移动邮件 {msg.get('id')} 失败")
+
+            # 获取收件箱邮件
+            out_list = []
+            inbox_msgs = await self.get_messages(folder_id='inbox', top=top)
+            if isinstance(inbox_msgs, dict) and 'value' in inbox_msgs:
+                for i, msg in enumerate(inbox_msgs.get("value", []), 1):
+                    from_addr = msg.get('from', {}).get('emailAddress', {}).get('address')
+                    content = msg.get('body', {}).get('content', '')
+                    # 匹配发件人
+                    if from_email in (from_addr or ''):
+                        out_list.append({
+                            "from_email": from_addr,
+                            'title': msg.get('subject'),
+                            "content": content
+                        })
+                    if i >= num:
+                        break
+                if not out_list:
+                    return 0
+                return out_list
+            return 0
+        except Exception as e:
+            # 打印完整堆栈，便于定位类似 'str' object is not callable 之类的错误
+            logger.error(f"[{self.email}] get_emails_main 发生异常: {e}\n{traceback.format_exc()}")
+            return 0
 
     # 发送邮件主逻辑
     async def send_email_main(self, to_email: str, subject: str, content: str, content_type: str = 'Text') -> int:
