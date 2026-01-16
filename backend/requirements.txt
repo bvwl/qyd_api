@@ -1,0 +1,26 @@
+aerich
+tomlkit
+aiohttp
+aiomysql
+APScheduler
+fastapi
+# numpy
+tenacity
+tortoise-orm
+uvicorn
+pycryptodome
+curl_cffi
+fake_useragent
+aiohttp_socks
+pynacl
+eth-account
+base58
+aioredis
+redis
+httpx
+loguru
+uvloop
+cryptography
+uvicorn[standard]
+psutil
+DrissionPage

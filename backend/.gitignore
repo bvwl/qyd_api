@@ -1,0 +1,10 @@
+.env
+.trae
+.idea
+__pycache__
+logs
+.DS_Store
+.vscode
+*baiduyun*
+*.pyc
+
