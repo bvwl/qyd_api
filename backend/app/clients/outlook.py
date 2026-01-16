@@ -256,6 +256,9 @@ class AzureAuthManager(Req):
         当 Access Token 过期 (通常 1 小时) 时调用。
         :return: 1 (成功) 或 0 (失败)
         """
+        # 初始化重试计数（从装饰器获取当前重试次数）
+        retry_count = getattr(self, '_async_retry_count', 0)
+        
         bol = await self.read_config()
         if bol != 1 or not self.refresh_token_value:
             logger.error(f"[{self.email}] 未找到授权信息")
@@ -276,7 +279,14 @@ class AzureAuthManager(Req):
         content = res.get("content")
         
         if status_code >= 500:
-            raise Exception(f"请求失败: {status_code}")
+            # 重试次数超过2次时，设置邮箱状态为5
+            if retry_count >= 2:
+                logger.error(f"[{self.email}] 刷新 Token 连续{retry_count+1}次失败，设置状态为5")
+                email_info = await EmailInfo.get_or_none(email=self.email)
+                if email_info:
+                    email_info.status = 5
+                    await email_info.save()
+            raise Exception(f"[{self.email}] 请求失败: {status_code}")
         elif status_code != 200:
             logger.error(f"[{self.email}] ❌ 响应状态码: {status_code}")
             return 0

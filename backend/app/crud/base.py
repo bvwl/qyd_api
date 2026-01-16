@@ -2,6 +2,7 @@ from typing import Generic, Type, TypeVar, List, Dict, Any, Optional, Iterable
 from uuid import UUID
 from tortoise.models import Model
 from tortoise.queryset import QuerySet
+from fastapi import HTTPException
 
 # 限定模型类型为 Tortoise Model
 ModelType = TypeVar("ModelType", bound=Model)
@@ -142,7 +143,10 @@ class CRUDBase(Generic[ModelType]):
         query = self._build_query(**kwargs)
         # 排序 + 分页
         query = query.order_by(order_by).limit(limit).offset((page - 1) * limit)
-        return await query
+        result = await query
+        if not result:
+            raise HTTPException(status_code=404, detail="未找到数据")
+        return result
 
     async def get_count(self, **kwargs) -> int:
         """

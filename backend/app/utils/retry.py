@@ -18,6 +18,13 @@ def retry(max_retries: int = 3, delay: float = 1.0, backoff: float = 1.0):
             retries = 0
             current_delay = delay
             while retries < max_retries:
+                # 尝试将当前重试次数注入到 self (args[0]) 中
+                if args and hasattr(args[0], '__class__'):
+                    try:
+                        setattr(args[0], '_async_retry_count', retries)
+                    except AttributeError:
+                        pass
+                    
                 try:
                     return func(*args, **kwargs)
                 except Exception as e:
@@ -50,6 +57,13 @@ def async_retry(max_retries: int = 3, delay: float = 1.0, backoff: float = 1.0):
             retries = 0
             current_delay = delay
             while retries < max_retries:
+                # 尝试将当前重试次数注入到 self (args[0]) 中
+                if args and hasattr(args[0], '__class__'):
+                    try:
+                        setattr(args[0], '_async_retry_count', retries)
+                    except AttributeError:
+                        pass
+
                 try:
                     return await func(*args, **kwargs)  # 直接执行原始方法
                 except Exception as e:
