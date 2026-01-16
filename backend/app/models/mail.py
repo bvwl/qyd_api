@@ -1,19 +1,17 @@
-import uuid
 from tortoise import fields
-from tortoise.models import Model
+from .base import BaseModel
 
 """
-- 邮箱信息 - 邮箱号 密码 生日 辅助邮箱 辅助邮箱密码 2fa 注册国家 客户端id access_token refresh_token 代理信息 状态
+- 邮箱信息 - 邮箱号 密码 生日 辅助邮箱 辅助邮箱密码 客户端id access_token refresh_token 代理信息 状态
 - 邮箱授权 - 邮箱号 授权地址 响应地址
 """
 
 
 # 邮箱信息模型
-class EmailInfo(Model):
+class EmailInfo(BaseModel):
     """
     邮箱信息
     """
-    id = fields.UUIDField(pk=True, default=uuid.uuid4, description='ID')
     email = fields.CharField(max_length=50, index=True, unique=True, description='邮箱号')
     password = fields.CharField(max_length=50, description='密码')
     auxiliary_email = fields.CharField(max_length=50, description='辅助邮箱')
@@ -22,8 +20,6 @@ class EmailInfo(Model):
     access_token = fields.TextField(null=True, description='access_token')
     refresh_token = fields.TextField(null=True, description='refresh_token')
     status = fields.SmallIntField(default=1, index=True, description='状态(1:正常,2:异常)')
-    create_time = fields.DatetimeField(auto_now_add=True, index=True, description='创建时间')
-    update_time = fields.DatetimeField(auto_now=True, description='更新时间')
 
     # 代理信息关联ServerProxy
     server_info = fields.ForeignKeyField("models.ServerInfo", related_name="email_infos", description='代理信息',
@@ -45,19 +41,16 @@ class EmailInfo(Model):
 
 
 # 邮箱授权模型
-class EmailAuth(Model):
+class EmailAuth(BaseModel):
     """
     邮箱授权
     """
-    id = fields.UUIDField(pk=True, default=uuid.uuid4, description='ID')
     email = fields.CharField(max_length=50, index=True, description='邮箱号')
     auth_group = fields.SmallIntField(description='授权组')
     authorization_address = fields.TextField(description='授权地址')
     status = fields.SmallIntField(default=1, index=True,
                                   description='状态(1:待授权, 2:授权成功, 3:授权中, 4:授权失败)')
     back_code = fields.CharField(max_length=50, description='回调code')
-    create_time = fields.DatetimeField(auto_now_add=True, index=True, description='创建时间')
-    update_time = fields.DatetimeField(auto_now=True, description='更新时间')
 
     class Meta:
         table = "email_auth"

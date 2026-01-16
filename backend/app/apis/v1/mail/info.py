@@ -9,6 +9,25 @@ from fastapi import APIRouter, Query, Body, HTTPException, Path
 app = APIRouter()
 
 
+def _mask_items(
+        items: list[Out],
+        hide_password: bool = True,
+        hide_aux_password: bool = True,
+        hide_server_ssh_port: bool = True,
+) -> list[Out]:
+    masked_items: list[Out] = []
+    for item in items:
+        data = Out.model_validate(item)
+        if hide_password:
+            data.password = ""
+        if hide_aux_password:
+            data.auxiliary_email_password = ""
+        if hide_server_ssh_port and data.server_info is not None:
+            data.server_info.ssh_port = None
+        masked_items.append(data)
+    return masked_items
+
+
 # 创建邮箱信息
 @app.post("", response_model=Out, description='创建邮箱信息', summary='创建邮箱信息')
 async def post(item: Create = Body(..., description='创建数据')):
@@ -90,7 +109,13 @@ async def gets(
             page=page,
             limit=limit
         )
-        return OutList(message='成功', count=count, num=len(items), items=items)
+        masked_items = _mask_items(
+            [Out.model_validate(obj) for obj in items],
+            hide_password=True,
+            hide_aux_password=True,
+            hide_server_ssh_port=True,
+        )
+        return OutList(message='成功', count=count, num=len(masked_items), items=masked_items)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
