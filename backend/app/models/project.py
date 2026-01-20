@@ -59,7 +59,8 @@ class ProjectInfo(BaseModel):
         table_description = "项目信息"
         ordering = ["-create_time"]
         indexes = [
-            ("name", "status"),
+            ("status", "create_time"),  # 按状态和时间查询（最常用）
+            # name 已有 index=True，无需重复声明
         ]
 
     def __repr__(self):
@@ -83,6 +84,10 @@ class ProjectWallet(BaseModel):
         table = "project_wallet"
         table_description = "项目钱包"
         ordering = ["-create_time"]
+        indexes = [
+            ("chain", "create_time"),  # 按链和时间查询
+            ("create_time",),  # 时间范围查询
+        ]
 
     def __repr__(self):
         return f"<ProjectWallet(id={self.id})>"
@@ -116,7 +121,11 @@ class ProjectAccount(BaseModel):
         table_description = "项目账号"
         ordering = ["-create_time"]
         indexes = [
-            ("account", "status"),
+            ("project_id", "status", "account_type"),  # 按项目、状态和类型查询
+            ("status", "account_type", "create_time"),  # 按状态和类型查询
+            ("server_id", "status"),  # 按服务器和状态查询
+            ("wallet_id",),  # 按钱包查询
+            # account 已有 index=True，无需重复声明
         ]
 
     def __repr__(self):
@@ -139,6 +148,10 @@ class ProjectBalance(BaseModel):
         table = "project_balance"
         table_description = "项目余额"
         ordering = ["-create_time"]
+        indexes = [
+            ("account_id", "create_time"),  # 按账号和时间查询
+            ("create_time",),  # 时间范围查询
+        ]
 
     def __repr__(self):
         return f"<ProjectBalance(id={self.id})>"

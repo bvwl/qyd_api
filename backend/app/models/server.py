@@ -28,7 +28,8 @@ class ServerCountry(BaseModel):
         table_description = "国家信息"
         ordering = ["-create_time"]
         indexes = [
-            ("short_name", "name"),
+            ("status", "create_time"),  # 按状态和时间查询
+            # short_name 已有 index=True 和 unique=True，无需重复声明
         ]
 
     def __repr__(self):
@@ -56,6 +57,11 @@ class ServerGroup(BaseModel):
         table = "server_group"
         table_description = "分组信息"
         ordering = ["-create_time"]
+        indexes = [
+            ("country_id", "status", "create_time"),  # 按国家、状态和时间查询
+            ("status", "create_time"),  # 按状态和时间查询
+            # name 已有 index=True 和 unique=True，无需重复声明
+        ]
 
     def __repr__(self):
         return f"<Info(id={self.id},name={self.name})>"
@@ -90,8 +96,9 @@ class ServerInfo(BaseModel):
         table_description = "服务器信息"
         ordering = ["-create_time"]
         indexes = [
-            ("host", "status"),
-            ("status", "create_time"),
+            ("status", "is_sale", "create_time"),  # 按状态、销售状态和时间查询
+            ("group_id", "status"),  # 按分组和状态查询
+            # host 和 domain 已有 index=True，无需重复声明
         ]
 
     def __repr__(self):
@@ -122,7 +129,8 @@ class ServerAccount(BaseModel):
         table_description = "服务器账号"
         ordering = ["-create_time"]
         indexes = [
-            ("username", "create_time"),
+            ("user_id", "create_time"),  # 按用户和时间查询
+            # username 已有 index=True，无需重复声明
         ]
 
     def __repr__(self):

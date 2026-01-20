@@ -24,3 +24,7 @@ cryptography
 uvicorn[standard]
 psutil
 DrissionPage
+pytest
+pytest-asyncio
+requests
+concurrent-log-handler

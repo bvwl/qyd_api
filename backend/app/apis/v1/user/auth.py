@@ -40,14 +40,12 @@ def _hash_password(password: str) -> str:
 
 async def _create_token_for_user(user_id: UUID) -> str:
     from app.schemas.user.token import Create as TokenCreate
+    from app.models.user import Status
     access_token = secrets.token_hex(16)
-    expired_at = (now_cn() + timedelta(days=7)).replace(tzinfo=None)
     token_data = TokenCreate(
         user_id=user_id,
-        access_token=access_token,
-        refresh_token=None,
-        expired_at=expired_at,
-        is_revoked=False,
+        token=access_token,
+        status=Status.OK,
     )
     await token_crud.create(token_data)
     return access_token
@@ -60,7 +58,7 @@ async def register(item: RegisterRequest = Body(..., description="注册信息")
         user_out = await user_crud.create(
             {
                 "email": item.email,
-                "password_hash": password_hash,
+                "password": password_hash,
                 "nickname": item.nickname,
                 "avatar": item.avatar,
             }
@@ -83,11 +81,10 @@ async def login(item: LoginRequest = Body(..., description="登录信息")):
         if not user:
             raise HTTPException(status_code=400, detail="邮箱或密码错误")
         password_hash = _hash_password(item.password)
-        if user.password_hash != password_hash:
+        if user.password != password_hash:
             raise HTTPException(status_code=400, detail="邮箱或密码错误")
         access_token = await _create_token_for_user(user.id)
         user_out = UserOut(
-            message="成功",
             id=user.id,
             email=user.email,
             nickname=user.nickname,

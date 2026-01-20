@@ -58,7 +58,9 @@ class UserRole(BaseModel):
         table_description = "用户角色"
         ordering = ["-create_time"]
         indexes = [
-            ("code", "description"),
+            ("code",),  # 唯一索引已存在，单独索引用于查询
+            ("name",),  # 按名称模糊查询
+            ("create_time",),  # 时间范围查询
         ]
 
     def __repr__(self):
@@ -97,7 +99,8 @@ class UserInfo(BaseModel):
         table_description = "用户信息"
         ordering = ["-create_time"]
         indexes = [
-            ("email", "status"),
+            ("status", "create_time"),  # 按状态和时间查询（常用组合）
+            ("create_time",),  # 时间范围查询
         ]
 
     def __repr__(self):
@@ -126,7 +129,9 @@ class UserToken(BaseModel):
         table_description = "用户 Token"
         ordering = ["-create_time"]
         indexes = [
-            ("user_id", "is_revoked"),
+            ("user_id", "status", "create_time"),  # 按用户和状态查询，包含时间排序
+            ("status", "create_time"),  # 按状态和时间查询
+            ("create_time",),  # 时间范围查询
         ]
 
     def __repr__(self):
@@ -156,7 +161,10 @@ class UserLog(BaseModel):
         table_description = "用户操作日志"
         ordering = ["-create_time"]
         indexes = [
-            ("user_id", "create_time"),
+            ("user_id", "create_time"),  # 按用户查询日志（最常用）
+            ("user_id", "action", "create_time"),  # 按用户和操作类型查询
+            ("action", "create_time"),  # 按操作类型查询
+            ("create_time",),  # 时间范围查询
         ]
 
     def __repr__(self):
@@ -218,8 +226,11 @@ class FrontendRoute(BaseModel):
         table_description = "前端路由/菜单"
         ordering = ["sort", "-create_time"]
         indexes = [
-            ("path", "status"),
-            ("parent_id", "sort"),
+            ("status", "parent_id", "sort"),  # 按状态和父级查询，包含排序
+            ("parent_id", "sort"),  # 按父级查询子路由（树形结构常用）
+            ("path",),  # 按路径查询
+            ("name",),  # 按名称模糊查询
+            ("create_time",),  # 时间范围查询
         ]
 
     def __repr__(self):

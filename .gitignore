@@ -1,10 +1,49 @@
+# Python
 .env
-.trae
-.idea
 __pycache__
-logs
-.DS_Store
-.vscode
-*baiduyun*
 *.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
 
+# Node.js
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+yarn.lock
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs
+*.log
+
+# Build
+dist
+dist-ssr
+*.local
+
+# Database
+*.db
+*.sqlite
+
+# Other
+.trae
+*baiduyun*

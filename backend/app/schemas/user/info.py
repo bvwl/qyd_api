@@ -51,7 +51,6 @@ class Out(Base):
     """
     用户输出模型
     """
-    message: str = Field("成功", description="提示信息")
     id: UUID = Field(..., description="ID")
 
     create_time: datetime = Field(..., description="创建时间")
@@ -60,8 +59,8 @@ class Out(Base):
     # 关联的角色列表
     roles: List[RoleBase] = Field(default_factory=list, description="角色列表")
     
-    # 关联的项目列表
-    projects: List["ProjectInfoBase"] = Field(default_factory=list, description="项目列表")
+    # 关联的项目列表 - 移除以避免循环引用
+    # projects: List["ProjectInfoBase"] = Field(default_factory=list, description="项目列表")
 
     @field_serializer("create_time", "update_time")
     def format_datetime(self, dt: datetime) -> str:

@@ -39,8 +39,11 @@ class EmailInfo(BaseModel):
         table_description = "邮箱信息"
         ordering = ["-create_time"]
         indexes = [
-            ("email", "status"),
-            ("status", "create_time"),
+            ("status", "server_id", "create_time"),  # 按状态、服务器和时间查询（EmailType 过滤常用）
+            ("status", "create_time"),  # 按状态和时间查询
+            ("server_id", "status"),  # 按服务器和状态查询
+            # email 已有 index=True 和 unique=True，无需重复声明
+            ("update_time",),  # 更新时间查询（自动检查邮箱状态时使用）
         ]
 
     def __repr__(self):

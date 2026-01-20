@@ -70,6 +70,9 @@ class CRUD:
         # 使用 prefetch_related 预加载关联数据（包括嵌套关联）
         res = await query.prefetch_related('group', 'group__country')
         
+        if not res:
+            raise HTTPException(status_code=404, detail='未查询到数据')
+        
         num = len(res)
         items = [Out.model_validate(obj) for obj in res]
         return OutList(message='成功', count=count, num=num, items=items)

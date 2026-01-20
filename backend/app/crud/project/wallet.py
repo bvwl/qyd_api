@@ -64,6 +64,9 @@ class CRUD:
         # ProjectWallet 没有关联字段，不需要 prefetch_related
         res = await query
         
+        if not res:
+            raise HTTPException(status_code=404, detail='未查询到数据')
+        
         num = len(res)
         items = [Out.model_validate(obj) for obj in res]
         return OutList(message='成功', count=count, num=num, items=items)

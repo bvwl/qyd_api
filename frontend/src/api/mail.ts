@@ -1,0 +1,70 @@
+import api from './index'
+import type { EmailInfo, ApiResponse, PaginationParams, EmailType } from '@/types'
+
+// 邮箱信息
+export const getEmailList = (params?: PaginationParams & { 
+  email?: string
+  status?: number
+  email_type?: EmailType
+  server_id?: string
+}) => {
+  return api.get<any, ApiResponse<EmailInfo>>('/v1/mail/info', { params })
+}
+
+export const getEmailDetail = (id: string) => {
+  return api.get<any, EmailInfo>(`/v1/mail/info/${id}`)
+}
+
+export const createEmail = (data: Partial<EmailInfo>) => {
+  return api.post<any, EmailInfo>('/v1/mail/info', data)
+}
+
+export const updateEmail = (id: string, data: Partial<EmailInfo>) => {
+  return api.put<any, EmailInfo>(`/v1/mail/info/${id}`, data)
+}
+
+export const deleteEmail = (id: string) => {
+  return api.delete(`/v1/mail/info/${id}`)
+}
+
+// 批量更新邮箱状态
+export const batchUpdateEmailStatus = (data: { from_status: number; to_status: number }) => {
+  return api.post<any, ApiResponse>('/v1/mail/info/status/batch-update', data)
+}
+
+// Outlook 操作
+export const getOutlookAuthUrl = (email: string) => {
+  return api.get<any, { url: string; verifier: string }>('/v1/mail/outlook/auth/url', { params: { email } })
+}
+
+export const getOutlookToken = (data: { email: string; url: string; verifier: string }) => {
+  return api.post<any, ApiResponse>('/v1/mail/outlook/auth/token', data)
+}
+
+export const sendOutlookEmail = (data: {
+  email: string
+  to_email: string
+  subject: string
+  content: string
+  content_type?: 'Text' | 'HTML'
+}) => {
+  return api.post<any, ApiResponse>('/v1/mail/outlook/send', data)
+}
+
+export const getOutlookMessages = (data: {
+  email: string
+  from_email: string
+  num?: number
+  top?: number
+}) => {
+  return api.post<any, { code: number; message: string; data: any[] }>('/v1/mail/outlook/messages', data)
+}
+
+export const checkEmailStatus = (data: {
+  update_time_start?: number
+  update_time_end?: number
+  status?: number
+  email_type?: EmailType
+}) => {
+  return api.post<any, ApiResponse>('/v1/mail/outlook/check', data)
+}

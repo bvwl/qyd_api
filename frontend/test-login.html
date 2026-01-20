@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录测试工具</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            background: #1890ff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+        button:hover {
+            background: #40a9ff;
+        }
+        input {
+            padding: 8px;
+            margin: 5px;
+            width: 300px;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f5f5f5;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+        .success {
+            background: #f6ffed;
+            border: 1px solid #b7eb8f;
+        }
+        .error {
+            background: #fff2f0;
+            border: 1px solid #ffccc7;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 QYD 登录测试工具</h1>
+
+    <div class="section">
+        <h2>1. 测试后端连接</h2>
+        <button onclick="testBackend()">测试后端服务</button>
+        <div id="backend-result" class="result"></div>
+    </div>
+
+    <div class="section">
+        <h2>2. 创建测试用户（使用注册接口）</h2>
+        <div>
+            <input type="email" id="create-email" placeholder="邮箱" value="admin@example.com">
+            <input type="text" id="create-nickname" placeholder="昵称" value="管理员">
+            <input type="password" id="create-password" placeholder="密码" value="admin123">
+        </div>
+        <button onclick="createUser()">使用注册接口创建</button>
+        <button onclick="createUserDirect()">使用用户接口创建（需手动加密）</button>
+        <div id="create-result" class="result"></div>
+    </div>
+
+    <div class="section">
+        <h2>3. 测试登录</h2>
+        <div>
+            <input type="email" id="login-email" placeholder="邮箱" value="admin@example.com">
+            <input type="password" id="login-password" placeholder="密码" value="admin123">
+        </div>
+        <button onclick="testLogin()">测试登录</button>
+        <div id="login-result" class="result"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://127.0.0.1:6080';
+
+        async function testBackend() {
+            const result = document.getElementById('backend-result');
+            result.textContent = '测试中...';
+            
+            try {
+                const response = await fetch(`${API_BASE}/docs`);
+                if (response.ok) {
+                    result.className = 'result success';
+                    result.textContent = '✅ 后端服务正常\n\nAPI 文档地址：' + API_BASE + '/docs';
+                } else {
+                    result.className = 'result error';
+                    result.textContent = '❌ 后端服务异常\n\n状态码：' + response.status;
+                }
+            } catch (error) {
+                result.className = 'result error';
+                result.textContent = '❌ 无法连接到后端服务\n\n错误：' + error.message + '\n\n请确保后端服务已启动：cd backend && python start.py';
+            }
+        }
+
+        async function createUser() {
+            const result = document.getElementById('create-result');
+            result.textContent = '创建中...';
+            
+            const email = document.getElementById('create-email').value;
+            const nickname = document.getElementById('create-nickname').value;
+            const password = document.getElementById('create-password').value;
+
+            try {
+                const response = await fetch(`${API_BASE}/v1/user/auth/register`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email,
+                        nickname,
+                        password
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    result.className = 'result success';
+                    result.textContent = '✅ 用户创建成功（使用注册接口）\n\n' + JSON.stringify(data, null, 2);
+                } else {
+                    result.className = 'result error';
+                    result.textContent = '❌ 用户创建失败\n\n状态码：' + response.status + '\n\n' + JSON.stringify(data, null, 2);
+                }
+            } catch (error) {
+                result.className = 'result error';
+                result.textContent = '❌ 请求失败\n\n错误：' + error.message;
+            }
+        }
+
+        async function createUserDirect() {
+            const result = document.getElementById('create-result');
+            result.textContent = '创建中...';
+            
+            const email = document.getElementById('create-email').value;
+            const nickname = document.getElementById('create-nickname').value;
+            const password = document.getElementById('create-password').value;
+
+            // SHA256 加密密码
+            const encoder = new TextEncoder();
+            const data = encoder.encode(password);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            const hashedPassword = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+            try {
+                const response = await fetch(`${API_BASE}/v1/user/user`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email,
+                        nickname,
+                        password: hashedPassword,
+                        status: 1
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    result.className = 'result success';
+                    result.textContent = '✅ 用户创建成功（密码已加密）\n\n原始密码：' + password + '\n加密后：' + hashedPassword + '\n\n' + JSON.stringify(data, null, 2);
+                } else {
+                    result.className = 'result error';
+                    result.textContent = '❌ 用户创建失败\n\n状态码：' + response.status + '\n\n' + JSON.stringify(data, null, 2);
+                }
+            } catch (error) {
+                result.className = 'result error';
+                result.textContent = '❌ 请求失败\n\n错误：' + error.message;
+            }
+        }
+
+        async function testLogin() {
+            const result = document.getElementById('login-result');
+            result.textContent = '登录中...';
+            
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+
+            try {
+                const response = await fetch(`${API_BASE}/v1/user/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email,
+                        password
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    result.className = 'result success';
+                    result.textContent = '✅ 登录成功\n\n' + JSON.stringify(data, null, 2);
+                } else {
+                    result.className = 'result error';
+                    result.textContent = '❌ 登录失败\n\n状态码：' + response.status + '\n\n响应：' + JSON.stringify(data, null, 2) + '\n\n可能的原因：\n1. 用户不存在\n2. 密码错误\n3. 密码长度不足（至少6位）';
+                }
+            } catch (error) {
+                result.className = 'result error';
+                result.textContent = '❌ 请求失败\n\n错误：' + error.message;
+            }
+        }
+
+        // 页面加载时自动测试后端
+        window.onload = () => {
+            testBackend();
+        };
+    </script>
+</body>
+</html>

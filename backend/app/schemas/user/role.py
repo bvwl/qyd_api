@@ -67,8 +67,8 @@ class Out(Base):
     create_time: datetime = Field(..., description="创建时间")
     update_time: datetime = Field(..., description="更新时间")
 
-    # 关联的用户列表
-    users: List["UserBase"] = Field(default_factory=list, description="用户列表")
+    # 关联的用户列表 - 移除以避免循环引用
+    # users: List["UserBase"] = Field(default_factory=list, description="用户列表")
 
     # 关联的路由列表
     routes: List[RouteLite] = Field(default_factory=list, description="路由列表")

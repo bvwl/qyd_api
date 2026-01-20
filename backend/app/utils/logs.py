@@ -31,12 +31,12 @@ def getLogger(name: str = 'root') -> Logger:
         # 日志文件路径
         log_file = os.path.join(log_dir, f"{name}.log")
 
-        # 文件处理器：每2小时滚动一次，保留7天，共84个文件，支持多进程写入
+        # 文件处理器：每2小时滚动一次，保留30天，共360个文件，支持多进程写入
         file_handler = TimedRotatingFileHandler(
             filename=log_file,
             when='H',
             interval=2,             # 每2小时切一次
-            backupCount=84,         # 保留7天 = 7 * 24 / 2 = 84个文件
+            backupCount=360,        # 保留30天 = 30 * 24 / 2 = 360个文件
             encoding='utf-8',
             delay=False,
             utc=False  # 你也可以改成 True 表示按 UTC 时间切
@@ -60,8 +60,9 @@ def getLogger(name: str = 'root') -> Logger:
         logger.addHandler(console_handler)
         logger.addHandler(file_handler)
 
-        # 添加压缩功能（在第一次创建 logger 时执行一次）
+        # 添加压缩功能和清理旧日志（在第一次创建 logger 时执行一次）
         _compress_old_logs(log_dir, name)
+        delete_old_compressed_logs(log_dir, days=30)
 
     return logger
 
@@ -143,13 +144,13 @@ def log_api_call(logger: Logger, user_id: str = None, endpoint: str = None, meth
         logger.error(f"记录API调用日志失败: {e}")
 
 
-def delete_old_compressed_logs(log_dir: str = None, days: int = 7):
+def delete_old_compressed_logs(log_dir: str = None, days: int = 30):
     """
     删除超过指定天数的压缩日志文件
     
     Args:
         log_dir: 日志目录，如果不指定则使用默认目录
-        days: 保留天数，默认7天
+        days: 保留天数，默认30天
     """
     try:
         if log_dir is None:
