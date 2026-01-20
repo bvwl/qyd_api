@@ -64,12 +64,13 @@ class CRUD:
         else:
             count = -1
 
-        offset = (page - 1) * limit  # 计算偏移量
-        query = query.limit(limit).offset(offset)  # 应用分页
-        res = await query
+        offset = (page - 1) * limit
+        query = query.limit(limit).offset(offset)
+        
+        # 使用 prefetch_related 预加载关联数据（包括嵌套关联）
+        res = await query.prefetch_related('group', 'group__country')
+        
         num = len(res)
-        for item in res:
-            await item.fetch_related('group', 'group__country')
         items = [Out.model_validate(obj) for obj in res]
         return OutList(message='成功', count=count, num=num, items=items)
 

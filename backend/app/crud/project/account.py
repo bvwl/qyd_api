@@ -10,10 +10,19 @@ from app.utils.time_tool import parse_time
 class CRUD:
     # 创建
     async def create(self, item: Create) -> Out:
-        res = await ProjectAccount.create(**item.model_dump())
+        # 处理外键字段
+        data = item.model_dump(exclude={'project_id', 'server_id', 'wallet_id'})
+        if item.project_id:
+            data['project_id'] = item.project_id
+        if item.server_id:
+            data['server_id'] = item.server_id
+        if item.wallet_id:
+            data['wallet_id'] = item.wallet_id
+        
+        res = await ProjectAccount.create(**data)
         if not res:
             raise HTTPException(status_code=500, detail='创建失败')
-        await res.fetch_related('project', 'server', 'server__group', 'server__group__country')
+        await res.fetch_related('project', 'server', 'wallet')
         return Out.model_validate(res)
 
     # 查询
@@ -21,7 +30,7 @@ class CRUD:
         res = await ProjectAccount.get_or_none(id=id)
         if not res:
             raise HTTPException(status_code=404, detail='数据不存在')
-        await res.fetch_related('project', 'server', 'server__group', 'server__group__country')
+        await res.fetch_related('project', 'server', 'wallet')
         return Out.model_validate(res)
 
     # 条件查询
@@ -30,7 +39,8 @@ class CRUD:
                         status: int | None = None,
                         account_type: int | None = None,
                         project_id: UUID | None = None,
-                        server_info_id: UUID | None = None,
+                        server_id: UUID | None = None,
+                        wallet_id: UUID | None = None,
                         page: int = 1,
                         limit: int = 10,
                         res_count: bool = False,
@@ -49,8 +59,10 @@ class CRUD:
             query = query.filter(account_type=account_type)
         if project_id:
             query = query.filter(project_id=project_id)
-        if server_info_id:
-            query = query.filter(server_info_id=server_info_id)
+        if server_id:
+            query = query.filter(server_id=server_id)
+        if wallet_id:
+            query = query.filter(wallet_id=wallet_id)
         if create_time_start:
             query = query.filter(create_time__gte=parse_time(create_time_start))
         if create_time_end:
@@ -70,12 +82,13 @@ class CRUD:
         else:
             count = -1
 
-        offset = (page - 1) * limit  # 计算偏移量
-        query = query.limit(limit).offset(offset)  # 应用分页
-        res = await query
+        offset = (page - 1) * limit
+        query = query.limit(limit).offset(offset)
+        
+        # 使用 prefetch_related 预加载关联数据
+        res = await query.prefetch_related('project', 'server', 'wallet')
+        
         num = len(res)
-        for item in res:
-            await item.fetch_related('project', 'server', 'server__group', 'server__group__country')
         items = [Out.model_validate(obj) for obj in res]
         return OutList(message='成功', count=count, num=num, items=items)
 
@@ -90,7 +103,7 @@ class CRUD:
 
         await res.update_from_dict(update_data)
         await res.save()
-        await res.fetch_related('project', 'server', 'server__group', 'server__group__country')
+        await res.fetch_related('project', 'server', 'wallet')
         return Out.model_validate(res)
 
     # 删除
@@ -103,15 +116,24 @@ class CRUD:
 
     # 创建或更新
     async def upsert(self, item: Create) -> Out:
+        # 处理外键字段
+        data = item.model_dump(exclude={'project_id', 'server_id', 'wallet_id'})
+        if item.project_id:
+            data['project_id'] = item.project_id
+        if item.server_id:
+            data['server_id'] = item.server_id
+        if item.wallet_id:
+            data['wallet_id'] = item.wallet_id
+        
         record, created = await ProjectAccount.get_or_create(
-            defaults=item.model_dump(),
+            defaults=data,
             account=item.account,
             project_id=item.project_id
         )
         if not created:
             await record.update_from_dict(item.model_dump(exclude_unset=True))
             await record.save()
-        await record.fetch_related('project', 'server', 'server__group', 'server__group__country')
+        await record.fetch_related('project', 'server', 'wallet')
         return Out.model_validate(record)
 
 

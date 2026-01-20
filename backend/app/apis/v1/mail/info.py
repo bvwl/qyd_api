@@ -1,5 +1,6 @@
 from uuid import UUID
 
+from app.models.mail import EmailInfo
 from app.schemas.mail.info import Create, Update, Out, OutList, EmailType
 from app.crud.mail.info import email_info_crud
 from app.utils.time_tool import parse_time
@@ -22,8 +23,8 @@ def _mask_items(
             data.password = ""
         if hide_aux_password:
             data.auxiliary_email_password = ""
-        if hide_server_ssh_port and data.server_info is not None:
-            data.server_info.ssh_port = None
+        if hide_server_ssh_port and data.server is not None:
+            data.server.ssh_port = None
         masked_items.append(data)
     return masked_items
 
@@ -65,8 +66,8 @@ async def get(id: UUID = Path(..., description='ID')):
 @app.get("", response_model=OutList, description='获取邮箱信息', summary='获取邮箱信息')
 async def gets(
         email: str | None = Query(None, description='邮箱号'),
-        status: int | None = Query(None, description='状态(1:正常,4:异常)'),
-        proxy_info_id: UUID | None = Query(None, description='代理信息ID'),
+        status: int | None = Query(None, description='状态(1:正常,2:异常)'),
+        server_id: UUID | None = Query(None, description='服务器ID'),
         email_type: EmailType | None = Query(None, description='邮箱类型'),
         order_by: str | None = Query('-create_time', description='排序字段',
                                      pattern='^(?:-)?(?:id|email|status|create_time|update_time)$'),
@@ -83,39 +84,31 @@ async def gets(
         limit: int = Query(10, ge=1, le=1000, description='每页数量'),
 ):
     try:
-        if res_count:
-            count = await email_info_crud.get_count(
-                email=email,
-                status=status,
-                proxy_info_id=proxy_info_id,
-                email_type=email_type,
-                create_time_start=parse_time(create_time_start),
-                create_time_end=parse_time(create_time_end, True),
-                update_time_start=parse_time(update_time_start),
-                update_time_end=parse_time(update_time_end, True),
-            )
-        else:
-            count = -1
-        items = await email_info_crud.get_multi(
+        result = await email_info_crud.get_multi(
             email=email,
             status=status,
-            proxy_info_id=proxy_info_id,
+            server_id=server_id,
             email_type=email_type,
             order_by=order_by,
-            create_time_start=parse_time(create_time_start),
-            create_time_end=parse_time(create_time_end, True),
-            update_time_start=parse_time(update_time_start),
-            update_time_end=parse_time(update_time_end, True),
+            create_time_start=create_time_start,
+            create_time_end=create_time_end,
+            update_time_start=update_time_start,
+            update_time_end=update_time_end,
             page=page,
-            limit=limit
+            limit=limit,
+            res_count=res_count
         )
+        # 脱敏处理
         masked_items = _mask_items(
-            [Out.model_validate(obj) for obj in items],
+            result.items,
             hide_password=True,
             hide_aux_password=True,
             hide_server_ssh_port=True,
         )
-        return OutList(message='成功', count=count, num=len(masked_items), items=masked_items)
+        result.items = masked_items
+        return result
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -131,7 +124,9 @@ async def put(id: UUID = Path(..., description='主键ID'),
     部分更新邮箱信息，只更新传入的非空字段
     """
     try:
-        return await email_info_crud.update(id, item.model_dump(exclude_unset=True))
+        return await email_info_crud.update(id, item)
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -177,10 +172,10 @@ async def batch_update_status(
 ):
     """
     批量将邮箱状态从 from_status 调整为 to_status
-    例如：统一将状态为 4 的邮箱调整为 1
+    例如：统一将状态为 2 的邮箱调整为 1
     """
     try:
-        updated = await email_info_crud.model.filter(status=from_status).update(status=to_status)
+        updated = await EmailInfo.filter(status=from_status).update(status=to_status)
         return BaseOut(message="成功", count=updated)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

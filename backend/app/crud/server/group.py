@@ -16,7 +16,7 @@ class CRUD:
         res = await ServerGroup.create(**item.model_dump())
         if not res:
             raise HTTPException(status_code=500, detail='创建失败')
-        await res.fetch_related('country', 'server_infos')
+        await res.fetch_related('country')
         return Out.model_validate(res)
 
     # 查询
@@ -24,7 +24,7 @@ class CRUD:
         res = await ServerGroup.get_or_none(id=id)
         if not res:
             raise HTTPException(status_code=404, detail='数据不存在')
-        await res.fetch_related('country', 'server_infos')
+        await res.fetch_related('country')
         return Out.model_validate(res)
 
     # 条件查询
@@ -64,12 +64,13 @@ class CRUD:
         else:
             count = -1
 
-        offset = (page - 1) * limit  # 计算偏移量
-        query = query.limit(limit).offset(offset)  # 应用分页
-        res = await query
+        offset = (page - 1) * limit
+        query = query.limit(limit).offset(offset)
+        
+        # 使用 prefetch_related 预加载 ForeignKey 关联数据
+        res = await query.prefetch_related('country')
+        
         num = len(res)
-        for item in res:
-            await item.fetch_related('country', 'server_infos')
         items = [Out.model_validate(obj) for obj in res]
         return OutList(message='成功', count=count, num=num, items=items)
 
@@ -89,7 +90,7 @@ class CRUD:
 
         await res.update_from_dict(update_data)
         await res.save()
-        await res.fetch_related('country', 'server_infos')
+        await res.fetch_related('country')
         return Out.model_validate(res)
 
     # 删除
@@ -109,7 +110,7 @@ class CRUD:
         if not created:
             await record.update_from_dict(item.model_dump(exclude_unset=True))
             await record.save()
-        await record.fetch_related('country', 'server_infos')
+        await record.fetch_related('country')
         return Out.model_validate(record)
 
 

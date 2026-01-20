@@ -1,7 +1,7 @@
 from uuid import UUID
 from fastapi import HTTPException
 
-from app.models.user import Token
+from app.models.user import UserToken
 from app.schemas.user.token import Create, Update, Out, OutList
 from app.schemas.base import BaseOut
 from app.utils.time_tool import parse_time
@@ -10,10 +10,10 @@ from app.utils.time_tool import parse_time
 class CRUD:
     # 创建
     async def create(self, item: Create) -> Out:
-        is_exist = await Token.get_or_none(access_token=item.access_token)
+        is_exist = await UserToken.get_or_none(token=item.token)
         if is_exist:
             raise HTTPException(status_code=400, detail='访问令牌已存在')
-        res = await Token.create(**item.model_dump())
+        res = await UserToken.create(**item.model_dump())
         if not res:
             raise HTTPException(status_code=500, detail='创建失败')
         await res.fetch_related('user')
@@ -21,7 +21,7 @@ class CRUD:
 
     # 查询
     async def get(self, id: UUID) -> Out:
-        res = await Token.get_or_none(id=id).select_related('user')
+        res = await UserToken.get_or_none(id=id)
         if not res:
             raise HTTPException(status_code=404, detail='数据不存在')
         await res.fetch_related('user')
@@ -30,7 +30,7 @@ class CRUD:
     # 条件查询
     async def get_multi(self,
                         user_id: UUID | None = None,
-                        is_revoked: bool | None = None,
+                        status: int | None = None,
                         page: int = 1,
                         limit: int = 10,
                         res_count: bool = False,
@@ -40,11 +40,11 @@ class CRUD:
                         update_time_start: str | int | None = None,
                         update_time_end: str | int | None = None
                         ) -> OutList:
-        query = Token.all().select_related('user')
+        query = UserToken.all()
         if user_id:
             query = query.filter(user_id=user_id)
-        if is_revoked is not None:
-            query = query.filter(is_revoked=is_revoked)
+        if status is not None:
+            query = query.filter(status=status)
         if create_time_start:
             query = query.filter(create_time__gte=parse_time(create_time_start))
         if create_time_end:
@@ -64,26 +64,27 @@ class CRUD:
         else:
             count = -1
 
-        offset = (page - 1) * limit  # 计算偏移量
-        query = query.limit(limit).offset(offset)  # 应用分页
-        res = await query
+        offset = (page - 1) * limit
+        query = query.limit(limit).offset(offset)
+        
+        # 使用 prefetch_related 预加载关联数据
+        res = await query.prefetch_related('user')
+        
         num = len(res)
-        for item in res:
-            await item.fetch_related('user')
         items = [Out.model_validate(obj) for obj in res]
         return OutList(message='成功', count=count, num=num, items=items)
 
     # 更新
     async def update(self, id: UUID, item: Update) -> Out:
-        res = await Token.get_or_none(id=id)
+        res = await UserToken.get_or_none(id=id)
         if not res:
             raise HTTPException(status_code=404, detail='数据不存在')
         update_data = item.model_dump(exclude_unset=True)
         if not update_data:
             raise HTTPException(status_code=400, detail='没有更新数据')
-        if 'access_token' in update_data:
-            new_token = update_data['access_token']
-            is_exist = await Token.get_or_none(access_token=new_token)
+        if 'token' in update_data:
+            new_token = update_data['token']
+            is_exist = await UserToken.get_or_none(token=new_token)
             if is_exist and is_exist.id != id:
                 raise HTTPException(status_code=400, detail='访问令牌已存在')
 
@@ -94,7 +95,7 @@ class CRUD:
 
     # 删除
     async def delete(self, id: UUID) -> BaseOut:
-        res = await Token.get_or_none(id=id)
+        res = await UserToken.get_or_none(id=id)
         if not res:
             raise HTTPException(status_code=404, detail='数据不存在')
         await res.delete()
@@ -102,9 +103,9 @@ class CRUD:
 
     # 创建或更新
     async def upsert(self, item: Create) -> Out:
-        record, created = await Token.get_or_create(
+        record, created = await UserToken.get_or_create(
             defaults=item.model_dump(),
-            access_token=item.access_token
+            token=item.token
         )
         if not created:
             await record.update_from_dict(item.model_dump(exclude_unset=True))

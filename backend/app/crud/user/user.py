@@ -33,15 +33,15 @@ class CRUD:
         if role_ids:
             await res.roles.add(*role_ids)
         
-        await res.fetch_related('roles', 'tokens', 'logs', 'server_account', 'projects')
+        await res.fetch_related('roles', 'projects')
         return Out.model_validate(res)
 
     # 查询
     async def get(self, id: UUID) -> Out:
-        res = await UserInfo.get_or_none(id=id).prefetch_related('roles', 'tokens', 'logs', 'server_account', 'projects')
+        res = await UserInfo.get_or_none(id=id)
         if not res:
             raise HTTPException(status_code=404, detail='数据不存在')
-        await res.fetch_related('roles', 'tokens', 'logs', 'server_account', 'projects')
+        await res.fetch_related('roles', 'projects')
         return Out.model_validate(res)
 
     # 条件查询
@@ -57,7 +57,7 @@ class CRUD:
                         update_time_start: str | int | None = None,
                         update_time_end: str | int | None = None
                         ) -> OutList:
-        query = UserInfo.all().prefetch_related('roles', 'tokens', 'logs', 'server_account', 'projects')
+        query = UserInfo.all()
         if email:
             query = query.filter(email__icontains=email)
         if status is not None:
@@ -81,12 +81,13 @@ class CRUD:
         else:
             count = -1
 
-        offset = (page - 1) * limit  # 计算偏移量
-        query = query.limit(limit).offset(offset)  # 应用分页
-        res = await query
+        offset = (page - 1) * limit
+        query = query.limit(limit).offset(offset)
+        
+        # 使用 prefetch_related 预加载多对多关联数据
+        res = await query.prefetch_related('roles', 'projects')
+        
         num = len(res)
-        for item in res:
-            await item.fetch_related('roles', 'tokens', 'logs', 'server_account', 'projects')
         items = [Out.model_validate(obj) for obj in res]
         return OutList(message='成功', count=count, num=num, items=items)
 
@@ -121,7 +122,7 @@ class CRUD:
             if role_ids:
                 await res.roles.add(*role_ids)
         
-        await res.fetch_related('roles', 'tokens', 'logs', 'server_account', 'projects')
+        await res.fetch_related('roles', 'projects')
         return Out.model_validate(res)
 
     # 删除
@@ -155,7 +156,7 @@ class CRUD:
             if role_ids:
                 await record.roles.add(*role_ids)
         
-        await record.fetch_related('roles', 'tokens', 'logs', 'server_account', 'projects')
+        await record.fetch_related('roles', 'projects')
         return Out.model_validate(record)
 
 

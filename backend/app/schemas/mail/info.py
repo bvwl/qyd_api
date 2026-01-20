@@ -11,16 +11,16 @@ from app.schemas.server.info import Base as ServerInfoBase
 
 class EmailType(StrEnum):
     """
-    邮件类型枚举（业务层使用）
+    邮件类型枚举（业务层使用，用于 API 查询参数）
     """
-    IP_OK = 'IP_OK'
-    IP_NOT = 'IP_NOT'
-    TOKEN_OK = 'TOKEN_OK'
-    TOKEN_NOT = 'TOKEN_NOT'
-    IP_OK_TOKEN_OK = 'IP_OK_TOKEN_OK'
-    IP_OK_TOKEN_NOT = 'IP_OK_TOKEN_NOT'
-    IP_NOT_TOKEN_OK = 'IP_NOT_TOKEN_OK'
-    IP_NOT_TOKEN_NOT = 'IP_NOT_TOKEN_NOT'
+    IP_OK = "IP_OK"
+    IP_NOT = "IP_NOT"
+    TOKEN_OK = "TOKEN_OK"
+    TOKEN_NOT = "TOKEN_NOT"
+    IP_OK_TOKEN_OK = "IP_OK_TOKEN_OK"
+    IP_OK_TOKEN_NOT = "IP_OK_TOKEN_NOT"
+    IP_NOT_TOKEN_OK = "IP_NOT_TOKEN_OK"
+    IP_NOT_TOKEN_NOT = "IP_NOT_TOKEN_NOT"
 
 
 class Base(BaseModel):
@@ -75,6 +75,7 @@ class Out(Base):
 
     create_time: datetime = Field(..., description='创建时间')
     update_time: datetime = Field(..., description='更新时间')
+    
     server_id: UUID | None = Field(None, description='代理信息ID')
     server: ServerInfoBase | None = Field(None, description='代理信息')
 

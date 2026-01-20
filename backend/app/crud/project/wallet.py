@@ -13,7 +13,6 @@ class CRUD:
         res = await ProjectWallet.create(**item.model_dump())
         if not res:
             raise HTTPException(status_code=500, detail='创建失败')
-        await res.fetch_related('project')
         return Out.model_validate(res)
 
     # 查询
@@ -21,12 +20,11 @@ class CRUD:
         res = await ProjectWallet.get_or_none(id=id)
         if not res:
             raise HTTPException(status_code=404, detail='数据不存在')
-        await res.fetch_related('project')
         return Out.model_validate(res)
 
     # 条件查询
     async def get_multi(self,
-                        project_id: UUID | None = None,
+                        chain: str | None = None,
                         page: int = 1,
                         limit: int = 10,
                         res_count: bool = False,
@@ -38,9 +36,8 @@ class CRUD:
                         ) -> OutList:
         query = ProjectWallet.all()
         
-        # 通过外键过滤
-        if project_id:
-            query = query.filter(project_id=project_id)
+        if chain:
+            query = query.filter(chain__icontains=chain)
         
         if create_time_start:
             query = query.filter(create_time__gte=parse_time(create_time_start))
@@ -61,12 +58,13 @@ class CRUD:
         else:
             count = -1
 
-        offset = (page - 1) * limit  # 计算偏移量
-        query = query.limit(limit).offset(offset)  # 应用分页
+        offset = (page - 1) * limit
+        query = query.limit(limit).offset(offset)
+        
+        # ProjectWallet 没有关联字段，不需要 prefetch_related
         res = await query
+        
         num = len(res)
-        for item in res:
-            await item.fetch_related('project')
         items = [Out.model_validate(obj) for obj in res]
         return OutList(message='成功', count=count, num=num, items=items)
 
@@ -83,7 +81,6 @@ class CRUD:
         await res.update_from_dict(update_data)
         await res.save()
         
-        await res.fetch_related('project')
         return Out.model_validate(res)
 
     # 删除
@@ -94,14 +91,11 @@ class CRUD:
         await res.delete()
         return BaseOut(message='成功', count=1)
 
-    # 创建或更新
+    # 创建或更新（根据公钥唯一性）
     async def upsert(self, item: Create) -> Out:
-        if not item.project_id:
-            raise HTTPException(status_code=400, detail='缺少项目ID')
-        
         record, created = await ProjectWallet.get_or_create(
             defaults=item.model_dump(),
-            project_id=item.project_id
+            public_key=item.public_key
         )
         
         if not created:
@@ -110,7 +104,6 @@ class CRUD:
                 await record.update_from_dict(update_data)
                 await record.save()
         
-        await record.fetch_related('project')
         return Out.model_validate(record)
 
 

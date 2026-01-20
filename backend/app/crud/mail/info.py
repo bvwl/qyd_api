@@ -26,7 +26,13 @@ class CRUD:
         is_exist = await EmailInfo.get_or_none(email=item.email)
         if is_exist:
             raise HTTPException(status_code=400, detail='邮箱号已存在')
-        res = await EmailInfo.create(**item.model_dump())
+        
+        # 处理外键字段
+        data = item.model_dump(exclude={'server_id'})
+        if item.server_id:
+            data['server_id'] = item.server_id
+        
+        res = await EmailInfo.create(**data)
         if not res:
             raise HTTPException(status_code=500, detail='创建失败')
         await res.fetch_related('server')
@@ -44,9 +50,8 @@ class CRUD:
     async def get_multi(self,
                         email: str | None = None,
                         status: int | None = None,
-                        server_info_id: UUID | None = None,
+                        server_id: UUID | None = None,
                         email_type: EmailType | None = None,
-                        proxy_info_id: UUID | None = None,
                         page: int = 1,
                         limit: int = 10,
                         res_count: bool = False,
@@ -58,22 +63,18 @@ class CRUD:
                         ) -> OutList:
         query = EmailInfo.all()
         
-        # 处理 proxy_info_id 别名
-        if proxy_info_id is not None:
-            server_info_id = proxy_info_id
-        
         if email:
             query = query.filter(email__icontains=email)
         if status is not None:
             query = query.filter(status=status)
-        if server_info_id:
-            query = query.filter(server_info_id=server_info_id)
+        if server_id:
+            query = query.filter(server_id=server_id)
         
         # 应用邮件类型过滤
         if email_type:
             ip_is_null, token_is_null = EMAIL_TYPE_CONDITIONS.get(email_type, (None, None))
             if ip_is_null is not None:
-                query = query.filter(server_info_id__isnull=ip_is_null)
+                query = query.filter(server_id__isnull=ip_is_null)
             if token_is_null is not None:
                 query = query.filter(access_token__isnull=token_is_null)
         
@@ -96,12 +97,16 @@ class CRUD:
         else:
             count = -1
 
-        offset = (page - 1) * limit  # 计算偏移量
-        query = query.limit(limit).offset(offset)  # 应用分页
-        res = await query
+        offset = (page - 1) * limit
+        query = query.limit(limit).offset(offset)
+        
+        # 使用 prefetch_related 预加载 ForeignKey 关联数据
+        res = await query.prefetch_related('server')
+        
+        if not res:
+            raise HTTPException(status_code=404, detail='未查询到数据')
+        
         num = len(res)
-        for item in res:
-            await item.fetch_related('server')
         items = [Out.model_validate(obj) for obj in res]
         return OutList(message='成功', count=count, num=num, items=items)
 
@@ -134,12 +139,19 @@ class CRUD:
 
     # 创建或更新
     async def upsert(self, item: Create) -> Out:
+        # 处理外键字段
+        data = item.model_dump(exclude={'server_id'})
+        if item.server_id:
+            data['server_id'] = item.server_id
+        
         record, created = await EmailInfo.get_or_create(
-            defaults=item.model_dump(),
+            defaults=data,
             email=item.email
         )
         if not created:
-            await record.update_from_dict(item.model_dump(exclude_unset=True))
+            await record.update_from_dict(item.model_dump(exclude_unset=True, exclude={'server_id'}))
+            if item.server_id:
+                record.server_id = item.server_id
             await record.save()
         await record.fetch_related('server')
         return Out.model_validate(record)

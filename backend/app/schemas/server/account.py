@@ -43,6 +43,9 @@ class Out(Base):
     message: str = Field('成功', description='提示信息')
     id: UUID = Field(..., description='ID')
 
+    create_time: datetime = Field(..., description='创建时间')
+    update_time: datetime = Field(..., description='更新时间')
+
     user_id: UUID | None = Field(None, description='关联用户ID')
 
     # 关联的用户信息

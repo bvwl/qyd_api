@@ -56,7 +56,7 @@ class CRUD:
                         create_time_end: str | int | None = None,
                         update_time_start: str | int | None = None,
                         update_time_end: str | int | None = None
-                        ) -> list[Out]:
+                        ) -> OutList:
         query = ProjectInfo.all()
         if name:
             query = query.filter(name__icontains=name)
@@ -76,15 +76,20 @@ class CRUD:
         if order_by:
             query = query.order_by(order_by)
 
-        offset = (page - 1) * limit  # 计算偏移量
-        query = query.limit(limit).offset(offset)  # 应用分页
-        res = await query
+        if res_count:
+            count = await query.count()
+        else:
+            count = -1
+
+        offset = (page - 1) * limit
+        query = query.limit(limit).offset(offset)
         
-        items = []
-        for item in res:
-            await item.fetch_related('users')
-            items.append(Out.model_validate(item))
-        return items
+        # 使用 prefetch_related 预加载关联数据
+        res = await query.prefetch_related('users')
+        
+        num = len(res)
+        items = [Out.model_validate(item) for item in res]
+        return OutList(message='成功', count=count, num=num, items=items)
     
     # 获取计数（用于API层）
     async def get_count(self,

@@ -13,9 +13,20 @@ class CRUD:
         is_exist = await FrontendRoute.get_or_none(path=item.path)
         if is_exist:
             raise HTTPException(status_code=400, detail='路由路径已存在')
-        res = await FrontendRoute.create(**item.model_dump())
+        
+        # 分离关联字段
+        data = item.model_dump()
+        role_ids = data.pop('role_ids', None)
+        
+        res = await FrontendRoute.create(**data)
         if not res:
             raise HTTPException(status_code=500, detail='创建失败')
+        
+        # 处理多对多关系
+        if role_ids:
+            await res.roles.add(*role_ids)
+        
+        await res.fetch_related('parent', 'children', 'roles')
         return Out.model_validate(res)
 
     # 查询
@@ -23,6 +34,7 @@ class CRUD:
         res = await FrontendRoute.get_or_none(id=id)
         if not res:
             raise HTTPException(status_code=404, detail='数据不存在')
+        await res.fetch_related('parent', 'children', 'roles')
         return Out.model_validate(res)
 
     # 条件查询
@@ -65,9 +77,12 @@ class CRUD:
         else:
             count = -1
 
-        offset = (page - 1) * limit  # 计算偏移量
-        query = query.limit(limit).offset(offset)  # 应用分页
-        res = await query
+        offset = (page - 1) * limit
+        query = query.limit(limit).offset(offset)
+        
+        # 使用 prefetch_related 预加载关联数据
+        res = await query.prefetch_related('parent', 'children', 'roles')
+        
         num = len(res)
         items = [Out.model_validate(obj) for obj in res]
         return OutList(message='成功', count=count, num=num, items=items)
@@ -86,8 +101,21 @@ class CRUD:
             if is_exist and is_exist.id != id:
                 raise HTTPException(status_code=400, detail='路由路径已存在')
 
-        await res.update_from_dict(update_data)
-        await res.save()
+        # 分离关联字段
+        role_ids = update_data.pop('role_ids', None)
+        
+        # 更新基本字段
+        if update_data:
+            await res.update_from_dict(update_data)
+            await res.save()
+        
+        # 处理多对多关系
+        if role_ids is not None:
+            await res.roles.clear()
+            if role_ids:
+                await res.roles.add(*role_ids)
+        
+        await res.fetch_related('parent', 'children', 'roles')
         return Out.model_validate(res)
 
     # 删除
@@ -100,13 +128,27 @@ class CRUD:
 
     # 创建或更新
     async def upsert(self, item: Create) -> Out:
+        # 分离关联字段
+        data = item.model_dump()
+        role_ids = data.pop('role_ids', None)
+        
         record, created = await FrontendRoute.get_or_create(
-            defaults=item.model_dump(),
+            defaults=data,
             path=item.path
         )
         if not created:
-            await record.update_from_dict(item.model_dump(exclude_unset=True))
-            await record.save()
+            update_data = {k: v for k, v in data.items() if k != 'path'}
+            if update_data:
+                await record.update_from_dict(update_data)
+                await record.save()
+        
+        # 处理多对多关系
+        if role_ids is not None:
+            await record.roles.clear()
+            if role_ids:
+                await record.roles.add(*role_ids)
+        
+        await record.fetch_related('parent', 'children', 'roles')
         return Out.model_validate(record)
 
 

@@ -13,9 +13,16 @@ class CRUD:
         is_exist = await ServerAccount.get_or_none(username=item.username)
         if is_exist:
             raise HTTPException(status_code=400, detail='用户名已存在')
-        res = await ServerAccount.create(**item.model_dump())
+        
+        # 处理外键字段
+        data = item.model_dump(exclude={'user_id'})
+        if item.user_id:
+            data['user_id'] = item.user_id
+        
+        res = await ServerAccount.create(**data)
         if not res:
             raise HTTPException(status_code=500, detail='创建失败')
+        await res.fetch_related('user')
         return Out.model_validate(res)
 
     # 查询
@@ -23,6 +30,7 @@ class CRUD:
         res = await ServerAccount.get_or_none(id=id)
         if not res:
             raise HTTPException(status_code=404, detail='用户不存在')
+        await res.fetch_related('user')
         return Out.model_validate(res)
 
     # 条件查询
@@ -59,9 +67,12 @@ class CRUD:
         else:
             count = -1
 
-        offset = (page - 1) * limit  # 计算偏移量
-        query = query.limit(limit).offset(offset)  # 应用分页
-        res = await query
+        offset = (page - 1) * limit
+        query = query.limit(limit).offset(offset)
+        
+        # 使用 prefetch_related 预加载关联数据
+        res = await query.prefetch_related('user')
+        
         num = len(res)
         items = [Out.model_validate(obj) for obj in res]
         return OutList(message='成功', count=count, num=num, items=items)
@@ -77,6 +88,7 @@ class CRUD:
 
         await res.update_from_dict(update_data)
         await res.save()
+        await res.fetch_related('user')
         return Out.model_validate(res)
 
     # 删除
@@ -89,14 +101,21 @@ class CRUD:
 
     # 创建或更新
     async def upsert(self, item: Create) -> Out:
-
+        # 处理外键字段
+        data = item.model_dump(exclude={'user_id'})
+        if item.user_id:
+            data['user_id'] = item.user_id
+        
         record, created = await ServerAccount.get_or_create(
-            defaults=item.model_dump(),
+            defaults=data,
             username=item.username
         )
         if not created:
-            await record.update_from_dict(item.model_dump(exclude_unset=True))
+            await record.update_from_dict(item.model_dump(exclude_unset=True, exclude={'user_id'}))
+            if item.user_id:
+                record.user_id = item.user_id
             await record.save()
+        await record.fetch_related('user')
         return Out.model_validate(record)
 
 

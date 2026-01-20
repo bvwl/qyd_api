@@ -18,7 +18,7 @@ class CRUD:
 
     # 查询
     async def get(self, id: UUID) -> Out:
-        res = await UserLog.get_or_none(id=id).select_related('user')
+        res = await UserLog.get_or_none(id=id)
         if not res:
             raise HTTPException(status_code=404, detail='数据不存在')
         await res.fetch_related('user')
@@ -27,7 +27,7 @@ class CRUD:
     # 条件查询
     async def get_multi(self,
                         user_id: UUID | None = None,
-                        action: str | None = None,
+                        action: int | None = None,
                         page: int = 1,
                         limit: int = 10,
                         res_count: bool = False,
@@ -37,11 +37,11 @@ class CRUD:
                         update_time_start: str | int | None = None,
                         update_time_end: str | int | None = None
                         ) -> OutList:
-        query = UserLog.all().select_related('user')
+        query = UserLog.all()
         if user_id:
             query = query.filter(user_id=user_id)
-        if action:
-            query = query.filter(action__icontains=action)
+        if action is not None:
+            query = query.filter(action=action)
         if create_time_start:
             query = query.filter(create_time__gte=parse_time(create_time_start))
         if create_time_end:
@@ -61,12 +61,13 @@ class CRUD:
         else:
             count = -1
 
-        offset = (page - 1) * limit  # 计算偏移量
-        query = query.limit(limit).offset(offset)  # 应用分页
-        res = await query
+        offset = (page - 1) * limit
+        query = query.limit(limit).offset(offset)
+        
+        # 使用 prefetch_related 预加载关联数据
+        res = await query.prefetch_related('user')
+        
         num = len(res)
-        for item in res:
-            await item.fetch_related('user')
         items = [Out.model_validate(obj) for obj in res]
         return OutList(message='成功', count=count, num=num, items=items)
 
