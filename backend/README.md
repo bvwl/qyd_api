@@ -23,26 +23,74 @@
   - `core/`：核心配置
     - `settings.py`：Tortoise ORM 配置、数据库连接信息等
   - `models/`：Tortoise ORM 模型定义
+    - `base.py`：基础模型（包含 UUID 主键、创建/更新时间）
     - `user.py`：用户、角色、日志、Token、前端路由模型
     - `project.py`：项目信息、账号、钱包、余额模型
     - `server.py`：服务器国家、分组、服务器信息、代理账号模型
     - `mail.py`：邮箱信息模型
   - `schemas/`：Pydantic 请求/响应模型
+    - `base.py`：基础响应模型（BaseOut）
     - `user/`：用户相关的 Create/Update/Out/OutList 模型
+      - `info.py`：用户信息 Schema
+      - `role.py`：角色 Schema
+      - `route.py`：前端路由 Schema
+      - `token.py`：Token Schema
+      - `log.py`：操作日志 Schema
     - `project/`：项目相关的 Create/Update/Out/OutList 模型
+      - `info.py`：项目信息 Schema
+      - `account.py`：项目账号 Schema
+      - `wallet.py`：项目钱包 Schema
+      - `balance.py`：项目余额 Schema
     - `server/`：服务器相关的 Create/Update/Out/OutList 模型
+      - `country.py`：国家信息 Schema
+      - `group.py`：分组信息 Schema
+      - `info.py`：服务器信息 Schema
+      - `account.py`：服务器账号 Schema
     - `mail/`：邮箱相关的 Create/Update/Out/OutList 模型及枚举
+      - `info.py`：邮箱信息 Schema（包含 EmailType 枚举）
+      - `outlook.py`：Outlook 操作 Schema
   - `crud/`：各模型对应的 CRUD 封装
     - `base.py`：通用 CRUD 基类（统一列表查询、分页、关联处理、upsert 等）
-    - `user/`：用户相关 CRUD（用户、角色、日志、Token、路由）
-    - `project/`：项目相关 CRUD（项目信息、账号、钱包、余额）
-    - `server/`：服务器相关 CRUD（国家、分组、服务器信息、代理账号）
-    - `mail/`：邮箱信息 CRUD
+    - `user/`：用户相关 CRUD
+      - `user.py`：用户信息 CRUD
+      - `role.py`：角色 CRUD
+      - `route.py`：前端路由 CRUD
+      - `token.py`：Token CRUD
+      - `log.py`：操作日志 CRUD
+      - `permission.py`：权限 CRUD（占位）
+    - `project/`：项目相关 CRUD
+      - `info.py`：项目信息 CRUD
+      - `account.py`：项目账号 CRUD
+      - `wallet.py`：项目钱包 CRUD
+      - `balance.py`：项目余额 CRUD
+    - `server/`：服务器相关 CRUD
+      - `country.py`：国家信息 CRUD
+      - `group.py`：分组信息 CRUD
+      - `info.py`：服务器信息 CRUD
+      - `account.py`：服务器账号 CRUD
+    - `mail/`：邮箱相关 CRUD
+      - `info.py`：邮箱信息 CRUD
   - `apis/v1/`：对外 HTTP 接口（按业务模块拆分）
     - `user/`：用户相关接口
+      - `auth.py`：用户认证接口
+      - `user.py`：用户管理接口
+      - `role.py`：角色管理接口
+      - `route.py`：路由管理接口
+      - `token.py`：Token 管理接口
+      - `log.py`：日志管理接口
     - `project/`：项目相关接口
+      - `info.py`：项目信息接口
+      - `account.py`：项目账号接口
+      - `wallet.py`：项目钱包接口
+      - `balance.py`：项目余额接口
     - `server/`：服务器相关接口
+      - `country.py`：国家信息接口
+      - `group.py`：分组信息接口
+      - `info.py`：服务器信息接口
+      - `account.py`：服务器账号接口
     - `mail/`：邮箱相关接口
+      - `info.py`：邮箱信息接口
+      - `outlook.py`：Outlook 操作接口
   - `clients/`
     - `outlook.py`：Outlook 邮箱客户端封装（OAuth2 授权、收发邮件等逻辑）
   - `utils/`：通用工具
@@ -51,14 +99,26 @@
     - `logs.py`：日志封装
     - `retry.py`：重试工具
     - `redis_tool.py`：Redis 相关封装
-  - `tests/`
+    - `decorators.py`：装饰器工具
+    - `req.py`：HTTP 请求工具
+  - `tests/`：测试文件
     - `api_requests_test.py`：接口测试样例（可作为 Postman/接口调用的参考）
+    - `test_user.py`：用户模块测试
+    - `test_project.py`：项目模块测试
+    - `test_server.py`：服务器模块测试
+    - `test_mail.py`：邮箱模块测试
+    - `user_requests_test.py`：用户请求测试
+    - `run_all_tests.py`：运行所有测试
 - `migrations/`：数据库迁移脚本（由 aerich 生成）
+  - `models/`：迁移版本文件
 - `scripts/`：辅助脚本
   - `init_db.sh`：初始化数据库（建表）
   - `update_db.sh`：更新数据库（迁移）
 - `start.py`：本地启动脚本（封装 uvicorn 运行参数）
 - `.env`：环境变量配置（数据库连接、监听地址等）
+- `requirements.txt`：Python 依赖包列表
+- `pyproject.toml`：项目配置（aerich 配置）
+- `pytest.ini`：pytest 配置
 
 ---
 
@@ -261,7 +321,65 @@ aerich upgrade
 - 角色 ↔ 路由：`role_route_rel` 中间表
 - 项目 ↔ 用户：`project_user_rel` 中间表
 
-### 4.4 RBAC 权限控制设计
+### 4.3 多对多关联设计
+
+多对多关联遵循以下规则：
+
+- 在一侧定义 `ManyToManyField`，指定中间表名称（through 参数）
+- 在另一侧只声明类型注解 `ManyToManyRelation`
+- 使用 `TYPE_CHECKING` 避免循环导入
+
+**示例关联：**
+
+- 用户 ↔ 角色：`user_role_rel` 中间表
+- 角色 ↔ 路由：`role_route_rel` 中间表
+- 项目 ↔ 用户：`project_user_rel` 中间表
+
+### 4.4 关联数据加载规范
+
+**单个对象查询：**
+- 使用 `fetch_related()` 加载关联数据
+- 示例：`await obj.fetch_related('user', 'roles')`
+
+**列表查询：**
+- 使用 `prefetch_related()` 预加载关联数据，避免 N+1 查询问题
+- 示例：`await query.prefetch_related('user', 'roles')`
+
+**嵌套关联：**
+- 使用双下划线语法加载嵌套关联
+- 示例：`await query.prefetch_related('group', 'group__country')`
+
+**关键区别：**
+- `fetch_related`：用于已加载的单个对象
+- `prefetch_related`：用于查询集（QuerySet），一次性预加载所有对象的关联数据
+- 不要在 `get_or_none()` 后链式调用 `prefetch_related()`
+
+**各模块关联加载示例：**
+
+```python
+# Mail 模块
+await EmailInfo.all().prefetch_related('server')
+
+# Project 模块
+await ProjectInfo.all().prefetch_related('users')
+await ProjectAccount.all().prefetch_related('project', 'server', 'wallet')
+await ProjectBalance.all().prefetch_related('account')
+
+# Server 模块
+await ServerCountry.all().prefetch_related('server_groups')
+await ServerGroup.all().prefetch_related('country')
+await ServerInfo.all().prefetch_related('group', 'group__country')
+await ServerAccount.all().prefetch_related('user')
+
+# User 模块
+await UserInfo.all().prefetch_related('roles', 'projects')
+await UserRole.all().prefetch_related('users', 'routes')
+await FrontendRoute.all().prefetch_related('parent', 'children', 'roles')
+await UserToken.all().prefetch_related('user')
+await UserLog.all().prefetch_related('user')
+```
+
+### 4.5 RBAC 权限控制设计
 
 基于角色的访问控制（Role-Based Access Control）：
 
@@ -663,3 +781,252 @@ EmailInfo (邮箱信息)
 ### 邮箱模块
 
 - `Status`（通用状态）：1-正常, 2-异常
+
+
+---
+
+## 10. API 接口完整列表
+
+### 10.1 用户模块 (/v1/user)
+
+#### 用户认证 (/auth)
+- 用户登录、注册、Token 验证等
+
+#### 用户管理 (/user)
+- `POST /v1/user/user` - 创建用户
+- `GET /v1/user/user/{id}` - 获取用户信息
+- `GET /v1/user/user` - 获取用户列表
+- `PUT /v1/user/user/{id}` - 更新用户信息
+- `DELETE /v1/user/user/{id}` - 删除用户
+- `POST /v1/user/user/upsert` - 创建或更新用户
+
+#### 角色管理 (/role)
+- `POST /v1/user/role` - 创建角色
+- `GET /v1/user/role/{id}` - 获取角色信息
+- `GET /v1/user/role` - 获取角色列表
+- `PUT /v1/user/role/{id}` - 更新角色信息
+- `DELETE /v1/user/role/{id}` - 删除角色
+- `POST /v1/user/role/upsert` - 创建或更新角色
+
+#### 路由管理 (/route)
+- `POST /v1/user/route` - 创建路由
+- `GET /v1/user/route/{id}` - 获取路由信息
+- `GET /v1/user/route` - 获取路由列表
+- `PUT /v1/user/route/{id}` - 更新路由信息
+- `DELETE /v1/user/route/{id}` - 删除路由
+- `POST /v1/user/route/upsert` - 创建或更新路由
+
+#### Token 管理 (/token)
+- `POST /v1/user/token` - 创建 Token
+- `GET /v1/user/token/{id}` - 获取 Token 信息
+- `GET /v1/user/token` - 获取 Token 列表
+- `PUT /v1/user/token/{id}` - 更新 Token 信息
+- `DELETE /v1/user/token/{id}` - 删除 Token
+- `POST /v1/user/token/upsert` - 创建或更新 Token
+
+#### 日志管理 (/log)
+- `POST /v1/user/log` - 创建日志
+- `GET /v1/user/log/{id}` - 获取日志信息
+- `GET /v1/user/log` - 获取日志列表
+- `PUT /v1/user/log/{id}` - 更新日志信息
+- `DELETE /v1/user/log/{id}` - 删除日志
+
+### 10.2 项目模块 (/v1/project)
+
+#### 项目信息 (/info)
+- `POST /v1/project/info` - 创建项目
+- `GET /v1/project/info/{id}` - 获取项目信息
+- `GET /v1/project/info` - 获取项目列表
+- `PUT /v1/project/info/{id}` - 更新项目信息
+- `DELETE /v1/project/info/{id}` - 删除项目
+- `POST /v1/project/info/upsert` - 创建或更新项目
+
+#### 项目账号 (/account)
+- `POST /v1/project/account` - 创建项目账号
+- `GET /v1/project/account/{id}` - 获取项目账号信息
+- `GET /v1/project/account` - 获取项目账号列表
+- `PUT /v1/project/account/{id}` - 更新项目账号信息
+- `DELETE /v1/project/account/{id}` - 删除项目账号
+- `POST /v1/project/account/upsert` - 创建或更新项目账号
+
+#### 项目钱包 (/wallet)
+- `POST /v1/project/wallet` - 创建项目钱包
+- `GET /v1/project/wallet/{id}` - 获取项目钱包信息
+- `GET /v1/project/wallet` - 获取项目钱包列表
+- `PUT /v1/project/wallet/{id}` - 更新项目钱包信息
+- `DELETE /v1/project/wallet/{id}` - 删除项目钱包
+- `POST /v1/project/wallet/upsert` - 创建或更新项目钱包
+
+#### 项目余额 (/balance)
+- `POST /v1/project/balance` - 创建项目余额
+- `GET /v1/project/balance/{id}` - 获取项目余额信息
+- `GET /v1/project/balance` - 获取项目余额列表
+- `PUT /v1/project/balance/{id}` - 更新项目余额信息
+- `DELETE /v1/project/balance/{id}` - 删除项目余额
+- `POST /v1/project/balance/upsert` - 创建或更新项目余额
+
+### 10.3 服务器模块 (/v1/server)
+
+#### 国家信息 (/country)
+- `POST /v1/server/country` - 创建国家信息
+- `GET /v1/server/country/{id}` - 获取国家信息
+- `GET /v1/server/country` - 获取国家列表
+- `PUT /v1/server/country/{id}` - 更新国家信息
+- `DELETE /v1/server/country/{id}` - 删除国家信息
+- `POST /v1/server/country/upsert` - 创建或更新国家信息
+
+#### 分组信息 (/group)
+- `POST /v1/server/group` - 创建分组信息
+- `GET /v1/server/group/{id}` - 获取分组信息
+- `GET /v1/server/group` - 获取分组列表
+- `PUT /v1/server/group/{id}` - 更新分组信息
+- `DELETE /v1/server/group/{id}` - 删除分组信息
+- `POST /v1/server/group/upsert` - 创建或更新分组信息
+
+#### 服务器信息 (/info)
+- `POST /v1/server/info` - 创建服务器信息
+- `GET /v1/server/info/{id}` - 获取服务器信息
+- `GET /v1/server/info` - 获取服务器列表
+- `PUT /v1/server/info/{id}` - 更新服务器信息
+- `DELETE /v1/server/info/{id}` - 删除服务器信息
+- `POST /v1/server/info/upsert` - 创建或更新服务器信息
+
+#### 服务器账号 (/account)
+- `POST /v1/server/account` - 创建服务器账号
+- `GET /v1/server/account/{id}` - 获取服务器账号信息
+- `GET /v1/server/account` - 获取服务器账号列表
+- `PUT /v1/server/account/{id}` - 更新服务器账号信息
+- `DELETE /v1/server/account/{id}` - 删除服务器账号
+- `POST /v1/server/account/upsert` - 创建或更新服务器账号
+
+### 10.4 邮箱模块 (/v1/mail)
+
+#### 邮箱信息 (/info)
+- `POST /v1/mail/info` - 创建邮箱信息
+- `GET /v1/mail/info/{id}` - 获取邮箱信息
+- `GET /v1/mail/info` - 获取邮箱列表（支持 EmailType 过滤）
+- `PUT /v1/mail/info/{id}` - 更新邮箱信息
+- `DELETE /v1/mail/info/{id}` - 删除邮箱信息
+- `POST /v1/mail/info/upsert` - 创建或更新邮箱信息
+- `POST /v1/mail/info/status/batch-update` - 批量更新邮箱状态
+
+#### Outlook 操作 (/outlook)
+- `GET /v1/mail/outlook/auth/url` - 获取 OAuth2 授权 URL
+- `POST /v1/mail/outlook/auth/token` - 使用授权码换取 Token
+- `POST /v1/mail/outlook/send` - 发送邮件
+- `POST /v1/mail/outlook/messages` - 获取指定发件人的邮件
+- `POST /v1/mail/outlook/check` - 检查并更新邮箱状态
+
+---
+
+## 11. 最近更新记录
+
+### 2026-01-20 - CRUD 和 API 完善
+
+**修复内容：**
+
+1. **关联加载优化**
+   - 统一使用 `prefetch_related()` 进行列表查询的关联预加载
+   - 避免 N+1 查询问题，显著提升性能
+   - 修正了所有模块的关联加载方式
+
+2. **用户模块 CRUD 修复**
+   - 修正 `UserLog` 的 action 字段过滤（从字符串改为整数）
+   - 修正 `UserToken` 的字段名（token、status）
+   - 修正 `UserRole` 和 `FrontendRoute` 的多对多关联处理
+   - 移除不需要的关联（tokens、logs、server_account）
+
+3. **Schema 循环导入修复**
+   - 使用 `TYPE_CHECKING` 解决 `user/info.py` 和 `project/info.py` 的循环导入
+   - 使用 `TYPE_CHECKING` 解决 `user/info.py` 和 `user/role.py` 的循环导入
+   - 使用字符串类型注解（forward reference）避免运行时导入
+
+4. **新增 API 接口**
+   - 创建 `backend/app/apis/v1/user/role.py` - 角色管理 API
+   - 创建 `backend/app/apis/v1/user/route.py` - 路由管理 API
+   - 创建 `backend/app/apis/v1/user/token.py` - Token 管理 API
+   - 创建 `backend/app/apis/v1/user/log.py` - 日志管理 API
+   - 更新路由注册，所有 API 正常工作
+
+5. **验证结果**
+   - ✅ 所有模块的 CRUD 关联加载正确
+   - ✅ 所有 API 路由成功注册（共 93 个路由）
+   - ✅ 应用可以正常启动，无导入错误
+   - ✅ 测试套件可以正常收集（53 个测试用例）
+
+---
+
+## 12. 开发规范总结
+
+### 12.1 枚举类型规范
+
+- 模型层枚举使用 `IntEnum`（数据库存储整数）
+- 业务层枚举（如 `EmailType`）使用 `StrEnum`（API 查询参数，方便测试）
+- 枚举值：模型层用整数，业务层用大写字符串
+
+### 12.2 关联加载规范
+
+- 单个对象查询：使用 `fetch_related`
+- 列表查询：使用 `prefetch_related` 避免 N+1 问题
+- 不要在 `get_or_none()` 后链式调用 `prefetch_related`
+- 不要在开头和结尾重复调用 `prefetch_related`
+
+### 12.3 多对多关联规范
+
+- 在一侧定义 `ManyToManyField`，指定 `through` 中间表
+- 在另一侧只声明类型注解 `ManyToManyRelation`
+- 使用 `TYPE_CHECKING` 避免循环导入
+
+### 12.4 Schema 设计规范
+
+- 不使用 `Lite` 精简模型，直接引入对应的 `Base`
+- 关联字段顺序：先 ID 字段，后关联对象
+- 外键处理：在 create/upsert 中使用 `exclude` 正确处理
+- 使用 `TYPE_CHECKING` 避免循环导入
+
+### 12.5 模型名称规范
+
+- 用户角色：`UserRole` 不是 `Role`
+- 用户令牌：`UserToken` 不是 `Token`
+- 前端路由：`FrontendRoute` 不是 `Route`
+
+---
+
+## 13. 故障排查
+
+### 13.1 循环导入问题
+
+**症状：** `ImportError: cannot import name 'Base' from partially initialized module`
+
+**解决方案：**
+```python
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.schemas.xxx import Base as XxxBase
+
+# 在类型注解中使用字符串引用
+field: List["XxxBase"] = Field(...)
+```
+
+### 13.2 关联数据未加载
+
+**症状：** 访问关联对象时报错或返回空
+
+**解决方案：**
+- 列表查询：确保使用 `prefetch_related('relation_name')`
+- 单个查询：确保使用 `await obj.fetch_related('relation_name')`
+
+### 13.3 N+1 查询问题
+
+**症状：** 列表查询时数据库查询次数过多
+
+**解决方案：**
+- 将循环中的 `fetch_related` 改为查询时的 `prefetch_related`
+- 示例：`await query.prefetch_related('user', 'roles')`
+
+---
+
+## 14. 联系与贡献
+
+如有问题或建议，请联系项目维护者。

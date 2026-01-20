@@ -1,13 +1,15 @@
 from datetime import datetime
-from typing import List
+from typing import List, TYPE_CHECKING
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_serializer
 
 from app.models.user import UserStatus
 from app.utils.time_tool import CN_TZ
-from app.schemas.project.info import Base as ProjectInfoBase
 from .role import Base as RoleBase
+
+if TYPE_CHECKING:
+    from app.schemas.project.info import Base as ProjectInfoBase
 
 
 class Base(BaseModel):
@@ -59,7 +61,7 @@ class Out(Base):
     roles: List[RoleBase] = Field(default_factory=list, description="角色列表")
     
     # 关联的项目列表
-    projects: List[ProjectInfoBase] = Field(default_factory=list, description="项目列表")
+    projects: List["ProjectInfoBase"] = Field(default_factory=list, description="项目列表")
 
     @field_serializer("create_time", "update_time")
     def format_datetime(self, dt: datetime) -> str:

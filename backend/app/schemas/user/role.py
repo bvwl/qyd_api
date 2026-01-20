@@ -1,11 +1,13 @@
 from datetime import datetime
-from typing import List
+from typing import List, TYPE_CHECKING
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_serializer
 
 from app.utils.time_tool import CN_TZ
-from .info import Base as UserBase
+
+if TYPE_CHECKING:
+    from .info import Base as UserBase
 
 
 class RouteLite(BaseModel):
@@ -66,7 +68,7 @@ class Out(Base):
     update_time: datetime = Field(..., description="更新时间")
 
     # 关联的用户列表
-    users: List[UserBase] = Field(default_factory=list, description="用户列表")
+    users: List["UserBase"] = Field(default_factory=list, description="用户列表")
 
     # 关联的路由列表
     routes: List[RouteLite] = Field(default_factory=list, description="路由列表")
