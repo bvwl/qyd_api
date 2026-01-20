@@ -1,24 +1,26 @@
 from datetime import datetime
+from enum import StrEnum
 from pydantic import BaseModel, Field, field_serializer, computed_field
 from typing import List
-from enum import Enum
 from uuid import UUID
+
+from app.models.mail import Status
 from app.utils.time_tool import CN_TZ
 from app.schemas.server.info import Base as ServerInfoBase
 
 
-class EmailType(str, Enum):
+class EmailType(StrEnum):
     """
-    邮件类型枚举
+    邮件类型枚举（业务层使用）
     """
-    IP_OK = 'ip_ok'
-    IP_NOT = 'ip_not'
-    TOKEN_OK = 'token_ok'
-    TOKEN_NOT = 'token_not'
-    IP_OK_TOKEN_OK = 'ip_ok_token_ok'
-    IP_OK_TOKEN_NOT = 'ip_ok_token_not'
-    IP_NOT_TOKEN_OK = 'ip_not_token_ok'
-    IP_NOT_TOKEN_NOT = 'ip_not_token_not'
+    IP_OK = 'IP_OK'
+    IP_NOT = 'IP_NOT'
+    TOKEN_OK = 'TOKEN_OK'
+    TOKEN_NOT = 'TOKEN_NOT'
+    IP_OK_TOKEN_OK = 'IP_OK_TOKEN_OK'
+    IP_OK_TOKEN_NOT = 'IP_OK_TOKEN_NOT'
+    IP_NOT_TOKEN_OK = 'IP_NOT_TOKEN_OK'
+    IP_NOT_TOKEN_NOT = 'IP_NOT_TOKEN_NOT'
 
 
 class Base(BaseModel):
@@ -28,14 +30,13 @@ class Base(BaseModel):
     字段与数据库模型 EmailInfo 保持一致
     """
     email: str = Field(..., max_length=50, description='邮箱号')
-    password: str = Field(..., max_length=50, description='密码')
+    password: str = Field(..., description='密码')
     auxiliary_email: str = Field(..., max_length=50, description='辅助邮箱')
-    auxiliary_email_password: str = Field(...,
-                                          max_length=50, description='辅助邮箱密码')
+    auxiliary_email_password: str = Field(..., description='辅助邮箱密码')
     client_id: str | None = Field(None, max_length=50, description='客户端id')
     access_token: str | None = Field(None, description='access_token')
     refresh_token: str | None = Field(None, description='refresh_token')
-    status: int = Field(1, description='状态(1:正常,2:异常)')
+    status: Status = Field(Status.OK, description='状态(1:正常,2:异常)')
 
     class Config:
         from_attributes = True
@@ -45,7 +46,7 @@ class Create(Base):
     """
     创建请求模型
     """
-    server_info_id: UUID | None = Field(None, description='代理信息ID')
+    server_id: UUID | None = Field(None, description='代理信息ID')
 
 
 class Update(BaseModel):
@@ -53,16 +54,16 @@ class Update(BaseModel):
     更新请求模型，支持部分更新
     """
     email: str | None = Field(None, max_length=50, description='邮箱号')
-    password: str | None = Field(None, max_length=50, description='密码')
+    password: str | None = Field(None, description='密码')
     auxiliary_email: str | None = Field(
         None, max_length=50, description='辅助邮箱')
     auxiliary_email_password: str | None = Field(
-        None, max_length=50, description='辅助邮箱密码')
+        None, description='辅助邮箱密码')
     client_id: str | None = Field(None, max_length=50, description='客户端id')
     access_token: str | None = Field(None, description='access_token')
     refresh_token: str | None = Field(None, description='refresh_token')
-    status: int | None = Field(None, description='状态(1:正常,2:异常)')
-    server_info_id: UUID | None = Field(None, description='代理信息ID')
+    status: Status | None = Field(None, description='状态(1:正常,2:异常)')
+    server_id: UUID | None = Field(None, description='代理信息ID')
 
 
 class Out(Base):
@@ -74,13 +75,13 @@ class Out(Base):
 
     create_time: datetime = Field(..., description='创建时间')
     update_time: datetime = Field(..., description='更新时间')
-    server_info_id: UUID | None = Field(None, description='代理信息ID')
-    server_info: ServerInfoBase | None = Field(None, description='代理信息')
+    server_id: UUID | None = Field(None, description='代理信息ID')
+    server: ServerInfoBase | None = Field(None, description='代理信息')
 
     @computed_field
     @property
     def proxy_type(self) -> str:
-        server = self.server_info
+        server = self.server
         if not server or server.port is None:
             return "unknown"
         if 20000 <= server.port < 30000:
@@ -92,7 +93,7 @@ class Out(Base):
     @computed_field
     @property
     def proxy_url(self) -> str:
-        server = self.server_info
+        server = self.server
 
         if not server or server.port is None:
             return ""

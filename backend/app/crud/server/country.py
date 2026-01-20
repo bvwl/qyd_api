@@ -1,55 +1,116 @@
-from typing import Dict, Any
 from uuid import UUID
+from fastapi import HTTPException
 
 from app.models.server import ServerCountry
-from ..base import CRUDBase
+from app.schemas.server.country import Create, Update, Out, OutList
+from app.schemas.base import BaseOut
+from app.utils.time_tool import parse_time
 
 
-class CRUD(CRUDBase[ServerCountry]):
-    """
-    国家信息专用 CRUD
+class CRUD:
+    # 创建
+    async def create(self, item: Create) -> Out:
+        is_exist = await ServerCountry.get_or_none(short_name=item.short_name)
+        if is_exist:
+            raise HTTPException(status_code=400, detail='国家简称已存在')
+        res = await ServerCountry.create(**item.model_dump())
+        if not res:
+            raise HTTPException(status_code=500, detail='创建失败')
+        await res.fetch_related('server_groups')
+        return Out.model_validate(res)
 
-    主要职责：
-    - 提供 short_name/status 维度的列表查询
-    - 支持按创建时间/更新时间范围过滤
-    - 在创建/更新时校验国家简称唯一性
-    """
-    # 列表查询支持的字段及其查询方式
-    QUERY_FIELD_RULES = {
-        # 国家简称模糊查询（API 中会先转为大写）
-        "short_name": "contains",
-        # 状态精确匹配
-        "status": "exact",
-        # 创建/更新时间范围查询
-        "create_time_start": "gte",
-        "create_time_end": "lte",
-        "update_time_start": "gte",
-        "update_time_end": "lte",
-    }
-    # 查询参数名到模型字段名的映射（处理 xxx_start/xxx_end）
-    QUERY_FIELD_MAP = {
-        "create_time_start": "create_time",
-        "create_time_end": "create_time",
-        "update_time_start": "update_time",
-        "update_time_end": "update_time",
-    }
+    # 查询
+    async def get(self, id: UUID) -> Out:
+        res = await ServerCountry.get_or_none(id=id)
+        if not res:
+            raise HTTPException(status_code=404, detail='数据不存在')
+        await res.fetch_related('server_groups')
+        return Out.model_validate(res)
 
-    async def _before_create(self, obj_in: Dict[str, Any]) -> None:
-        """
-        创建数据前的校验钩子
-        :param obj_in: 创建数据字典
-        :raise ValueError: 校验失败时抛异常
-        """
-        if await self.model.filter(short_name=obj_in['short_name']).first():
-            raise ValueError('国家简称已存在')
+    # 条件查询
+    async def get_multi(self,
+                        short_name: str | None = None,
+                        status: int | None = None,
+                        page: int = 1,
+                        limit: int = 10,
+                        res_count: bool = False,
+                        order_by: str = '-create_time',
+                        create_time_start: str | int | None = None,
+                        create_time_end: str | int | None = None,
+                        update_time_start: str | int | None = None,
+                        update_time_end: str | int | None = None
+                        ) -> OutList:
+        query = ServerCountry.all()
+        if short_name:
+            query = query.filter(short_name__icontains=short_name)
+        if status is not None:
+            query = query.filter(status=status)
+        if create_time_start:
+            query = query.filter(create_time__gte=parse_time(create_time_start))
+        if create_time_end:
+            query = query.filter(create_time__lte=parse_time(
+                create_time_end, is_end=True))
+        if update_time_start:
+            query = query.filter(update_time__gte=parse_time(update_time_start))
+        if update_time_end:
+            query = query.filter(update_time__lte=parse_time(
+                update_time_end, is_end=True))
 
-    async def _before_update(self, id: UUID, update_data: Dict[str, Any], db_obj: ServerCountry) -> None:
-        """更新前校验国家简称唯一性（排除自身）"""
-        if "short_name" in update_data:
-            new_short_name = update_data["short_name"]
-            exists = await self.model.filter(short_name=new_short_name, id__not=id).first()
-            if exists:
-                raise ValueError(f"国家简称 {new_short_name} 已被占用")
+        if order_by:
+            query = query.order_by(order_by)
+
+        if res_count:
+            count = await query.count()
+        else:
+            count = -1
+
+        offset = (page - 1) * limit  # 计算偏移量
+        query = query.limit(limit).offset(offset)  # 应用分页
+        res = await query
+        num = len(res)
+        for item in res:
+            await item.fetch_related('server_groups')
+        items = [Out.model_validate(obj) for obj in res]
+        return OutList(message='成功', count=count, num=num, items=items)
+
+    # 更新
+    async def update(self, id: UUID, item: Update) -> Out:
+        res = await ServerCountry.get_or_none(id=id)
+        if not res:
+            raise HTTPException(status_code=404, detail='数据不存在')
+        update_data = item.model_dump(exclude_unset=True)
+        if not update_data:
+            raise HTTPException(status_code=400, detail='没有更新数据')
+        if 'short_name' in update_data:
+            new_short_name = update_data['short_name']
+            is_exist = await ServerCountry.get_or_none(short_name=new_short_name)
+            if is_exist and is_exist.id != id:
+                raise HTTPException(status_code=400, detail=f'国家简称 {new_short_name} 已被占用')
+
+        await res.update_from_dict(update_data)
+        await res.save()
+        await res.fetch_related('server_groups')
+        return Out.model_validate(res)
+
+    # 删除
+    async def delete(self, id: UUID) -> BaseOut:
+        res = await ServerCountry.get_or_none(id=id)
+        if not res:
+            raise HTTPException(status_code=404, detail='数据不存在')
+        await res.delete()
+        return BaseOut(message='成功', count=1)
+
+    # 创建或更新
+    async def upsert(self, item: Create) -> Out:
+        record, created = await ServerCountry.get_or_create(
+            defaults=item.model_dump(),
+            short_name=item.short_name
+        )
+        if not created:
+            await record.update_from_dict(item.model_dump(exclude_unset=True))
+            await record.save()
+        await record.fetch_related('server_groups')
+        return Out.model_validate(record)
 
 
-server_country_crud = CRUD(ServerCountry)
+server_country_crud = CRUD()

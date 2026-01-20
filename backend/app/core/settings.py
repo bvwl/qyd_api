@@ -38,6 +38,8 @@ TORTOISE_ORM = {
             "models": [
                 "app.models.mail",
                 "app.models.server",
+                "app.models.user",
+                "app.models.project",
                 "aerich.models",
             ],
             "default_connection": "default",

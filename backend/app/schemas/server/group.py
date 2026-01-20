@@ -2,6 +2,8 @@ from datetime import datetime
 from pydantic import BaseModel, Field, field_serializer
 from typing import List
 from uuid import UUID
+
+from app.models.server import Status
 from app.utils.time_tool import CN_TZ
 from .country import Base as ServerCountryBase
 
@@ -13,7 +15,7 @@ class Base(BaseModel):
     字段与数据库模型 ServerGroup 保持一致
     """
     name: str = Field(..., description='分组名称')
-    status: int = Field(1, description='状态(1:正常,2:异常)')
+    status: Status = Field(Status.OK, description='状态(1:正常,2:异常)')
 
     class Config:
         from_attributes = True
@@ -32,7 +34,7 @@ class Update(BaseModel):
     """
     name: str | None = Field(None, description='分组名称')
     country_id: UUID | None = Field(None, description='国家ID')
-    status: int | None = Field(None, description='状态(1:正常,2:异常)')
+    status: Status | None = Field(None, description='状态(1:正常,2:异常)')
 
 
 class Out(Base):

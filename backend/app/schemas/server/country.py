@@ -2,7 +2,18 @@ from datetime import datetime
 from pydantic import BaseModel, Field, field_serializer
 from typing import List
 from uuid import UUID
-from app.utils.time_tool import TimestampModel, CN_TZ
+
+from app.models.server import Status
+from app.utils.time_tool import CN_TZ
+
+
+class ServerGroupLite(BaseModel):
+    id: UUID = Field(..., description='分组ID')
+    name: str = Field(..., description='分组名称')
+    status: Status = Field(Status.OK, description='状态(1:正常,2:异常)')
+
+    class Config:
+        from_attributes = True
 
 
 class Base(BaseModel):
@@ -13,7 +24,7 @@ class Base(BaseModel):
     """
     short_name: str = Field(..., description='国家简称')
     name: str = Field(..., description='国家名称')
-    status: int = Field(1, description='状态(1:正常,2:异常)')
+    status: Status = Field(Status.OK, description='状态(1:正常,2:异常)')
 
     class Config:
         from_attributes = True
@@ -32,7 +43,7 @@ class Update(BaseModel):
     """
     short_name: str | None = Field(None, description='国家简称')
     name: str | None = Field(None, description='国家名称')
-    status: int | None = Field(None, description='状态(1:正常,2:异常)')
+    status: Status | None = Field(None, description='状态(1:正常,2:异常)')
 
 
 class Out(Base):
@@ -44,6 +55,7 @@ class Out(Base):
 
     create_time: datetime = Field(..., description='创建时间')
     update_time: datetime = Field(..., description='更新时间')
+    server_groups: List[ServerGroupLite] = Field([], description='关联分组列表')
 
     @field_serializer('create_time', 'update_time')
     def format_datetime(self, dt: datetime) -> str:

@@ -9,7 +9,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 from app.crud.user.user import user_crud
 from app.crud.user.token import token_crud
-from app.schemas.user.user import Out as UserOut
+from app.schemas.user.info import Out as UserOut
 from app.utils.time_tool import now_cn
 
 
@@ -39,17 +39,17 @@ def _hash_password(password: str) -> str:
 
 
 async def _create_token_for_user(user_id: UUID) -> str:
+    from app.schemas.user.token import Create as TokenCreate
     access_token = secrets.token_hex(16)
     expired_at = (now_cn() + timedelta(days=7)).replace(tzinfo=None)
-    await token_crud.create(
-        {
-            "user_id": user_id,
-            "access_token": access_token,
-            "refresh_token": None,
-            "expired_at": expired_at,
-            "is_revoked": False,
-        }
+    token_data = TokenCreate(
+        user_id=user_id,
+        access_token=access_token,
+        refresh_token=None,
+        expired_at=expired_at,
+        is_revoked=False,
     )
+    await token_crud.create(token_data)
     return access_token
 
 
@@ -57,7 +57,7 @@ async def _create_token_for_user(user_id: UUID) -> str:
 async def register(item: RegisterRequest = Body(..., description="注册信息")):
     try:
         password_hash = _hash_password(item.password)
-        user = await user_crud.create(
+        user_out = await user_crud.create(
             {
                 "email": item.email,
                 "password_hash": password_hash,
@@ -65,18 +65,7 @@ async def register(item: RegisterRequest = Body(..., description="注册信息")
                 "avatar": item.avatar,
             }
         )
-        access_token = await _create_token_for_user(user.id)
-        user_out = UserOut(
-            message="成功",
-            id=user.id,
-            email=user.email,
-            nickname=user.nickname,
-            avatar=user.avatar,
-            status=user.status,
-            create_time=user.create_time,
-            update_time=user.update_time,
-            roles=list(getattr(user, "roles", [])),
-        )
+        access_token = await _create_token_for_user(user_out.id)
         return AuthResponse(message="成功", user=user_out, access_token=access_token)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -89,7 +78,8 @@ async def register(item: RegisterRequest = Body(..., description="注册信息")
 @app.post("/login", response_model=AuthResponse, description="用户登录", summary="用户登录")
 async def login(item: LoginRequest = Body(..., description="登录信息")):
     try:
-        user = await user_crud.model.get_or_none(email=item.email)
+        from app.models.user import UserInfo
+        user = await UserInfo.get_or_none(email=item.email).prefetch_related('roles')
         if not user:
             raise HTTPException(status_code=400, detail="邮箱或密码错误")
         password_hash = _hash_password(item.password)
@@ -112,4 +102,3 @@ async def login(item: LoginRequest = Body(..., description="登录信息")):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-

@@ -3,5 +3,5 @@
   <component name="Black">
     <option name="sdkName" value="zy312" />
   </component>
-  <component name="ProjectRootManager" version="2" project-jdk-name="zy312" project-jdk-type="Python SDK" />
+  <component name="ProjectRootManager" version="2" project-jdk-name="table_api" project-jdk-type="Python SDK" />
 </project>

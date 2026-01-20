@@ -16,7 +16,7 @@ async def post(item: Create = Body(..., description='创建数据')):
     创建服务器信息记录
     """
     try:
-        return await server_info_crud.create(item.model_dump())
+        return await server_info_crud.create(item)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException as e:
@@ -62,21 +62,11 @@ async def gets(
         limit: int = Query(10, ge=1, le=1000, description='每页数量'),
 ):
     try:
-        if res_count:
-            count = await server_info_crud.get_count(
-                host=host,
-                domain=domain,
-                create_time_start=parse_time(create_time_start),
-                create_time_end=parse_time(create_time_end, True),
-                update_time_start=parse_time(update_time_start),
-                update_time_end=parse_time(update_time_end, True),
-            )
-        else:
-            count = -1
-        items = await server_info_crud.get_multi(
+        return await server_info_crud.get_multi(
             host=host,
             domain=domain,
             order_by=order_by,
+            res_count=res_count,
             create_time_start=parse_time(create_time_start),
             create_time_end=parse_time(create_time_end, True),
             update_time_start=parse_time(update_time_start),
@@ -84,7 +74,6 @@ async def gets(
             page=page,
             limit=limit
         )
-        return OutList(message='成功', count=count, num=len(items), items=items)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -100,7 +89,7 @@ async def put(id: UUID = Path(..., description='主键ID'),
     部分更新服务器信息，只更新传入的非空字段
     """
     try:
-        return await server_info_crud.update(id, item.model_dump(exclude_unset=True))
+        return await server_info_crud.update(id, item)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -114,14 +103,13 @@ async def delete(id: UUID = Path(..., description='主键ID')):
     删除服务器信息
     """
     try:
-        ok = await server_info_crud.delete(id)
+        return await server_info_crud.delete(id)
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    if not ok:
-        raise HTTPException(status_code=404, detail='数据不存在')
-    return BaseOut(message='成功', count=1)
 
 
 # 创建或更新服务器信息
@@ -134,7 +122,7 @@ async def post_or_put(item: Create = Body(..., description='创建或更新数�
         filter_kwargs = {
             "host": item.host
         }
-        return await server_info_crud.upsert(filter_kwargs, item.model_dump())
+        return await server_info_crud.upsert(filter_kwargs, item)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

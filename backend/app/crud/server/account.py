@@ -1,54 +1,103 @@
-from typing import Dict, Any
 from uuid import UUID
+from fastapi import HTTPException
 
-from app.models.server import ProxyAccount
-from ..base import CRUDBase
-
-
-class CRUD(CRUDBase[ProxyAccount]):
-    """
-    代理账号专用 CRUD
-
-    主要职责：
-    - 提供用户名维度的模糊查询
-    - 支持按创建时间/更新时间范围过滤
-    - 在创建/更新时校验用户名唯一性
-    """
-    # 列表查询支持的字段及其查询方式
-    QUERY_FIELD_RULES = {
-        # 用户名模糊查询
-        "username": "icontains",
-        # 创建/更新时间范围查询
-        "create_time_start": "gte",
-        "create_time_end": "lte",
-        "update_time_start": "gte",
-        "update_time_end": "lte",
-    }
-    # 查询参数名到模型字段名的映射（处理 xxx_start/xxx_end）
-    QUERY_FIELD_MAP = {
-        "create_time_start": "create_time",
-        "create_time_end": "create_time",
-        "update_time_start": "update_time",
-        "update_time_end": "update_time",
-    }
-
-    async def _before_create(self, obj_in: Dict[str, Any]) -> None:
-        """
-        创建数据前的校验钩子
-        :param obj_in: 创建数据字典
-        :raise ValueError: 校验失败时抛异常
-        """
-        if await self.model.filter(username=obj_in['username']).first():
-            raise ValueError('用户名已存在')
-
-    async def _before_update(self, id: UUID, update_data: Dict[str, Any], db_obj: ProxyAccount) -> None:
-        """更新前校验用户名唯一性（排除自身）"""
-        if "username" in update_data:
-            new_username = update_data["username"]
-            exists = await self.model.filter(username=new_username, id__not=id).first()
-            if exists:
-                raise ValueError(f"用户名 {new_username} 已被占用")
+from app.models.server import ServerAccount
+from app.schemas.server.account import Create, Update, Out, OutList
+from app.schemas.base import BaseOut
+from app.utils.time_tool import parse_time
 
 
+class CRUD:
+    # 创建
+    async def create(self, item: Create) -> Out:
+        is_exist = await ServerAccount.get_or_none(username=item.username)
+        if is_exist:
+            raise HTTPException(status_code=400, detail='用户名已存在')
+        res = await ServerAccount.create(**item.model_dump())
+        if not res:
+            raise HTTPException(status_code=500, detail='创建失败')
+        return Out.model_validate(res)
 
-server_account_crud = CRUD(ProxyAccount)
+    # 查询
+    async def get(self, id: UUID) -> Out:
+        res = await ServerAccount.get_or_none(id=id)
+        if not res:
+            raise HTTPException(status_code=404, detail='用户不存在')
+        return Out.model_validate(res)
+
+    # 条件查询
+    async def get_multi(self,
+                        username: str | None = None,
+                        page: int = 1,
+                        limit: int = 10,
+                        res_count: bool = False,
+                        order_by: str = '-create_time',
+                        create_time_start: str | int | None = None,
+                        create_time_end: str | int | None = None,
+                        update_time_start: str | int | None = None,
+                        update_time_end: str | int | None = None
+                        ) -> OutList:
+        query = ServerAccount.all()
+        if username:
+            query = query.filter(username__icontains=username)
+        if create_time_start:
+            query = query.filter(create_time__gte=parse_time(create_time_start))
+        if create_time_end:
+            query = query.filter(create_time__lte=parse_time(
+                create_time_end, is_end=True))
+        if update_time_start:
+            query = query.filter(update_time__gte=parse_time(update_time_start))
+        if update_time_end:
+            query = query.filter(update_time__lte=parse_time(
+                update_time_end, is_end=True))
+
+        if order_by:
+            query = query.order_by(order_by)
+
+        if res_count:
+            count = await query.count()
+        else:
+            count = -1
+
+        offset = (page - 1) * limit  # 计算偏移量
+        query = query.limit(limit).offset(offset)  # 应用分页
+        res = await query
+        num = len(res)
+        items = [Out.model_validate(obj) for obj in res]
+        return OutList(message='成功', count=count, num=num, items=items)
+
+    # 更新
+    async def update(self, id: UUID, item: Update) -> Out:
+        res = await ServerAccount.get_or_none(id=id)
+        if not res:
+            raise HTTPException(status_code=404, detail='用户不存在')
+        update_data = item.model_dump(exclude_unset=True)
+        if not update_data:
+            raise HTTPException(status_code=400, detail='没有更新数据')
+
+        await res.update_from_dict(update_data)
+        await res.save()
+        return Out.model_validate(res)
+
+    # 删除
+    async def delete(self, id: UUID) -> BaseOut:
+        res = await ServerAccount.get_or_none(id=id)
+        if not res:
+            raise HTTPException(status_code=404, detail='用户不存在')
+        await res.delete()
+        return BaseOut(message='成功', count=1)
+
+    # 创建或更新
+    async def upsert(self, item: Create) -> Out:
+
+        record, created = await ServerAccount.get_or_create(
+            defaults=item.model_dump(),
+            username=item.username
+        )
+        if not created:
+            await record.update_from_dict(item.model_dump(exclude_unset=True))
+            await record.save()
+        return Out.model_validate(record)
+
+
+server_account_crud = CRUD()

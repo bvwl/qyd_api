@@ -1,75 +1,162 @@
-from typing import Dict, Any
 from uuid import UUID
+from fastapi import HTTPException
 
-from app.models.user import User
-from ..base import CRUDBase
+from app.models.user import UserInfo
+from app.schemas.user.info import Create, Update, Out, OutList
+from app.schemas.base import BaseOut
+from app.utils.time_tool import parse_time
 
 
-class CRUD(CRUDBase[User]):
-    """
-    用户信息专用 CRUD
+class CRUD:
+    # 创建
+    async def create(self, item: dict | Create) -> Out:
+        # 统一处理为字典
+        if isinstance(item, dict):
+            data = item.copy()
+            email = data.get('email')
+        else:
+            data = item.model_dump()
+            email = item.email
+        
+        is_exist = await UserInfo.get_or_none(email=email)
+        if is_exist:
+            raise HTTPException(status_code=400, detail='邮箱已存在')
+        
+        # 分离关联字段
+        role_ids = data.pop('role_ids', None)
+        
+        res = await UserInfo.create(**data)
+        if not res:
+            raise HTTPException(status_code=500, detail='创建失败')
+        
+        # 处理多对多关系
+        if role_ids:
+            await res.roles.add(*role_ids)
+        
+        await res.fetch_related('roles', 'tokens', 'logs', 'server_account', 'projects')
+        return Out.model_validate(res)
 
-    主要职责：
-    - 提供 email/status 维度的查询
-    - 支持按创建时间/更新时间范围过滤
-    - 查询时预加载角色信息
-    - 写入时处理角色多对多关联（role_ids -> roles）
-    """
-    # 列表查询支持的字段及其查询方式
-    QUERY_FIELD_RULES = {
-        # 邮箱模糊查询
-        "email": "contains",
-        # 状态精确匹配
-        "status": "exact",
-        # 创建/更新时间范围查询
-        "create_time_start": "gte",
-        "create_time_end": "lte",
-        "update_time_start": "gte",
-        "update_time_end": "lte",
-    }
-    # 查询参数名到模型字段名的映射（处理 xxx_start/xxx_end）
-    QUERY_FIELD_MAP = {
-        "create_time_start": "create_time",
-        "create_time_end": "create_time",
-        "update_time_start": "update_time",
-        "update_time_end": "update_time",
-    }
-    # 查询时预加载角色信息
-    FETCH_RELATED_FIELDS = ("roles",)
-    # 关联字段配置：请求中的 role_ids 映射到模型的 roles 多对多关系
-    RELATED_FIELDS = {
-        "role_ids": "roles",
-    }
+    # 查询
+    async def get(self, id: UUID) -> Out:
+        res = await UserInfo.get_or_none(id=id).prefetch_related('roles', 'tokens', 'logs', 'server_account', 'projects')
+        if not res:
+            raise HTTPException(status_code=404, detail='数据不存在')
+        await res.fetch_related('roles', 'tokens', 'logs', 'server_account', 'projects')
+        return Out.model_validate(res)
 
-    async def _before_create(self, obj_in: Dict[str, Any]) -> None:
-        """
-        创建数据前的校验钩子
-        :param obj_in: 创建数据字典
-        :raise ValueError: 校验失败时抛异常
-        """
-        if await self.model.filter(email=obj_in["email"]).first():
-            raise ValueError("邮箱已存在")
+    # 条件查询
+    async def get_multi(self,
+                        email: str | None = None,
+                        status: int | None = None,
+                        page: int = 1,
+                        limit: int = 10,
+                        res_count: bool = False,
+                        order_by: str = '-create_time',
+                        create_time_start: str | int | None = None,
+                        create_time_end: str | int | None = None,
+                        update_time_start: str | int | None = None,
+                        update_time_end: str | int | None = None
+                        ) -> OutList:
+        query = UserInfo.all().prefetch_related('roles', 'tokens', 'logs', 'server_account', 'projects')
+        if email:
+            query = query.filter(email__icontains=email)
+        if status is not None:
+            query = query.filter(status=status)
+        if create_time_start:
+            query = query.filter(create_time__gte=parse_time(create_time_start))
+        if create_time_end:
+            query = query.filter(create_time__lte=parse_time(
+                create_time_end, is_end=True))
+        if update_time_start:
+            query = query.filter(update_time__gte=parse_time(update_time_start))
+        if update_time_end:
+            query = query.filter(update_time__lte=parse_time(
+                update_time_end, is_end=True))
 
-    async def _before_update(self, id: UUID, update_data: Dict[str, Any], db_obj: User) -> None:
-        """更新前校验邮箱唯一性（排除自身）"""
-        if "email" in update_data:
-            new_email = update_data["email"]
-            exists = await self.model.filter(email=new_email, id__not=id).first()
-            if exists:
-                raise ValueError(f"邮箱 {new_email} 已被占用")
+        if order_by:
+            query = query.order_by(order_by)
 
-    async def _handle_related_fields(self, db_obj: User, related_data: Dict[str, Any], is_created: bool) -> None:
-        """
-        处理关联字段：角色多对多关系
-        """
-        role_ids = related_data.get("role_ids")
+        if res_count:
+            count = await query.count()
+        else:
+            count = -1
+
+        offset = (page - 1) * limit  # 计算偏移量
+        query = query.limit(limit).offset(offset)  # 应用分页
+        res = await query
+        num = len(res)
+        for item in res:
+            await item.fetch_related('roles', 'tokens', 'logs', 'server_account', 'projects')
+        items = [Out.model_validate(obj) for obj in res]
+        return OutList(message='成功', count=count, num=num, items=items)
+
+    # 更新
+    async def update(self, id: UUID, item: Update) -> Out:
+        res = await UserInfo.get_or_none(id=id)
+        if not res:
+            raise HTTPException(status_code=404, detail='数据不存在')
+        
+        update_data = item.model_dump(exclude_unset=True)
+        if not update_data:
+            raise HTTPException(status_code=400, detail='没有更新数据')
+        
+        # 检查邮箱唯一性
+        if 'email' in update_data:
+            new_email = update_data['email']
+            is_exist = await UserInfo.get_or_none(email=new_email)
+            if is_exist and is_exist.id != id:
+                raise HTTPException(status_code=400, detail=f'邮箱 {new_email} 已被占用')
+        
+        # 分离关联字段
+        role_ids = update_data.pop('role_ids', None)
+        
+        # 更新基本字段
+        if update_data:
+            await res.update_from_dict(update_data)
+            await res.save()
+        
+        # 处理多对多关系
         if role_ids is not None:
-            # 先清空原有关联
-            await db_obj.roles.clear()
-            # 再添加新的角色
+            await res.roles.clear()
             if role_ids:
-                await db_obj.roles.add(*role_ids)
+                await res.roles.add(*role_ids)
+        
+        await res.fetch_related('roles', 'tokens', 'logs', 'server_account', 'projects')
+        return Out.model_validate(res)
+
+    # 删除
+    async def delete(self, id: UUID) -> BaseOut:
+        res = await UserInfo.get_or_none(id=id)
+        if not res:
+            raise HTTPException(status_code=404, detail='数据不存在')
+        await res.delete()
+        return BaseOut(message='成功', count=1)
+
+    # 创建或更新
+    async def upsert(self, item: Create) -> Out:
+        # 分离关联字段
+        data = item.model_dump()
+        role_ids = data.pop('role_ids', None)
+        
+        record, created = await UserInfo.get_or_create(
+            defaults=data,
+            email=item.email
+        )
+        
+        if not created:
+            update_data = {k: v for k, v in data.items() if k != 'email'}
+            if update_data:
+                await record.update_from_dict(update_data)
+                await record.save()
+        
+        # 处理多对多关系
+        if role_ids is not None:
+            await record.roles.clear()
+            if role_ids:
+                await record.roles.add(*role_ids)
+        
+        await record.fetch_related('roles', 'tokens', 'logs', 'server_account', 'projects')
+        return Out.model_validate(record)
 
 
-user_crud = CRUD(User)
-
+user_crud = CRUD()

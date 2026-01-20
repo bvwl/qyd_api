@@ -158,7 +158,7 @@ if __name__ == '__main__':
     run(
         'main:app',
         host='0.0.0.0',
-        port=6070,
+        port=6080,
         reload=False,
         workers=1,
         # loop='uvloop',

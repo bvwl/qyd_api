@@ -2,6 +2,8 @@ from datetime import datetime
 from pydantic import BaseModel, Field, field_serializer, computed_field
 from typing import List
 from uuid import UUID
+
+from app.models.server import Status, IsSale
 from app.utils.time_tool import CN_TZ
 from .group import Base as GroupBase
 
@@ -15,9 +17,9 @@ class Base(BaseModel):
     host: str = Field(..., description='服务器地址')
     ssh_port: int | None = Field(None, description='ssh端口')
     password: str | None = Field(None, description='服务器密码')
-    status: int = Field(1, description='状态(1:正常,4:异常)')
+    status: Status = Field(Status.OK, description='状态(1:正常,2:异常)')
     domain: str | None = Field(None, description='域名')
-    is_sale: int = Field(1, description='是否销售(1:是,2:否)')
+    is_sale: IsSale = Field(IsSale.YES, description='是否销售(1:是,2:否)')
     port: int | None = Field(None, description='代理端口')
 
     class Config:
@@ -38,9 +40,9 @@ class Update(BaseModel):
     host: str | None = Field(None, description='服务器地址')
     ssh_port: int | None = Field(None, description='ssh端口')
     password: str | None = Field(None, description='服务器密码')
-    status: int | None = Field(None, description='状态(1:正常,4:异常)')
+    status: Status | None = Field(None, description='状态(1:正常,2:异常)')
     domain: str | None = Field(None, description='域名')
-    is_sale: int | None = Field(None, description='是否销售(1:是,2:否)')
+    is_sale: IsSale | None = Field(None, description='是否销售(1:是,2:否)')
     port: int | None = Field(None, description='代理端口')
     group_id: UUID | None = Field(None, description='分组ID')
 
@@ -61,6 +63,8 @@ class Out(Base):
     @computed_field
     @property
     def proxy_type(self) -> str:
+        if self.port is None:
+            return "unknown"
         if 20000 <= self.port < 30000:
             return "http"
         elif 30000 <= self.port < 40000:
@@ -70,6 +74,8 @@ class Out(Base):
     @computed_field
     @property
     def proxy_url(self) -> str:
+        if self.port is None:
+            return ""
         if self.domain:
             return f"socks5://username:password@{self.domain}:{self.port}"
         return f"socks5://username:password@{self.host}:{self.port}"

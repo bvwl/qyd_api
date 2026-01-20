@@ -35,7 +35,7 @@ async def post(item: Create = Body(..., description='创建数据')):
     创建邮箱信息记录
     """
     try:
-        return await email_info_crud.create(item.model_dump())
+        return await email_info_crud.create(item)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException as e:
@@ -145,14 +145,14 @@ async def delete(id: UUID = Path(..., description='主键ID')):
     删除邮箱信息
     """
     try:
-        ok = await email_info_crud.delete(id)
+        await email_info_crud.delete(id)
+        return BaseOut(message='成功', count=1)
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    if not ok:
-        raise HTTPException(status_code=404, detail='数据不存在')
-    return BaseOut(message='成功', count=1)
 
 
 # 创建或更新邮箱信息
@@ -162,10 +162,7 @@ async def post_or_put(item: Create = Body(..., description='创建或更新数�
     创建或更新邮箱信息
     """
     try:
-        filter_kwargs = {
-            "email": item.email
-        }
-        return await email_info_crud.upsert(filter_kwargs, item.model_dump())
+        return await email_info_crud.upsert(item)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

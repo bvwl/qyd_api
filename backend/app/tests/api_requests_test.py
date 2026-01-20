@@ -10,7 +10,7 @@ def _base_url() -> str:
     获取基础接口地址
     """
     host = os.getenv("APP_HOST", "127.0.0.1")
-    port = int(os.getenv("APP_PORT", "6070"))
+    port = int(os.getenv("APP_PORT", "6080"))
     return f"http://{host}:{port}/v1"
 
 
@@ -144,32 +144,15 @@ def test_account_flow() -> dict:
 
 def test_email_auth_flow() -> dict:
     """
-    邮箱授权接口完整流程：创建→获取→列表→更新→返回 ID
+    已废弃：邮箱授权接口已移除
     """
-    auth_addr = f"https://auth.example.com/{uuid.uuid4().hex[:6]}"
-    payload = {
-        "email": f"user{uuid.uuid4().hex[:6]}@example.com",
-        "auth_group": random.randint(1, 5),
-        "authorization_address": auth_addr,
-        "status": 1,
-        "back_code": uuid.uuid4().hex[:8],
-    }
-    created = _req("POST", "/mail/auth", json=payload)
-    mid = created["id"]
-
-    _ = _req("GET", f"/mail/auth/{mid}")
-    _ = _req("GET", "/mail/auth", params={"authorization_address": auth_addr, "res_count": True})
-    _ = _req("PUT", f"/mail/auth/{mid}", json={"status": 2})
-    return {"id": mid, "authorization_address": auth_addr}
+    return {}
 
 
 def cleanup_resources(ids: dict) -> None:
     """
     清理资源，按外键依赖逆序删除
     """
-    # 先删邮箱授权（无外键）
-    if ids.get("mail_auth"):
-        _ = _req("DELETE", f"/mail/auth/{ids['mail_auth']['id']}")
     # 再删邮箱信息（依赖 server_info）
     if ids.get("email_info"):
         _ = _req("DELETE", f"/mail/info/{ids['email_info']['id']}")
@@ -208,16 +191,12 @@ def run_all_tests() -> None:
         account = test_account_flow()
         ids["account"] = account
 
-        mail_auth = test_email_auth_flow()
-        ids["mail_auth"] = mail_auth
-
         print("全部接口测试完成：")
         print(f"- 国家: {ids['country']['id']}")
         print(f"- 分组: {ids['group']['id']} (国家={ids['country']['short_name']})")
         print(f"- 服务器信息: {ids['server_info']['id']}")
         print(f"- 邮箱信息: {ids['email_info']['id']}")
         print(f"- 代理账号: {ids['account']['id']}")
-        print(f"- 邮箱授权: {ids['mail_auth']['id']}")
     finally:
         cleanup_resources(ids)
 

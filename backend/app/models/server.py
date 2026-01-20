@@ -1,7 +1,16 @@
-import uuid
+from enum import IntEnum
 from tortoise import fields
-from tortoise.models import Model
 from .base import BaseModel
+
+
+class Status(IntEnum):
+    OK = 1  # 正常
+    NOT = 2  # 异常
+
+
+class IsSale(IntEnum):
+    YES = 1  # 是
+    NO = 2  # 否
 
 
 # 服务器国家类
@@ -12,7 +21,7 @@ class ServerCountry(BaseModel):
     # 简称
     short_name = fields.CharField(max_length=2, index=True, unique=True, description='国家简称')
     name = fields.CharField(max_length=20, description='国家名称')
-    status = fields.SmallIntField(default=1, index=True, description='状态(1:正常,2:异常)')
+    status = fields.IntEnumField(Status, default=Status.OK, description='状态(1:正常,2:异常)')
 
     class Meta:
         table = "server_country"
@@ -33,11 +42,15 @@ class ServerGroup(BaseModel):
     """
     分组信息
     """
-    name = fields.CharField(max_length=20, unique=True, description='分组名称')
-    status = fields.SmallIntField(default=1, index=True, description='状态(1:正常,2:异常)')
+    name = fields.CharField(max_length=20, index=True, unique=True, description='分组名称')
+    status = fields.IntEnumField(Status, default=Status.OK, description='状态(1:正常,2:异常)')
 
     # 外键关联国家类
-    country = fields.ForeignKeyField("models.ServerCountry", related_name="server_groups", description='国家')
+    country = fields.ForeignKeyField(
+        "models.ServerCountry",
+        related_name="server_groups",
+        description='国家'
+    )
 
     class Meta:
         table = "server_group"
@@ -58,14 +71,19 @@ class ServerInfo(BaseModel):
     # 服务器相关
     host = fields.CharField(max_length=20, index=True, description='服务器地址')
     ssh_port = fields.IntField(null=True, description='ssh端口')
-    password = fields.CharField(max_length=128, null=True, description='服务器密码')
-    status = fields.SmallIntField(default=1, index=True, description='状态(1:正常,4:异常)')
+    password = fields.TextField(null=True, description='服务器密码（加密存储）')
+    status = fields.IntEnumField(Status, default=Status.OK, description='状态(1:正常,2:异常)')
     domain = fields.CharField(max_length=50, index=True, null=True, description='域名')
-    is_sale = fields.SmallIntField(default=1, index=True, description='是否销售(1:是,2:否)')
+    is_sale = fields.IntEnumField(IsSale, default=IsSale.YES, description='是否销售(1:是,2:否)')
     port = fields.IntField(null=True, description='代理端口')
 
     # 外键关联分组类
-    group = fields.ForeignKeyField("models.ServerGroup", null=True, related_name="server_infos", description='分组')
+    group = fields.ForeignKeyField(
+        "models.ServerGroup",
+        null=True,
+        related_name="server_infos",
+        description='分组'
+    )
 
     class Meta:
         table = "server_info"
@@ -83,25 +101,31 @@ class ServerInfo(BaseModel):
     __str__ = __repr__
 
 
-# 代理账号类
-class ProxyAccount(BaseModel):
+# 服务器账号类
+class ServerAccount(BaseModel):
     """
-    代理账号
+    服务器账号
     """
     username = fields.CharField(max_length=36, index=True, description='用户名')
-    password = fields.CharField(max_length=36, description='密码')
+    password = fields.TextField(description='密码（加密存储）')
 
-    # 外键关联用户信息类
+    # 外键关联用户信息类（一对一，可选）
+    user = fields.OneToOneField(
+        "models.UserInfo",
+        related_name="server_account",
+        null=True,
+        description='关联用户信息',
+    )
 
     class Meta:
         table = "proxy_account"
-        table_description = "代理账号"
+        table_description = "服务器账号"
         ordering = ["-create_time"]
         indexes = [
             ("username", "create_time"),
         ]
 
     def __repr__(self):
-        return f"<Info(id={self.id},username={self.username},password={self.password})>"
+        return f"<Info(id={self.id},username={self.username})>"
 
     __str__ = __repr__

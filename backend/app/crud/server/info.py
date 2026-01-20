@@ -1,69 +1,116 @@
-from typing import Dict, Any
 from uuid import UUID
+from fastapi import HTTPException
 
 from app.models.server import ServerInfo
-from ..base import CRUDBase
+from app.schemas.server.info import Create, Update, Out, OutList
+from app.schemas.base import BaseOut
+from app.utils.time_tool import parse_time
 
 
-class CRUD(CRUDBase[ServerInfo]):
-    """
-    服务器信息专用 CRUD
+class CRUD:
+    # 创建
+    async def create(self, item: Create) -> Out:
+        is_exist = await ServerInfo.get_or_none(host=item.host)
+        if is_exist:
+            raise HTTPException(status_code=400, detail='服务器地址已存在')
+        res = await ServerInfo.create(**item.model_dump())
+        if not res:
+            raise HTTPException(status_code=500, detail='创建失败')
+        await res.fetch_related('group', 'group__country')
+        return Out.model_validate(res)
 
-    主要职责：
-    - 提供 host/domain 维度的查询
-    - 支持按创建时间/更新时间范围过滤
-    - 写入时处理分组外键（group_id -> group）
-    """
-    # 列表查询支持的字段及其查询方式
-    QUERY_FIELD_RULES = {
-        # 服务器地址 / 域名模糊查询
-        "host": "contains",
-        "domain": "contains",
-        # 创建/更新时间范围查询
-        "create_time_start": "gte",
-        "create_time_end": "lte",
-        "update_time_start": "gte",
-        "update_time_end": "lte",
-    }
-    # 查询参数名到模型字段名的映射（处理 xxx_start/xxx_end）
-    QUERY_FIELD_MAP = {
-        "create_time_start": "create_time",
-        "create_time_end": "create_time",
-        "update_time_start": "update_time",
-        "update_time_end": "update_time",
-    }
-    # 查询时预加载分组，便于 schema 中直接返回嵌套分组对象
-    FETCH_RELATED_FIELDS = ("group",)
-    # 关联字段配置：请求中的 group_id 映射到模型的 group 外键
-    RELATED_FIELDS = {
-        "group_id": "group",
-    }
+    # 查询
+    async def get(self, id: UUID) -> Out:
+        res = await ServerInfo.get_or_none(id=id)
+        if not res:
+            raise HTTPException(status_code=404, detail='数据不存在')
+        await res.fetch_related('group', 'group__country')
+        return Out.model_validate(res)
 
-    async def _before_create(self, obj_in: Dict[str, Any]) -> None:
-        """
-        创建数据前的校验钩子
-        :param obj_in: 创建数据字典
-        :raise ValueError: 校验失败时抛异常
-        """
-        if await self.model.filter(host=obj_in['host']).first():
-            raise ValueError('服务器地址已存在')
+    # 条件查询
+    async def get_multi(self,
+                        host: str | None = None,
+                        domain: str | None = None,
+                        page: int = 1,
+                        limit: int = 10,
+                        res_count: bool = False,
+                        order_by: str = '-create_time',
+                        create_time_start: str | int | None = None,
+                        create_time_end: str | int | None = None,
+                        update_time_start: str | int | None = None,
+                        update_time_end: str | int | None = None
+                        ) -> OutList:
+        query = ServerInfo.all()
+        if host:
+            query = query.filter(host__icontains=host)
+        if domain:
+            query = query.filter(domain__icontains=domain)
+        if create_time_start:
+            query = query.filter(create_time__gte=parse_time(create_time_start))
+        if create_time_end:
+            query = query.filter(create_time__lte=parse_time(
+                create_time_end, is_end=True))
+        if update_time_start:
+            query = query.filter(update_time__gte=parse_time(update_time_start))
+        if update_time_end:
+            query = query.filter(update_time__lte=parse_time(
+                update_time_end, is_end=True))
 
-    async def _before_update(self, id: UUID, update_data: Dict[str, Any], db_obj: ServerInfo) -> None:
-        """更新前校验服务器地址唯一性（排除自身）"""
-        if "host" in update_data:
-            new_host = update_data["host"]
-            exists = await self.model.filter(host=new_host, id__not=id).first()
-            if exists:
-                raise ValueError(f"服务器地址 {new_host} 已被占用")
+        if order_by:
+            query = query.order_by(order_by)
 
-    async def _handle_related_fields(self, db_obj: ServerInfo, related_data: Dict[str, Any], is_created: bool) -> None:
-        """
-        处理关联字段：分组外键 group_id
-        """
-        group_id = related_data.get("group_id")
-        if group_id is not None:
-            db_obj.group_id = group_id
-            await db_obj.save()
+        if res_count:
+            count = await query.count()
+        else:
+            count = -1
+
+        offset = (page - 1) * limit  # 计算偏移量
+        query = query.limit(limit).offset(offset)  # 应用分页
+        res = await query
+        num = len(res)
+        for item in res:
+            await item.fetch_related('group', 'group__country')
+        items = [Out.model_validate(obj) for obj in res]
+        return OutList(message='成功', count=count, num=num, items=items)
+
+    # 更新
+    async def update(self, id: UUID, item: Update) -> Out:
+        res = await ServerInfo.get_or_none(id=id)
+        if not res:
+            raise HTTPException(status_code=404, detail='数据不存在')
+        update_data = item.model_dump(exclude_unset=True)
+        if not update_data:
+            raise HTTPException(status_code=400, detail='没有更新数据')
+        if 'host' in update_data:
+            new_host = update_data['host']
+            is_exist = await ServerInfo.get_or_none(host=new_host)
+            if is_exist and is_exist.id != id:
+                raise HTTPException(status_code=400, detail=f'服务器地址 {new_host} 已被占用')
+
+        await res.update_from_dict(update_data)
+        await res.save()
+        await res.fetch_related('group', 'group__country')
+        return Out.model_validate(res)
+
+    # 删除
+    async def delete(self, id: UUID) -> BaseOut:
+        res = await ServerInfo.get_or_none(id=id)
+        if not res:
+            raise HTTPException(status_code=404, detail='数据不存在')
+        await res.delete()
+        return BaseOut(message='成功', count=1)
+
+    # 创建或更新
+    async def upsert(self, item: Create) -> Out:
+        record, created = await ServerInfo.get_or_create(
+            defaults=item.model_dump(),
+            host=item.host
+        )
+        if not created:
+            await record.update_from_dict(item.model_dump(exclude_unset=True))
+            await record.save()
+        await record.fetch_related('group', 'group__country')
+        return Out.model_validate(record)
 
 
-server_info_crud = CRUD(ServerInfo)
+server_info_crud = CRUD()

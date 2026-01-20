@@ -2,10 +2,11 @@
 
 本目录为 QYD API 的后端服务代码，基于 **FastAPI + Tortoise ORM** 实现，主要提供：
 
-- 服务器相关管理接口（国家、分组、服务器信息、代理账号等）
-- 邮箱相关管理接口（邮箱信息、授权记录）
-- 邮箱发送/授权等客户端能力（`app/clients/mail.py`）
-- Outlook 邮箱授权/收发邮件能力（`app/clients/outlook.py` + `app/apis/v1/mail/outlook.py`）
+- 用户管理接口（用户、角色、权限、日志、Token）
+- 项目管理接口（项目信息、账号、钱包、余额）
+- 服务器管理接口（国家、分组、服务器信息、代理账号）
+- 邮箱管理接口（邮箱信息、Outlook 授权/收发邮件）
+- 基于角色的访问控制（RBAC）权限管理
 - 定时任务（APScheduler）自动检查邮箱状态
 
 运行环境：**Python 3.11+**（建议）  
@@ -22,20 +23,28 @@
   - `core/`：核心配置
     - `settings.py`：Tortoise ORM 配置、数据库连接信息等
   - `models/`：Tortoise ORM 模型定义
-    - `server.py`：服务器国家、分组、服务器信息、代理账号等模型
-    - `mail.py`：邮箱信息、邮箱授权模型
+    - `user.py`：用户、角色、日志、Token、前端路由模型
+    - `project.py`：项目信息、账号、钱包、余额模型
+    - `server.py`：服务器国家、分组、服务器信息、代理账号模型
+    - `mail.py`：邮箱信息模型
   - `schemas/`：Pydantic 请求/响应模型
+    - `user/`：用户相关的 Create/Update/Out/OutList 模型
+    - `project/`：项目相关的 Create/Update/Out/OutList 模型
     - `server/`：服务器相关的 Create/Update/Out/OutList 模型
     - `mail/`：邮箱相关的 Create/Update/Out/OutList 模型及枚举
   - `crud/`：各模型对应的 CRUD 封装
     - `base.py`：通用 CRUD 基类（统一列表查询、分页、关联处理、upsert 等）
+    - `user/`：用户相关 CRUD（用户、角色、日志、Token、路由）
+    - `project/`：项目相关 CRUD（项目信息、账号、钱包、余额）
     - `server/`：服务器相关 CRUD（国家、分组、服务器信息、代理账号）
-    - `mail/`：邮箱信息、邮箱授权 CRUD
+    - `mail/`：邮箱信息 CRUD
   - `apis/v1/`：对外 HTTP 接口（按业务模块拆分）
+    - `user/`：用户相关接口
+    - `project/`：项目相关接口
     - `server/`：服务器相关接口
     - `mail/`：邮箱相关接口
   - `clients/`
-    - `mail.py`：邮箱客户端封装（授权、收发邮件等逻辑）
+    - `outlook.py`：Outlook 邮箱客户端封装（OAuth2 授权、收发邮件等逻辑）
   - `utils/`：通用工具
     - `time_tool.py`：时间解析、时区处理（接口里的 `parse_time` 使用）
     - `exceptions.py`：自定义异常
@@ -71,7 +80,7 @@ pip install -r requirements.txt
 
 ```env
 APP_HOST=0.0.0.0
-APP_PORT=6070
+APP_PORT=6080
 APP_DEBUG=1
 
 # 数据库相关（示例，具体以 app.core.settings.TORTOISE_ORM 为准）
@@ -84,7 +93,7 @@ DB_NAME=qyd
 
 `start.py` 中的 `run_server` 会优先从 `.env` 加载环境变量：
 
-- 未设置时，默认监听 `0.0.0.0:6070`
+- 未设置时，默认监听 `0.0.0.0:6080`
 - `APP_DEBUG` 存在时，会打开 `reload` 热重载
 
 ### 2.3 启动服务
@@ -98,13 +107,13 @@ python start.py
 或直接使用 uvicorn（需保证 `PYTHONPATH` 指向 `backend`）：
 
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port 6070 --reload
+uvicorn app.main:app --host 0.0.0.0 --port 6080 --reload
 ```
 
 服务启动后，即可访问：
 
-- 接口文档（默认）：`http://127.0.0.1:6070/docs`
-- 或者：`http://127.0.0.1:6070/redoc`
+- 接口文档（默认）：`http://127.0.0.1:6080/docs`
+- 或者：`http://127.0.0.1:6080/redoc`
 
 ---
 
@@ -150,14 +159,132 @@ aerich upgrade
 
 ---
 
-## 4. 核心设计说明（简要）
+## 4. 核心设计说明
 
-### 4.1 分层结构
+### 4.1 数据模型设计
+
+#### 4.1.1 用户模块（user.py）
+
+**核心模型：**
+
+- `UserInfo`：用户信息
+  - 字段：email（邮箱）、password（密码加密）、nickname（昵称）、avatar（头像）、status（状态）
+  - 状态枚举：`UserStatus`（1:正常, 2:停用, 3:锁定, 4:封禁）
+  - 多对多关联：roles（角色）、projects（项目）
+
+- `UserRole`：用户角色
+  - 字段：name（角色名称）、code（角色标识）、description（角色描述）
+  - 多对多关联：users（用户）、routes（前端路由）
+
+- `FrontendRoute`：前端路由/菜单
+  - 字段：name、path、component、title、icon、sort、redirect、is_hidden、is_cache、is_affix、status
+  - 支持树形结构：parent（父级路由）、children（子路由）
+  - 多对多关联：roles（角色）
+
+- `UserToken`：用户访问令牌
+  - 字段：token、status
+  - 外键关联：user（所属用户）
+
+- `UserLog`：用户操作日志
+  - 字段：action（操作类型）、description（操作描述）、ip、user_agent
+  - 外键关联：user（所属用户）
+
+#### 4.1.2 项目模块（project.py）
+
+**核心模型：**
+
+- `ProjectInfo`：项目信息
+  - 字段：name（项目名称）、status（状态）、content（项目内容）
+  - 状态枚举：`ProjectStatus`（1:正常, 2:未编写, 3:编写中, 4:项目结束, 5:项目跑路, 6:项目维护, 7:未分配, 8:账号不支持, 9:IP不支持）
+  - 多对多关联：users（项目成员）
+
+- `ProjectAccount`：项目账号
+  - 字段：account、password、status、account_type、data（扩展数据）
+  - 状态枚举：`Status`（1:正常, 2:异常）
+  - 账号类型枚举：`AccountType`（1:邮箱, 2:钱包, 3:x, 4:其他1, 5:其他2）
+  - 外键关联：project（所属项目）、server（关联服务器）、wallet（关联钱包）
+
+- `ProjectWallet`：项目钱包
+  - 字段：private_key（私钥）、public_key（公钥）、mnemonic（助记词）、chain（链）、remark（备注）
+
+- `ProjectBalance`：项目余额
+  - 字段：balance（余额）、variable（变动余额）、history（历史余额）
+  - 一对一关联：account（关联账号）
+
+#### 4.1.3 服务器模块（server.py）
+
+**核心模型：**
+
+- `ServerCountry`：国家信息
+  - 字段：short_name（国家简称）、name（国家名称）、status
+
+- `ServerGroup`：分组信息
+  - 字段：name（分组名称）、status
+  - 外键关联：country（所属国家）
+
+- `ServerInfo`：服务器信息
+  - 字段：host、ssh_port、password、status、domain、is_sale、port
+  - 销售状态枚举：`IsSale`（1:是, 2:否）
+  - 外键关联：group（所属分组）
+
+- `ServerAccount`：服务器账号
+  - 字段：username、password
+  - 一对一关联：user（关联用户信息）
+
+#### 4.1.4 邮箱模块（mail.py）
+
+**核心模型：**
+
+- `EmailInfo`：邮箱信息
+  - 字段：email、password、auxiliary_email、auxiliary_email_password、client_id、access_token、refresh_token、status
+  - 外键关联：server（代理信息）
+
+### 4.2 枚举类型设计
+
+所有枚举统一使用 `IntEnum`（整数枚举），便于前端处理和数据库存储：
+
+- 在模型中使用 `fields.IntEnumField(EnumClass)` 定义
+- 在 Schema 中直接引用模型定义的枚举类型
+- 枚举值为整数，注释说明对应含义
+
+### 4.3 多对多关联设计
+
+多对多关联遵循以下规则：
+
+- 在一侧定义 `ManyToManyField`，指定中间表名称（through 参数）
+- 在另一侧只声明类型注解 `ManyToManyRelation`
+- 使用 `TYPE_CHECKING` 避免循环导入
+
+**示例关联：**
+
+- 用户 ↔ 角色：`user_role_rel` 中间表
+- 角色 ↔ 路由：`role_route_rel` 中间表
+- 项目 ↔ 用户：`project_user_rel` 中间表
+
+### 4.4 RBAC 权限控制设计
+
+基于角色的访问控制（Role-Based Access Control）：
+
+```
+用户（UserInfo）
+    ↓ 多对多
+角色（UserRole）
+    ↓ 多对多
+路由（FrontendRoute）
+```
+
+- 用户可以拥有多个角色
+- 角色可以关联多个前端路由/菜单
+- 通过角色间接控制用户可访问的路由
+- 路由支持树形结构，可构建多级菜单
+
+### 4.5 分层结构
 
 - **models**：保存数据库结构和关系，使用 Tortoise ORM 定义。
 - **schemas**：HTTP 层的入参/出参模型：
   - Create / Update：请求体结构。
   - Out / OutList：响应封装，包含列表总数、条目数量等。
+  - 关联对象：直接引入对应的 Base 模型，不使用 Lite 精简模型。
 - **crud**：
   - `CRUDBase` 封装了通用的增删改查、分页、count、upsert。
   - 具体业务 CRUD（例如 `server/info.py`、`mail/info.py`）通过：
@@ -169,7 +296,33 @@ aerich upgrade
   - 调用 CRUD 层；
   - 统一异常转换为 `HTTPException`。
 
-### 4.2 查询与过滤
+### 4.6 Schema 设计规范
+
+**基础规范：**
+
+- `Base`：包含模型的基础字段（不包含 ID、时间戳、关联对象）
+- `Create`：继承 Base，添加外键 ID 字段和关联 ID 列表
+- `Update`：所有字段可选，支持部分更新
+- `Out`：包含完整信息（ID、时间戳、关联对象）
+- `OutList`：包含 message、count、num、items
+
+**关联字段顺序：**
+
+1. 先定义外键 ID 字段（如 `project_id`）
+2. 后定义关联对象字段（如 `project: ProjectInfoBase`）
+
+**关联对象引用：**
+
+- 直接引入对应模块的 `Base` 模型
+- 不使用 `Lite` 精简模型
+- 示例：`from app.schemas.project.info import Base as ProjectInfoBase`
+
+**时间字段序列化：**
+
+- 使用 `@field_serializer` 统一格式化为中国时区
+- 格式：`%Y-%m-%d %H:%M:%S`
+
+### 4.7 查询与过滤
 
 - 通用过滤通过 `CRUDBase._build_query` 实现：
   - `QUERY_FIELD_RULES`：声明哪些字段可被查询，以及使用何种查询方式（`exact/contains/gte/...`）；
@@ -178,7 +331,7 @@ aerich upgrade
   - 常见参数：`create_time_start/create_time_end`、`update_time_start/update_time_end`；
   - API 层使用 `utils.time_tool.parse_time` 将字符串/时间戳转换为 `datetime`。
 
-### 4.3 邮箱业务的一点特殊逻辑
+### 4.8 邮箱业务的一点特殊逻辑
 
 在 `app/crud/mail/info.py` 中：
 
@@ -192,7 +345,7 @@ aerich upgrade
   - `password` / `auxiliary_email_password` 在列表返回中会被置空；
   - 嵌套的 `server_info.ssh_port` 在列表返回中会被置为 `null`。
 
-### 4.4 Outlook 授权与收发邮件
+### 4.9 Outlook 授权与收发邮件
 
 相关位置：
 
@@ -210,7 +363,7 @@ aerich upgrade
   - 然后再从收件箱中按发件人邮箱过滤并返回内容。
 - 刷新 Token 时内置重试逻辑：当请求连续多次返回 5xx 时，会把对应邮箱状态标记为异常（5），方便后续排查。
 
-### 4.5 定时任务与自动邮箱状态检查
+### 4.10 定时任务与自动邮箱状态检查
 
 相关位置：
 
@@ -452,3 +605,61 @@ curl -X POST "http://127.0.0.1:6070/v1/mail/outlook/messages" \
   - 在 `apis/v1/xxx/` 中新增路由，使用统一的异常处理方式。
 - 所有新增函数，建议保持已有风格：  
   函数级中文注释简要说明“用途 + 入参 + 关键逻辑”，方便以后快速浏览回忆。
+
+---
+
+## 8. 数据模型关系图
+
+```
+用户模块：
+UserInfo (用户)
+    ├─ 多对多 ─> UserRole (角色)
+    │              └─ 多对多 ─> FrontendRoute (前端路由/菜单)
+    ├─ 多对多 ─> ProjectInfo (项目)
+    ├─ 一对多 ─> UserToken (Token)
+    ├─ 一对多 ─> UserLog (操作日志)
+    └─ 一对一 ─> ServerAccount (服务器账号)
+
+项目模块：
+ProjectInfo (项目信息)
+    ├─ 多对多 ─> UserInfo (项目成员)
+    └─ 一对多 ─> ProjectAccount (项目账号)
+                    ├─ 外键 ─> ServerInfo (关联服务器)
+                    ├─ 外键 ─> ProjectWallet (关联钱包)
+                    └─ 一对一 ─> ProjectBalance (余额)
+
+服务器模块：
+ServerCountry (国家)
+    └─ 一对多 ─> ServerGroup (分组)
+                    └─ 一对多 ─> ServerInfo (服务器信息)
+                                    ├─ 一对多 ─> EmailInfo (邮箱)
+                                    └─ 一对多 ─> ProjectAccount (项目账号)
+
+邮箱模块：
+EmailInfo (邮箱信息)
+    └─ 外键 ─> ServerInfo (代理服务器)
+```
+
+---
+
+## 9. 枚举类型参考
+
+### 用户模块
+
+- `UserStatus`（用户状态）：1-正常, 2-停用, 3-锁定, 4-封禁
+- `Status`（通用状态）：1-正常, 2-异常
+
+### 项目模块
+
+- `ProjectStatus`（项目状态）：1-正常, 2-未编写, 3-编写中, 4-项目结束, 5-项目跑路, 6-项目维护, 7-未分配, 8-账号不支持, 9-IP不支持
+- `AccountType`（账号类型）：1-邮箱, 2-钱包, 3-x, 4-其他1, 5-其他2
+- `Status`（通用状态）：1-正常, 2-异常
+
+### 服务器模块
+
+- `Status`（通用状态）：1-正常, 2-异常
+- `IsSale`（是否销售）：1-是, 2-否
+
+### 邮箱模块
+
+- `Status`（通用状态）：1-正常, 2-异常

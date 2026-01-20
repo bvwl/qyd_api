@@ -1,16 +1,24 @@
 from tortoise import fields
+from tortoise.fields import ManyToManyRelation
 from enum import IntEnum
+from typing import TYPE_CHECKING
 from .base import BaseModel
+
+if TYPE_CHECKING:
+    from .project import ProjectInfo
 
 """
 - 用户角色模型 - 角色名 描述 创建时间 更新时间
-- 权限表- 权限名 描述 创建时间 更新时间
-- 角色权限表- 角色ID 权限ID
 - 用户信息模型 - 邮箱 密码 昵称 头像 状态(1:正常 2:暂停 3:异常 4:封禁) 创建时间 更新时间 角色(关联)
 - 用户日志模型 - 描述 创建时间 更新时间 用户(关联)
 - token模型 - token 创建时间 更新时间 用户(关联)
 - 前端路由模型 - 路由名 描述 创建时间 更新时间 状态(1:正常 2:暂停 3:异常 4:封禁) 角色(关联)
 """
+
+
+class Status(IntEnum):
+    OK = 1  # 正常
+    NOT = 2  # 异常
 
 
 # =======================
@@ -29,15 +37,21 @@ class UserStatus(IntEnum):
 # =======================
 
 
-class Role(BaseModel):
+class UserRole(BaseModel):
     name = fields.CharField(max_length=32, description="角色名称")
     code = fields.CharField(max_length=32, unique=True, description="角色标识")
     description = fields.CharField(max_length=255, null=True, description="角色描述")
 
-    # 角色权限关联
-    permissions: fields.ManyToManyRelation["Permission"]
-    # 角色用户关联
-    users: fields.ManyToManyRelation["User"]
+    # 多对多关联：角色 <-> 用户
+    users: ManyToManyRelation["UserInfo"] = fields.ManyToManyField(
+        "models.UserInfo",
+        related_name="roles",
+        through="user_role_rel",
+        description="角色关联的用户",
+    )
+
+    # 角色 <-> 路由（反向关联，由 FrontendRoute 定义）
+    routes: ManyToManyRelation["FrontendRoute"]
 
     class Meta:
         table = "user_roles"
@@ -54,56 +68,29 @@ class Role(BaseModel):
 
 
 # =======================
-# 权限模型
-# =======================
-
-class Permission(BaseModel):
-    name = fields.CharField(max_length=64, description="权限名称")
-    code = fields.CharField(max_length=64, unique=True, description="权限标识，如 user:create")
-    type = fields.CharField(max_length=16, description="权限类型 api / menu / button")
-    description = fields.CharField(max_length=255, null=True, description="权限描述")
-
-    roles: fields.ManyToManyRelation[Role]
-    routes: fields.ManyToManyRelation["FrontendRoute"]
-
-    class Meta:
-        table = "permissions"
-        table_description = "权限表"
-        ordering = ["-create_time"]
-        indexes = [
-            ("code", "type"),
-        ]
-
-    def __repr__(self):
-        return f"<Permission(id={self.id}, code={self.code}, type={self.type})>"
-
-    __str__ = __repr__
-
-
-# =======================
 # 用户模型
 # =======================
 
-class User(BaseModel):
+class UserInfo(BaseModel):
     email = fields.CharField(
         max_length=128, unique=True, description="邮箱"
     )
-    password_hash = fields.CharField(
-        max_length=255, description="密码哈希"
-    )
+    password = fields.TextField(description="密码加密")
     nickname = fields.CharField(
         max_length=64, description="昵称"
     )
     avatar = fields.CharField(
         max_length=255, null=True, description="头像"
     )
-    status = fields.IntField(
-        default=UserStatus.NORMAL, description="用户状态"
+    status = fields.IntEnumField(
+        UserStatus, default=UserStatus.NORMAL, description="用户状态"
     )
 
-    roles: fields.ManyToManyRelation[Role]
-    tokens: fields.ReverseRelation["Token"]
-    logs: fields.ReverseRelation["UserLog"]
+    # 用户 <-> 角色（反向关联，由 UserRole 定义）
+    roles: ManyToManyRelation["UserRole"]
+
+    # 用户 <-> 项目（反向关联，由 ProjectInfo 定义）
+    projects: ManyToManyRelation["ProjectInfo"]  # type: ignore
 
     class Meta:
         table = "users"
@@ -120,25 +107,18 @@ class User(BaseModel):
 
 
 # =======================
-# Token 模型（多端登录）
+# Token 模型（api使用）
 # =======================
 
-class Token(BaseModel):
+class UserToken(BaseModel):
     user = fields.ForeignKeyField(
-        "models.User",
+        "models.UserInfo",
         related_name="tokens",
-        on_delete=fields.CASCADE,
         description="所属用户"
     )
-    access_token = fields.CharField(
-        max_length=255, unique=True, description="访问令牌"
-    )
-    refresh_token = fields.CharField(
-        max_length=255, unique=True, null=True, description="刷新令牌"
-    )
-    expired_at = fields.DatetimeField(description="过期时间")
-    is_revoked = fields.BooleanField(
-        default=False, description="是否已失效"
+    token = fields.CharField(max_length=255, description="访问令牌")
+    status = fields.IntEnumField(
+        Status, default=Status.OK, description="是否已失效"
     )
 
     class Meta:
@@ -162,21 +142,14 @@ class Token(BaseModel):
 
 class UserLog(BaseModel):
     user = fields.ForeignKeyField(
-        "models.User",
+        "models.UserInfo",
         related_name="logs",
-        on_delete=fields.CASCADE,
         description="用户"
     )
-    action = fields.CharField(
-        max_length=32, description="操作类型"
-    )
+    action = fields.SmallIntField(description="操作类型(枚举)")
     description = fields.TextField(description="操作描述")
-    ip = fields.CharField(
-        max_length=64, null=True, description="IP 地址"
-    )
-    user_agent = fields.CharField(
-        max_length=255, null=True, description="User-Agent"
-    )
+    ip = fields.CharField(max_length=64, null=True, index=True, description="IP 地址")
+    user_agent = fields.CharField(max_length=255, null=True, description="User-Agent")
 
     class Meta:
         table = "user_logs"
@@ -193,63 +166,63 @@ class UserLog(BaseModel):
 
 
 # =======================
-# 前端路由模型
+# 前端路由模型（菜单权限）
 # =======================
 
 class FrontendRoute(BaseModel):
-    name = fields.CharField(
-        max_length=64, description="路由名称"
+    """
+    前端路由/菜单配置
+    """
+    # 基础信息
+    name = fields.CharField(max_length=64, description="路由名称（唯一标识）")
+    path = fields.CharField(max_length=128, description="路由路径")
+    component = fields.CharField(max_length=128, null=True, description="前端组件路径")
+
+    # 显示信息
+    title = fields.CharField(max_length=64, description="菜单标题")
+    icon = fields.CharField(max_length=64, null=True, description="菜单图标")
+
+    # 层级关系
+    parent = fields.ForeignKeyField(
+        "models.FrontendRoute",
+        related_name="children",
+        null=True,
+        description="父级路由",
+        on_delete=fields.CASCADE,
     )
-    path = fields.CharField(
-        max_length=128, description="路由路径"
-    )
-    component = fields.CharField(
-        max_length=128, description="前端组件路径"
-    )
-    status = fields.IntField(
-        default=1, description="状态 1正常 2停用 3异常 4封禁"
+    sort = fields.IntField(default=0, description="排序（数字越小越靠前）")
+
+    # 路由配置
+    redirect = fields.CharField(max_length=128, null=True, description="重定向路径")
+    is_hidden = fields.BooleanField(default=False, description="是否隐藏菜单")
+    is_cache = fields.BooleanField(default=True, description="是否缓存页面")
+    is_affix = fields.BooleanField(default=False, description="是否固定在标签页")
+
+    # 多对多关联：路由 <-> 角色
+    roles: ManyToManyRelation["UserRole"] = fields.ManyToManyField(
+        "models.UserRole",
+        related_name="routes",
+        through="role_route_rel",
+        description="路由关联的角色",
     )
 
-    permissions: fields.ManyToManyRelation[Permission]
+    # 状态
+    status = fields.IntEnumField(
+        Status,
+        default=Status.OK,
+        description="状态(1:正常,2:异常)",
+    )
 
     class Meta:
         table = "frontend_routes"
-        table_description = "前端路由"
-        ordering = ["-create_time"]
+        table_description = "前端路由/菜单"
+        ordering = ["sort", "-create_time"]
         indexes = [
             ("path", "status"),
+            ("parent_id", "sort"),
         ]
 
     def __repr__(self):
-        return f"<FrontendRoute(id={self.id}, path={self.path})>"
+        return f"<FrontendRoute(id={self.id}, name={self.name}, path={self.path})>"
 
     __str__ = __repr__
-
-
-# =======================
-# 多对多关系定义
-# =======================
-
-# User <-> Role
-User.roles = fields.ManyToManyField(
-    "models.Role",
-    related_name="users",
-    through="user_role_rel",
-    description="用户角色关联"
-)
-
-# Role <-> Permission
-Role.permissions = fields.ManyToManyField(
-    "models.Permission",
-    related_name="roles",
-    through="role_permission_rel",
-    description="角色权限关联"
-)
-
-# FrontendRoute <-> Permission
-FrontendRoute.permissions = fields.ManyToManyField(
-    "models.Permission",
-    related_name="routes",
-    through="route_permission_rel",
-    description="路由权限关联"
-)
