@@ -14,6 +14,15 @@ DB_POOL_RECYCLE = int(os.getenv("DB_POOL_RECYCLE", "3600"))
 DB_CONNECT_TIMEOUT = int(os.getenv("DB_CONNECT_TIMEOUT", "10"))
 
 
+# ==========================================
+# JWT 配置
+# ==========================================
+JWT = {
+    "secret_key": os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production-min-32-chars"),
+    "algorithm": os.getenv("JWT_ALGORITHM", "HS256"),
+    "expire_time": int(os.getenv("JWT_EXPIRE_TIME", "86400")),  # 默认24小时
+}
+
 TORTOISE_ORM = {
     "connections": {
         "default": {

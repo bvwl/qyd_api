@@ -35,6 +35,8 @@ async def get(id: UUID = Path(..., description="ID")):
         obj = await project_account_crud.get(id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     if not obj:
@@ -48,7 +50,7 @@ async def gets(
     status: int | None = Query(None, description="账号状态"),
     account_type: int | None = Query(None, description="账号类型"),
     project_id: UUID | None = Query(None, description="所属项目ID"),
-    server_info_id: UUID | None = Query(None, description="关联服务器信息ID"),
+    server_id: UUID | None = Query(None, description="关联服务器信息ID"),
     order_by: str | None = Query(
         "-create_time",
         description="排序字段",
@@ -78,26 +80,12 @@ async def gets(
     分页查询项目账号列表
     """
     try:
-        if res_count:
-            count = await project_account_crud.get_count(
-                account=account,
-                status=status,
-                account_type=account_type,
-                project_id=project_id,
-                server_info_id=server_info_id,
-                create_time_start=parse_time(create_time_start),
-                create_time_end=parse_time(create_time_end, True),
-                update_time_start=parse_time(update_time_start),
-                update_time_end=parse_time(update_time_end, True),
-            )
-        else:
-            count = -1
         return await project_account_crud.get_multi(
             account=account,
             status=status,
             account_type=account_type,
             project_id=project_id,
-            server_info_id=server_info_id,
+            server_id=server_id,
             order_by=order_by or "-create_time",
             create_time_start=parse_time(create_time_start),
             create_time_end=parse_time(create_time_end, True),
@@ -109,6 +97,8 @@ async def gets(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -125,6 +115,8 @@ async def put(
         return await project_account_crud.update(id, item)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -141,6 +133,8 @@ async def delete(id: UUID = Path(..., description="主键ID")):
         raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -158,6 +152,8 @@ async def post_or_put(item: Create = Body(..., description="创建或更新数�
         return await project_account_crud.upsert(filter_kwargs, item)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

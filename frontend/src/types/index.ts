@@ -32,10 +32,14 @@ export enum Status {
 }
 
 export enum EmailType {
-  IP_OK_TOKEN_OK = 'ip_ok_token_ok',
-  IP_OK_TOKEN_NOT = 'ip_ok_token_not',
-  IP_NOT_TOKEN_OK = 'ip_not_token_ok',
-  IP_NOT_TOKEN_NOT = 'ip_not_token_not'
+  IP_OK = 'IP_OK',
+  IP_NOT = 'IP_NOT',
+  TOKEN_OK = 'TOKEN_OK',
+  TOKEN_NOT = 'TOKEN_NOT',
+  IP_OK_TOKEN_OK = 'IP_OK_TOKEN_OK',
+  IP_OK_TOKEN_NOT = 'IP_OK_TOKEN_NOT',
+  IP_NOT_TOKEN_OK = 'IP_NOT_TOKEN_OK',
+  IP_NOT_TOKEN_NOT = 'IP_NOT_TOKEN_NOT'
 }
 
 export enum ActionType {
@@ -132,8 +136,6 @@ export interface ProjectAccount {
   project?: Project
   server_id?: string
   server?: ServerInfo
-  wallet_id?: string
-  wallet?: ProjectWallet
   create_time: string
   update_time: string
 }
@@ -145,6 +147,8 @@ export interface ProjectWallet {
   mnemonic: string
   chain: string
   remark?: string
+  project_id: string
+  project?: Project
   create_time: string
   update_time: string
 }
@@ -244,7 +248,7 @@ export interface PaginationParams {
 
 // 登录响应
 export interface LoginResponse {
+  message: string
   access_token: string
-  token_type: string
   user: User
 }

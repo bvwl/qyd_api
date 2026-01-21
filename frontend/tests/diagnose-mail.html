@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>邮箱列表诊断</title>
+</head>
+<body>
+  <h1>邮箱列表页面诊断</h1>
+  <div id="result"></div>
+
+  <script type="module">
+    const result = document.getElementById('result');
+    
+    try {
+      // 测试导入
+      result.innerHTML += '<p>✅ 页面加载成功</p>';
+      
+      // 测试 API 调用
+      const token = localStorage.getItem('token');
+      if (!token) {
+        result.innerHTML += '<p>⚠️ 未找到登录 token，请先登录</p>';
+      } else {
+        result.innerHTML += '<p>✅ 找到登录 token</p>';
+        
+        // 测试邮箱列表 API
+        fetch('http://127.0.0.1:6080/v1/mail/info?page=1&limit=10&res_count=true', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        })
+        .then(res => res.json())
+        .then(data => {
+          result.innerHTML += '<p>✅ API 调用成功</p>';
+          result.innerHTML += '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+        })
+        .catch(err => {
+          result.innerHTML += '<p>❌ API 调用失败: ' + err.message + '</p>';
+        });
+      }
+    } catch (error) {
+      result.innerHTML += '<p>❌ 错误: ' + error.message + '</p>';
+    }
+  </script>
+</body>
+</html>

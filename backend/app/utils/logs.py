@@ -98,6 +98,50 @@ def compress_old_logs(log_dir: str = None, name: str = "root"):
     _compress_old_logs(log_dir, name)
 
 
+def compress_all_logs(log_dir: str = None):
+    """
+    压缩所有日志模块的旧日志文件
+    
+    Args:
+        log_dir: 日志目录，如果不指定则使用默认目录
+    """
+    if log_dir is None:
+        log_dir = "logs"
+    
+    if not os.path.exists(log_dir):
+        return
+    
+    # 获取所有日志模块名称
+    logger_names = set()
+    for filename in os.listdir(log_dir):
+        if filename.endswith('.log'):
+            # 提取模块名（去掉.log后缀）
+            logger_name = filename[:-4]
+            logger_names.add(logger_name)
+    
+    # 压缩每个模块的旧日志
+    compressed_count = 0
+    for logger_name in logger_names:
+        pattern = os.path.join(log_dir, f"{logger_name}.log.*")
+        for filepath in glob.glob(pattern):
+            if filepath.endswith('.gz'):
+                continue
+            try:
+                with open(filepath, 'rb') as f_in:
+                    with gzip.open(filepath + '.gz', 'wb') as f_out:
+                        shutil.copyfileobj(f_in, f_out)
+                os.remove(filepath)
+                compressed_count += 1
+            except Exception as e:
+                print(f"日志压缩失败: {filepath}, 原因: {e}")
+    
+    if compressed_count > 0:
+        print(f"成功压缩 {compressed_count} 个日志文件")
+    
+    # 同时清理超过30天的压缩日志
+    delete_old_compressed_logs(log_dir, days=30)
+
+
 def log_api_call(logger: Logger, user_id: str = None, endpoint: str = None, method: str = None, params: dict = None, response_status: int = None, client_ip: str = None):
     """
     记录API调用信息，包含用户ID、接口路径、请求方法、参数、响应状态和来源IP

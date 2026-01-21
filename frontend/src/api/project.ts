@@ -23,7 +23,16 @@ export const deleteProject = (id: string) => {
 }
 
 // 项目账号
-export const getProjectAccountList = (params?: PaginationParams & { project_id?: string; status?: number; account_type?: number }) => {
+export const getProjectAccountList = (params?: PaginationParams & { 
+  project_id?: string
+  status?: number
+  account_type?: number
+  account?: string
+  create_time_start?: string
+  create_time_end?: string
+  update_time_start?: string
+  update_time_end?: string
+}) => {
   return api.get<any, ApiResponse<ProjectAccount>>('/v1/project/account', { params })
 }
 
@@ -44,7 +53,14 @@ export const deleteProjectAccount = (id: string) => {
 }
 
 // 项目钱包
-export const getProjectWalletList = (params?: PaginationParams & { chain?: string }) => {
+export const getProjectWalletList = (params?: PaginationParams & { 
+  chain?: string
+  project_id?: string
+  create_time_start?: string
+  create_time_end?: string
+  update_time_start?: string
+  update_time_end?: string
+}) => {
   return api.get<any, ApiResponse<ProjectWallet>>('/v1/project/wallet', { params })
 }
 

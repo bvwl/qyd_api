@@ -76,9 +76,12 @@ class ProjectWallet(BaseModel):
     """
     private_key = fields.TextField(description="私钥（AES加密）")
     public_key = fields.TextField(description="公钥")
-    mnemonic = fields.TextField(description="助记词（AES加密）")
+    mnemonic = fields.TextField(null=True, description="助记词（AES加密）")
     chain = fields.CharField(max_length=255, description="链")
     remark = fields.CharField(max_length=255, null=True, description="备注")
+
+    # 和项目信息关联
+    project = fields.ForeignKeyField("models.ProjectInfo", null=True, related_name="wallets", description="所属项目")
 
     class Meta:
         table = "project_wallet"
@@ -113,8 +116,6 @@ class ProjectAccount(BaseModel):
     project = fields.ForeignKeyField("models.ProjectInfo", related_name="accounts", description="所属项目")
     server = fields.ForeignKeyField("models.ServerInfo", related_name="project_accounts", null=True,
                                     description="关联服务器信息")
-    wallet = fields.ForeignKeyField("models.ProjectWallet", related_name="accounts", null=True,
-                                    description="关联钱包信息")
 
     class Meta:
         table = "project_account"
@@ -124,7 +125,6 @@ class ProjectAccount(BaseModel):
             ("project_id", "status", "account_type"),  # 按项目、状态和类型查询
             ("status", "account_type", "create_time"),  # 按状态和类型查询
             ("server_id", "status"),  # 按服务器和状态查询
-            ("wallet_id",),  # 按钱包查询
             # account 已有 index=True，无需重复声明
         ]
 

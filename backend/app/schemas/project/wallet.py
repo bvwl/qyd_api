@@ -4,6 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_serializer
 
+from .info import Base as ProjectInfoBase
 from app.utils.time_tool import CN_TZ
 
 
@@ -15,7 +16,7 @@ class Base(BaseModel):
     """
     private_key: str = Field(..., description="私钥（AES加密）")
     public_key: str = Field(..., description="公钥")
-    mnemonic: str = Field(..., description="助记词（AES加密）")
+    mnemonic: str | None = Field(None, description="助记词（AES加密）")
     chain: str = Field(..., description="链")
     remark: str | None = Field(None, description="备注")
 
@@ -27,7 +28,7 @@ class Create(Base):
     """
     创建项目钱包请求模型
     """
-    pass
+    project_id: UUID | None = Field(None, description="所属项目ID")
 
 
 class Update(BaseModel):
@@ -39,6 +40,7 @@ class Update(BaseModel):
     mnemonic: str | None = Field(None, description="助记词（AES加密）")
     chain: str | None = Field(None, description="链")
     remark: str | None = Field(None, description="备注")
+    project_id: UUID | None = Field(None, description="所属项目ID")
 
 
 class Out(Base):
@@ -50,6 +52,11 @@ class Out(Base):
 
     create_time: datetime = Field(..., description="创建时间")
     update_time: datetime = Field(..., description="更新时间")
+    
+    project_id: UUID | None = Field(None, description="所属项目ID")
+    
+    # 关联的项目信息
+    project: ProjectInfoBase | None = Field(None, description="项目信息")
 
     @field_serializer("create_time", "update_time")
     def format_datetime(self, dt: datetime) -> str:
@@ -67,4 +74,3 @@ class OutList(BaseModel):
     count: int = Field(0, description="总数")
     num: int = Field(0, description="当前数量")
     items: List[Out] = Field([], description="列表数据")
-

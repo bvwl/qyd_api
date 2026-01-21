@@ -23,6 +23,23 @@ export default function Login() {
     }
   }
 
+  // 自定义邮箱验证规则，允许zhiyu账户通过
+  const validateEmail = (_: any, value: string) => {
+    if (!value) {
+      return Promise.reject(new Error('请输入邮箱'))
+    }
+    // 允许zhiyu账户通过验证
+    if (value === 'zhiyu') {
+      return Promise.resolve()
+    }
+    // 其他账户需要符合邮箱格式
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(value)) {
+      return Promise.reject(new Error('请输入有效的邮箱地址'))
+    }
+    return Promise.resolve()
+  }
+
   return (
     <div className="login-container">
       <Card className="login-card" title="QYD 项目管理系统">
@@ -35,8 +52,7 @@ export default function Login() {
           <Form.Item
             name="email"
             rules={[
-              { required: true, message: '请输入邮箱' },
-              { type: 'email', message: '请输入有效的邮箱地址' },
+              { validator: validateEmail },
             ]}
           >
             <Input

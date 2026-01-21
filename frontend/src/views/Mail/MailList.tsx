@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Space, Tag, Input, Select, message, Modal, Form } from 'antd'
+import { Table, Button, Space, Tag, Input, Select, message, Modal, Form, DatePicker } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, SyncOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { getEmailList, createEmail, updateEmail, deleteEmail, batchUpdateEmailStatus } from '@/api/mail'
@@ -8,6 +8,9 @@ import type { EmailInfo, ServerInfo } from '@/types'
 import { Status, EmailType } from '@/types'
 import { STATUS_MAP, EMAIL_TYPE_MAP } from '@/utils/constants'
 import { formatDateTime, maskPassword } from '@/utils/format'
+import dayjs, { Dayjs } from 'dayjs'
+
+const { RangePicker } = DatePicker
 
 export default function MailList() {
   const [loading, setLoading] = useState(false)
@@ -18,6 +21,8 @@ export default function MailList() {
   const [searchEmail, setSearchEmail] = useState('')
   const [searchStatus, setSearchStatus] = useState<number>()
   const [searchEmailType, setSearchEmailType] = useState<EmailType>()
+  const [createTimeRange, setCreateTimeRange] = useState<[Dayjs, Dayjs] | null>(null)
+  const [updateTimeRange, setUpdateTimeRange] = useState<[Dayjs, Dayjs] | null>(null)
   const [modalVisible, setModalVisible] = useState(false)
   const [batchModalVisible, setBatchModalVisible] = useState(false)
   const [editingEmail, setEditingEmail] = useState<EmailInfo | null>(null)
@@ -35,6 +40,10 @@ export default function MailList() {
         email: searchEmail || undefined,
         status: searchStatus,
         email_type: searchEmailType,
+        create_time_start: createTimeRange?.[0]?.format('YYYY-MM-DD'),
+        create_time_end: createTimeRange?.[1]?.format('YYYY-MM-DD'),
+        update_time_start: updateTimeRange?.[0]?.format('YYYY-MM-DD'),
+        update_time_end: updateTimeRange?.[1]?.format('YYYY-MM-DD'),
       })
       setDataSource(res.items || [])
       setTotal(res.count || 0)
@@ -212,47 +221,69 @@ export default function MailList() {
 
   return (
     <div>
-      <Space style={{ marginBottom: 16 }} wrap>
-        <Input
-          placeholder="搜索邮箱"
-          prefix={<SearchOutlined />}
-          value={searchEmail}
-          onChange={(e) => setSearchEmail(e.target.value)}
-          style={{ width: 200 }}
-        />
-        <Select
-          placeholder="选择状态"
-          value={searchStatus}
-          onChange={setSearchStatus}
-          allowClear
-          style={{ width: 120 }}
-        >
-          {Object.entries(STATUS_MAP).map(([key, value]) => (
-            <Select.Option key={key} value={Number(key)}>
-              {value.text}
-            </Select.Option>
-          ))}
-        </Select>
-        <Select
-          placeholder="选择邮箱类型"
-          value={searchEmailType}
-          onChange={setSearchEmailType}
-          allowClear
-          style={{ width: 180 }}
-        >
-          {Object.entries(EMAIL_TYPE_MAP).map(([key, value]) => (
-            <Select.Option key={key} value={key}>
-              {value.text}
-            </Select.Option>
-          ))}
-        </Select>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+        <Space wrap>
+          <Input
+            placeholder="搜索邮箱"
+            prefix={<SearchOutlined />}
+            value={searchEmail}
+            onChange={(e) => setSearchEmail(e.target.value)}
+            style={{ width: 200 }}
+          />
+          <Select
+            placeholder="选择状态"
+            value={searchStatus}
+            onChange={setSearchStatus}
+            allowClear
+            style={{ width: 120 }}
+          >
+            {Object.entries(STATUS_MAP).map(([key, value]) => (
+              <Select.Option key={key} value={Number(key)}>
+                {value.text}
+              </Select.Option>
+            ))}
+          </Select>
+          <Select
+            placeholder="选择邮箱类型"
+            value={searchEmailType}
+            onChange={setSearchEmailType}
+            allowClear
+            style={{ width: 180 }}
+          >
+            {Object.entries(EMAIL_TYPE_MAP).map(([key, value]) => (
+              <Select.Option key={key} value={key}>
+                {value.text}
+              </Select.Option>
+            ))}
+          </Select>
+          <RangePicker
+            placeholder={['创建开始日期', '创建结束日期']}
+            value={createTimeRange}
+            onChange={(dates) => setCreateTimeRange(dates as [Dayjs, Dayjs] | null)}
+            format="YYYY-MM-DD"
+            style={{ width: 260 }}
+          />
+          <RangePicker
+            placeholder={['更新开始日期', '更新结束日期']}
+            value={updateTimeRange}
+            onChange={(dates) => setUpdateTimeRange(dates as [Dayjs, Dayjs] | null)}
+            format="YYYY-MM-DD"
+            style={{ width: 260 }}
+          />
+          <Button type="primary" icon={<SearchOutlined />} onClick={() => { setPage(1); fetchData(); }}>
+            搜索
+          </Button>
+          <Button onClick={() => { setSearchEmail(''); setSearchStatus(undefined); setSearchEmailType(undefined); setCreateTimeRange(null); setUpdateTimeRange(null); setPage(1); setTimeout(fetchData, 0); }}>
+            重置
+          </Button>
+          <Button icon={<SyncOutlined />} onClick={handleBatchUpdate}>
+            批量更新状态
+          </Button>
+        </Space>
         <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
           新增邮箱
         </Button>
-        <Button icon={<SyncOutlined />} onClick={handleBatchUpdate}>
-          批量更新状态
-        </Button>
-      </Space>
+      </div>
 
       <Table
         loading={loading}

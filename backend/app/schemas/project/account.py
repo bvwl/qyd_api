@@ -7,7 +7,6 @@ from app.models.project import Status, AccountType
 from app.utils.time_tool import CN_TZ
 from app.schemas.server.info import Base as ServerInfoBase
 from .info import Base as ProjectInfoBase
-from .wallet import Base as ProjectWalletBase
 
 
 class Base(BaseModel):
@@ -35,7 +34,6 @@ class Create(Base):
     """
     project_id: UUID = Field(..., description="所属项目ID")
     server_id: UUID | None = Field(None, description="关联服务器信息ID")
-    wallet_id: UUID | None = Field(None, description="关联钱包信息ID")
 
 
 class Update(BaseModel):
@@ -52,7 +50,6 @@ class Update(BaseModel):
     data: dict | None = Field(None, description="扩展数据")
     project_id: UUID | None = Field(None, description="所属项目ID")
     server_id: UUID | None = Field(None, description="关联服务器信息ID")
-    wallet_id: UUID | None = Field(None, description="关联钱包信息ID")
 
 
 class Out(Base):
@@ -67,12 +64,10 @@ class Out(Base):
 
     project_id: UUID = Field(..., description="所属项目ID")
     server_id: UUID | None = Field(None, description="关联服务器信息ID")
-    wallet_id: UUID | None = Field(None, description="关联钱包信息ID")
 
     # 关联的项目、服务器和钱包基础信息
     project: ProjectInfoBase = Field(..., description="项目信息")
     server: ServerInfoBase | None = Field(None, description="服务器信息")
-    wallet: ProjectWalletBase | None = Field(None, description="钱包信息")
 
     @field_serializer("create_time", "update_time")
     def format_datetime(self, dt: datetime) -> str:

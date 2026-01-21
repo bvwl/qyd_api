@@ -46,7 +46,7 @@ tests/
   - 创建、获取、列表、更新、删除
 - `TestProjectBalance` - 项目余额接口（依赖 ProjectAccount）
   - 创建、获取、列表、更新、删除
-- `TestProjectWallet` - 项目钱包接口（依赖 ProjectInfo）
+- `TestProjectWallet` - 项目钱包接口（独立资源，不依赖项目）
   - 创建、获取、列表、更新、删除
 
 ### 4. test_user.py - 用户相关接口

@@ -76,6 +76,8 @@ async def gets(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -112,5 +114,7 @@ async def post_or_put(item: Create = Body(..., description="创建或更新数�
         return await server_country_crud.upsert(item)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

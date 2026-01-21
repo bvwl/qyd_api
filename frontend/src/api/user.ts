@@ -31,6 +31,23 @@ export const deleteUser = (id: string) => {
   return api.delete(`/v1/user/user/${id}`)
 }
 
+// 用户角色管理
+export const getUserRoles = (userId: string) => {
+  return api.get<any, Role[]>(`/v1/user/${userId}/roles`)
+}
+
+export const assignUserRoles = (userId: string, roleCodes: string[]) => {
+  return api.put<any, User>(`/v1/user/${userId}/roles`, { role_codes: roleCodes })
+}
+
+export const addUserRole = (userId: string, roleCode: string) => {
+  return api.post<any, User>(`/v1/user/${userId}/roles/${roleCode}`)
+}
+
+export const removeUserRole = (userId: string, roleCode: string) => {
+  return api.delete<any, User>(`/v1/user/${userId}/roles/${roleCode}`)
+}
+
 // 角色管理
 export const getRoleList = (params?: PaginationParams) => {
   return api.get<any, ApiResponse<Role>>('/v1/user/role', { params })

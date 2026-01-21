@@ -13,6 +13,7 @@ class CRUD:
         res = await ProjectWallet.create(**item.model_dump())
         if not res:
             raise HTTPException(status_code=500, detail='创建失败')
+        await res.fetch_related('project')
         return Out.model_validate(res)
 
     # 查询
@@ -20,10 +21,12 @@ class CRUD:
         res = await ProjectWallet.get_or_none(id=id)
         if not res:
             raise HTTPException(status_code=404, detail='数据不存在')
+        await res.fetch_related('project')
         return Out.model_validate(res)
 
     # 条件查询
     async def get_multi(self,
+                        project_id: UUID | None = None,
                         chain: str | None = None,
                         page: int = 1,
                         limit: int = 10,
@@ -35,6 +38,9 @@ class CRUD:
                         update_time_end: str | int | None = None
                         ) -> OutList:
         query = ProjectWallet.all()
+        
+        if project_id:
+            query = query.filter(project_id=project_id)
         
         if chain:
             query = query.filter(chain__icontains=chain)
@@ -61,8 +67,8 @@ class CRUD:
         offset = (page - 1) * limit
         query = query.limit(limit).offset(offset)
         
-        # ProjectWallet 没有关联字段，不需要 prefetch_related
-        res = await query
+        # 预加载关联的项目信息
+        res = await query.prefetch_related('project')
         
         if not res:
             raise HTTPException(status_code=404, detail='未查询到数据')
@@ -83,6 +89,7 @@ class CRUD:
         
         await res.update_from_dict(update_data)
         await res.save()
+        await res.fetch_related('project')
         
         return Out.model_validate(res)
 
@@ -107,6 +114,7 @@ class CRUD:
                 await record.update_from_dict(update_data)
                 await record.save()
         
+        await record.fetch_related('project')
         return Out.model_validate(record)
 
 

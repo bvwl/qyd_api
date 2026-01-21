@@ -11,18 +11,16 @@ class CRUD:
     # 创建
     async def create(self, item: Create) -> Out:
         # 处理外键字段
-        data = item.model_dump(exclude={'project_id', 'server_id', 'wallet_id'})
+        data = item.model_dump(exclude={'project_id', 'server_id'})
         if item.project_id:
             data['project_id'] = item.project_id
         if item.server_id:
             data['server_id'] = item.server_id
-        if item.wallet_id:
-            data['wallet_id'] = item.wallet_id
-        
+
         res = await ProjectAccount.create(**data)
         if not res:
             raise HTTPException(status_code=500, detail='创建失败')
-        await res.fetch_related('project', 'server', 'wallet')
+        await res.fetch_related('project', 'server')
         return Out.model_validate(res)
 
     # 查询
@@ -30,7 +28,7 @@ class CRUD:
         res = await ProjectAccount.get_or_none(id=id)
         if not res:
             raise HTTPException(status_code=404, detail='数据不存在')
-        await res.fetch_related('project', 'server', 'wallet')
+        await res.fetch_related('project', 'server')
         return Out.model_validate(res)
 
     # 条件查询
@@ -40,7 +38,6 @@ class CRUD:
                         account_type: int | None = None,
                         project_id: UUID | None = None,
                         server_id: UUID | None = None,
-                        wallet_id: UUID | None = None,
                         page: int = 1,
                         limit: int = 10,
                         res_count: bool = False,
@@ -61,8 +58,6 @@ class CRUD:
             query = query.filter(project_id=project_id)
         if server_id:
             query = query.filter(server_id=server_id)
-        if wallet_id:
-            query = query.filter(wallet_id=wallet_id)
         if create_time_start:
             query = query.filter(create_time__gte=parse_time(create_time_start))
         if create_time_end:
@@ -86,7 +81,7 @@ class CRUD:
         query = query.limit(limit).offset(offset)
         
         # 使用 prefetch_related 预加载关联数据
-        res = await query.prefetch_related('project', 'server', 'wallet')
+        res = await query.prefetch_related('project', 'server')
         
         if not res:
             raise HTTPException(status_code=404, detail='未查询到数据')
@@ -106,7 +101,7 @@ class CRUD:
 
         await res.update_from_dict(update_data)
         await res.save()
-        await res.fetch_related('project', 'server', 'wallet')
+        await res.fetch_related('project', 'server')
         return Out.model_validate(res)
 
     # 删除
@@ -120,13 +115,11 @@ class CRUD:
     # 创建或更新
     async def upsert(self, item: Create) -> Out:
         # 处理外键字段
-        data = item.model_dump(exclude={'project_id', 'server_id', 'wallet_id'})
+        data = item.model_dump(exclude={'project_id', 'server_id'})
         if item.project_id:
             data['project_id'] = item.project_id
         if item.server_id:
             data['server_id'] = item.server_id
-        if item.wallet_id:
-            data['wallet_id'] = item.wallet_id
         
         record, created = await ProjectAccount.get_or_create(
             defaults=data,
@@ -136,7 +129,7 @@ class CRUD:
         if not created:
             await record.update_from_dict(item.model_dump(exclude_unset=True))
             await record.save()
-        await record.fetch_related('project', 'server', 'wallet')
+        await record.fetch_related('project', 'server')
         return Out.model_validate(record)
 
 

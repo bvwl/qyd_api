@@ -30,6 +30,7 @@ class Base(BaseModel):
 
     字段与数据库模型 UserRole 保持一致
     """
+    id: UUID = Field(..., description="ID")
     name: str = Field(..., max_length=32, description="角色名称")
     code: str = Field(..., max_length=32, description="角色标识")
     description: str | None = Field(None, max_length=255, description="角色描述")

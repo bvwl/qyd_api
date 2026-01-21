@@ -1,37 +1,47 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Query, Body, HTTPException, Path
+from fastapi import APIRouter, Query, Body, HTTPException, Path, Depends
 
 from app.schemas.user.route import Create, Update, Out, OutList
 from app.crud.user.route import route_crud
 from app.schemas.base import BaseOut
+from app.apis.deps import get_current_user
+from app.utils.time_tool import parse_time
 
 
 app = APIRouter()
 
 
 @app.post("", response_model=Out, description="创建路由", summary="创建路由")
-async def post(item: Create = Body(..., description="创建数据")):
+async def post(
+    item: Create = Body(..., description="创建数据"),
+    current_user: dict = Depends(get_current_user)
+):
     """
     创建路由记录
     """
     try:
         return await route_crud.create(item)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
         raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/{id}", response_model=Out, description="获取路由信息", summary="获取路由信息")
-async def get(id: UUID = Path(..., description="ID")):
+async def get(
+    id: UUID = Path(..., description="ID"),
+    current_user: dict = Depends(get_current_user)
+):
     """
     获取单个路由记录
     """
     try:
         obj = await route_crud.get(id)
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -70,6 +80,7 @@ async def gets(
     ),
     page: int = Query(1, ge=1, description="页码"),
     limit: int = Query(10, ge=1, le=1000, description="每页数量"),
+    current_user: dict = Depends(get_current_user)
 ):
     """
     分页查询路由列表
@@ -81,13 +92,15 @@ async def gets(
             status=status,
             order_by=order_by or "-create_time",
             res_count=res_count,
-            create_time_start=create_time_start,
-            create_time_end=create_time_end,
-            update_time_start=update_time_start,
-            update_time_end=update_time_end,
+            create_time_start=parse_time(create_time_start),
+            create_time_end=parse_time(create_time_end, True),
+            update_time_start=parse_time(update_time_start),
+            update_time_end=parse_time(update_time_end, True),
             page=page,
             limit=limit,
         )
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -98,12 +111,15 @@ async def gets(
 async def put(
     id: UUID = Path(..., description="主键ID"),
     item: Update = Body(..., description="更新数据"),
+    current_user: dict = Depends(get_current_user)
 ):
     """
     部分更新路由信息，只更新传入的非空字段
     """
     try:
         return await route_crud.update(id, item)
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -111,7 +127,10 @@ async def put(
 
 
 @app.delete("/{id}", response_model=BaseOut, description="删除路由", summary="删除路由")
-async def delete(id: UUID = Path(..., description="主键ID")):
+async def delete(
+    id: UUID = Path(..., description="主键ID"),
+    current_user: dict = Depends(get_current_user)
+):
     """
     删除路由
     """
@@ -126,12 +145,17 @@ async def delete(id: UUID = Path(..., description="主键ID")):
 
 
 @app.post("/upsert", response_model=Out, description="创建或更新路由", summary="创建或更新路由")
-async def post_or_put(item: Create = Body(..., description="创建或更新数据")):
+async def post_or_put(
+    item: Create = Body(..., description="创建或更新数据"),
+    current_user: dict = Depends(get_current_user)
+):
     """
     创建或更新路由
     """
     try:
         return await route_crud.upsert(item)
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

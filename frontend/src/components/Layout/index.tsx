@@ -1,14 +1,15 @@
 import { useState } from 'react'
 import { Layout, Menu, Avatar, Dropdown, theme } from 'antd'
 import {
+  DashboardOutlined,
   UserOutlined,
-  TeamOutlined,
   ProjectOutlined,
   CloudServerOutlined,
   MailOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  ApiOutlined,
 } from '@ant-design/icons'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useUserStore } from '@/store/useUserStore'
@@ -26,6 +27,11 @@ export default function AppLayout() {
   } = theme.useToken()
 
   const menuItems: MenuProps['items'] = [
+    {
+      key: '/dashboard',
+      icon: <DashboardOutlined />,
+      label: '仪表盘',
+    },
     {
       key: '/user',
       icon: <UserOutlined />,
@@ -67,6 +73,20 @@ export default function AppLayout() {
       children: [
         { key: '/mail/list', label: '邮箱列表' },
         { key: '/mail/outlook', label: 'Outlook授权' },
+      ],
+    },
+    {
+      key: '/api-docs',
+      icon: <ApiOutlined />,
+      label: 'API文档',
+      children: [
+        { key: '/api-docs/user', label: '用户列表' },
+        { key: '/api-docs/user-create', label: '创建用户' },
+        { key: '/api-docs/role', label: '角色列表' },
+        { key: '/api-docs/project', label: '项目列表' },
+        { key: '/api-docs/project-account', label: '项目账号' },
+        { key: '/api-docs/server', label: '服务器列表' },
+        { key: '/api-docs/mail', label: '邮箱列表' },
       ],
     },
   ]

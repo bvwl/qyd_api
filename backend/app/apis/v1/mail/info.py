@@ -5,7 +5,8 @@ from app.schemas.mail.info import Create, Update, Out, OutList, EmailType
 from app.crud.mail.info import email_info_crud
 from app.utils.time_tool import parse_time
 from app.schemas.base import BaseOut
-from fastapi import APIRouter, Query, Body, HTTPException, Path
+from fastapi import APIRouter, Query, Body, HTTPException, Path, Depends
+from app.apis.deps import get_current_user
 
 app = APIRouter()
 
@@ -31,7 +32,10 @@ def _mask_items(
 
 # 创建邮箱信息
 @app.post("", response_model=Out, description='创建邮箱信息', summary='创建邮箱信息')
-async def post(item: Create = Body(..., description='创建数据')):
+async def post(
+    item: Create = Body(..., description='创建数据'),
+    current_user: dict = Depends(get_current_user)
+):
     """
     创建邮箱信息记录
     """
@@ -47,7 +51,10 @@ async def post(item: Create = Body(..., description='创建数据')):
 
 # 查询邮箱单个信息
 @app.get("/{id}", response_model=Out, description='获取邮箱信息', summary='获取邮箱信息')
-async def get(id: UUID = Path(..., description='ID')):
+async def get(
+    id: UUID = Path(..., description='ID'),
+    current_user: dict = Depends(get_current_user)
+):
     """
     获取邮箱信息记录
     """
@@ -55,6 +62,8 @@ async def get(id: UUID = Path(..., description='ID')):
         obj = await email_info_crud.get(id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     if not obj:
@@ -82,6 +91,7 @@ async def gets(
             None, description='更新时间结束 (支持 YYYY-MM-DD / YYYY-MM-DD HH:mm:ss / 13位时间戳)'),
         page: int = Query(1, ge=1, description='页码'),
         limit: int = Query(10, ge=1, le=1000, description='每页数量'),
+        current_user: dict = Depends(get_current_user)
 ):
     try:
         result = await email_info_crud.get_multi(
@@ -111,15 +121,19 @@ async def gets(
         raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 # 更新邮箱信息
 @app.put("/{id}", response_model=Out, description='更新邮箱信息', summary='更新邮箱信息')
-async def put(id: UUID = Path(..., description='主键ID'),
-              item: Update = Body(..., description='更新数据'),
-              ):
+async def put(
+    id: UUID = Path(..., description='主键ID'),
+    item: Update = Body(..., description='更新数据'),
+    current_user: dict = Depends(get_current_user)
+):
     """
     部分更新邮箱信息，只更新传入的非空字段
     """
@@ -129,13 +143,18 @@ async def put(id: UUID = Path(..., description='主键ID'),
         raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 # 删除邮箱信息
 @app.delete("/{id}", response_model=BaseOut, description='删除邮箱信息', summary='删除邮箱信息')
-async def delete(id: UUID = Path(..., description='主键ID')):
+async def delete(
+    id: UUID = Path(..., description='主键ID'),
+    current_user: dict = Depends(get_current_user)
+):
     """
     删除邮箱信息
     """
@@ -146,13 +165,18 @@ async def delete(id: UUID = Path(..., description='主键ID')):
         raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 # 创建或更新邮箱信息
 @app.post("/upsert", response_model=Out, description='创建或更新邮箱信息', summary='创建或更新邮箱信息')
-async def post_or_put(item: Create = Body(..., description='创建或更新数据')):
+async def post_or_put(
+    item: Create = Body(..., description='创建或更新数据'),
+    current_user: dict = Depends(get_current_user)
+):
     """
     创建或更新邮箱信息
     """
@@ -160,6 +184,8 @@ async def post_or_put(item: Create = Body(..., description='创建或更新数�
         return await email_info_crud.upsert(item)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -169,6 +195,7 @@ async def post_or_put(item: Create = Body(..., description='创建或更新数�
 async def batch_update_status(
         from_status: int = Body(..., embed=True, description="原状态值"),
         to_status: int = Body(..., embed=True, description="目标状态值"),
+        current_user: dict = Depends(get_current_user)
 ):
     """
     批量将邮箱状态从 from_status 调整为 to_status

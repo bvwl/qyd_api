@@ -38,6 +38,10 @@ export const STATUS_MAP = {
 
 // 邮箱类型映射
 export const EMAIL_TYPE_MAP = {
+  [EmailType.IP_OK]: { text: 'IP正常', color: 'success' },
+  [EmailType.IP_NOT]: { text: 'IP异常', color: 'error' },
+  [EmailType.TOKEN_OK]: { text: 'Token正常', color: 'success' },
+  [EmailType.TOKEN_NOT]: { text: 'Token异常', color: 'error' },
   [EmailType.IP_OK_TOKEN_OK]: { text: 'IP正常+Token正常', color: 'success' },
   [EmailType.IP_OK_TOKEN_NOT]: { text: 'IP正常+Token异常', color: 'warning' },
   [EmailType.IP_NOT_TOKEN_OK]: { text: 'IP异常+Token正常', color: 'warning' },

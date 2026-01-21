@@ -35,6 +35,8 @@ async def get(id: UUID = Path(..., description='ID')):
         obj = await server_info_crud.get(id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     if not obj:
@@ -76,6 +78,8 @@ async def gets(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -92,6 +96,8 @@ async def put(id: UUID = Path(..., description='主键ID'),
         return await server_info_crud.update(id, item)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -108,6 +114,8 @@ async def delete(id: UUID = Path(..., description='主键ID')):
         raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -125,5 +133,7 @@ async def post_or_put(item: Create = Body(..., description='创建或更新数�
         return await server_info_crud.upsert(filter_kwargs, item)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

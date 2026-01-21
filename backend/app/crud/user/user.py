@@ -31,7 +31,15 @@ class CRUD:
         
         # 处理多对多关系
         if role_ids:
-            await res.roles.add(*role_ids)
+            from app.models.user import UserRole
+            # 将UUID字符串转换为UserRole对象
+            roles = []
+            for role_id in role_ids:
+                role = await UserRole.get_or_none(id=role_id)
+                if role:
+                    roles.append(role)
+            if roles:
+                await res.roles.add(*roles)
         
         await res.fetch_related('roles', 'projects')
         return Out.model_validate(res)
@@ -123,7 +131,15 @@ class CRUD:
         if role_ids is not None:
             await res.roles.clear()
             if role_ids:
-                await res.roles.add(*role_ids)
+                from app.models.user import UserRole
+                # 将UUID字符串转换为UserRole对象
+                roles = []
+                for role_id in role_ids:
+                    role = await UserRole.get_or_none(id=role_id)
+                    if role:
+                        roles.append(role)
+                if roles:
+                    await res.roles.add(*roles)
         
         await res.fetch_related('roles', 'projects')
         return Out.model_validate(res)
@@ -157,7 +173,15 @@ class CRUD:
         if role_ids is not None:
             await record.roles.clear()
             if role_ids:
-                await record.roles.add(*role_ids)
+                from app.models.user import UserRole
+                # 将UUID字符串转换为UserRole对象
+                roles = []
+                for role_id in role_ids:
+                    role = await UserRole.get_or_none(id=role_id)
+                    if role:
+                        roles.append(role)
+                if roles:
+                    await record.roles.add(*roles)
         
         await record.fetch_related('roles', 'projects')
         return Out.model_validate(record)

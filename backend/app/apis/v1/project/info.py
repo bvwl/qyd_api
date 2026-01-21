@@ -1,18 +1,22 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Query, Body, HTTPException, Path
+from fastapi import APIRouter, Query, Body, HTTPException, Path, Depends
 
 from app.schemas.project.info import Create, Update, Out, OutList
 from app.crud.project.info import project_info_crud
 from app.utils.time_tool import parse_time
 from app.schemas.base import BaseOut
+from app.apis.deps import get_current_user
 
 
 app = APIRouter()
 
 
 @app.post("", response_model=Out, description="创建项目信息", summary="创建项目信息")
-async def post(item: Create = Body(..., description="创建数据")):
+async def post(
+    item: Create = Body(..., description="创建数据"),
+    current_user: dict = Depends(get_current_user)
+):
     """
     创建项目记录
     """
@@ -27,7 +31,10 @@ async def post(item: Create = Body(..., description="创建数据")):
 
 
 @app.get("/{id}", response_model=Out, description="获取项目信息", summary="获取项目信息")
-async def get(id: UUID = Path(..., description="ID")):
+async def get(
+    id: UUID = Path(..., description="ID"),
+    current_user: dict = Depends(get_current_user)
+):
     """
     获取单个项目记录
     """
@@ -35,6 +42,8 @@ async def get(id: UUID = Path(..., description="ID")):
         obj = await project_info_crud.get(id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     if not obj:
@@ -70,6 +79,7 @@ async def gets(
     ),
     page: int = Query(1, ge=1, description="页码"),
     limit: int = Query(10, ge=1, le=1000, description="每页数量"),
+    current_user: dict = Depends(get_current_user)
 ):
     """
     分页查询项目列表
@@ -100,6 +110,8 @@ async def gets(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -108,6 +120,7 @@ async def gets(
 async def put(
     id: UUID = Path(..., description="主键ID"),
     item: Update = Body(..., description="更新数据"),
+    current_user: dict = Depends(get_current_user)
 ):
     """
     部分更新项目信息，只更新传入的非空字段
@@ -116,12 +129,17 @@ async def put(
         return await project_info_crud.update(id, item)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.delete("/{id}", response_model=BaseOut, description="删除项目信息", summary="删除项目信息")
-async def delete(id: UUID = Path(..., description="主键ID")):
+async def delete(
+    id: UUID = Path(..., description="主键ID"),
+    current_user: dict = Depends(get_current_user)
+):
     """
     删除项目信息
     """
@@ -132,12 +150,17 @@ async def delete(id: UUID = Path(..., description="主键ID")):
         raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/upsert", response_model=Out, description="创建或更新项目信息", summary="创建或更新项目信息")
-async def post_or_put(item: Create = Body(..., description="创建或更新数据")):
+async def post_or_put(
+    item: Create = Body(..., description="创建或更新数据"),
+    current_user: dict = Depends(get_current_user)
+):
     """
     创建或更新项目信息
     """
@@ -145,6 +168,8 @@ async def post_or_put(item: Create = Body(..., description="创建或更新数�
         return await project_info_crud.upsert(item)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

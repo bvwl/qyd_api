@@ -21,7 +21,7 @@ from app.core.settings import TORTOISE_ORM
 from app import app as main_router
 from app.apis.v1.mail.outlook import auto_check_email_status
 from app.utils.log_middleware import LoggingMiddleware
-from app.utils.logs import getLogger
+from app.utils.logs import getLogger, compress_all_logs
 
 
 # 配置日志
@@ -45,6 +45,19 @@ async def keep_db_connection_alive() -> None:
         scheduler_logger.debug("数据库连接检查成功")
     except Exception as e:
         scheduler_logger.error(f"数据库连接检查失败: {e}", exc_info=True)
+
+
+async def compress_logs_task() -> None:
+    """
+    压缩旧日志文件的定时任务
+    每2小时执行一次，压缩所有未压缩的旧日志
+    """
+    try:
+        scheduler_logger.info("开始执行日志压缩任务...")
+        compress_all_logs()
+        scheduler_logger.info("日志压缩任务完成")
+    except Exception as e:
+        scheduler_logger.error(f"日志压缩任务失败: {e}", exc_info=True)
 
 
 async def shutdown_handler() -> None:
@@ -97,6 +110,14 @@ async def lifespan(app: FastAPI):
     """
     app_logger.info("项目启动...")
 
+    # 启动时立即压缩旧日志
+    try:
+        app_logger.info("检查并压缩旧日志文件...")
+        compress_all_logs()
+        app_logger.info("日志压缩检查完成")
+    except Exception as e:
+        app_logger.warning(f"日志压缩检查失败: {e}")
+
     # 初始化数据库连接
     try:
         await Tortoise.init(config=TORTOISE_ORM)
@@ -116,6 +137,17 @@ async def lifespan(app: FastAPI):
         misfire_grace_time=30,
     )
     scheduler_logger.info(f"已注册定时任务: 每 {db_check_interval} 分钟检查数据库连接")
+
+    # 日志压缩定时任务：每2小时执行一次
+    scheduler.add_job(
+        compress_logs_task,
+        IntervalTrigger(hours=2),
+        id="compress_logs",
+        name="压缩旧日志文件",
+        coalesce=True,
+        misfire_grace_time=300,  # 5分钟容错
+    )
+    scheduler_logger.info("已注册定时任务: 每 2 小时压缩旧日志文件")
 
     # 可选：自动检查邮箱状态
     enable_email_check = os.getenv("ENABLE_EMAIL_CHECK", "0").lower() in ("1", "true", "yes")
