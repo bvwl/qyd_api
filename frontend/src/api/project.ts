@@ -1,8 +1,15 @@
 import api from './index'
-import type { Project, ProjectAccount, ProjectWallet, ProjectBalance, ApiResponse, PaginationParams } from '@/types'
+import type { Project, ProjectAccount, ProjectWallet, ApiResponse, PaginationParams } from '@/types'
 
 // 项目信息
-export const getProjectList = (params?: PaginationParams & { name?: string; status?: number }) => {
+export const getProjectList = (params?: PaginationParams & { 
+  name?: string
+  status?: number
+  create_time_start?: string
+  create_time_end?: string
+  update_time_start?: string
+  update_time_end?: string
+}) => {
   return api.get<any, ApiResponse<Project>>('/v1/project/info', { params })
 }
 
@@ -22,12 +29,13 @@ export const deleteProject = (id: string) => {
   return api.delete(`/v1/project/info/${id}`)
 }
 
-// 项目账号
+// 项目账号（包含余额字段）
 export const getProjectAccountList = (params?: PaginationParams & { 
   project_id?: string
   status?: number
   account_type?: number
   account?: string
+  order_by?: string
   create_time_start?: string
   create_time_end?: string
   update_time_start?: string
@@ -55,6 +63,7 @@ export const deleteProjectAccount = (id: string) => {
 // 项目钱包
 export const getProjectWalletList = (params?: PaginationParams & { 
   chain?: string
+  public_key?: string
   project_id?: string
   create_time_start?: string
   create_time_end?: string
@@ -80,23 +89,6 @@ export const deleteProjectWallet = (id: string) => {
   return api.delete(`/v1/project/wallet/${id}`)
 }
 
-// 项目余额
-export const getProjectBalanceList = (params?: PaginationParams & { account_id?: string }) => {
-  return api.get<any, ApiResponse<ProjectBalance>>('/v1/project/balance', { params })
-}
-
-export const getProjectBalanceDetail = (id: string) => {
-  return api.get<any, ProjectBalance>(`/v1/project/balance/${id}`)
-}
-
-export const createProjectBalance = (data: Partial<ProjectBalance>) => {
-  return api.post<any, ProjectBalance>('/v1/project/balance', data)
-}
-
-export const updateProjectBalance = (id: string, data: Partial<ProjectBalance>) => {
-  return api.put<any, ProjectBalance>(`/v1/project/balance/${id}`, data)
-}
-
-export const deleteProjectBalance = (id: string) => {
-  return api.delete(`/v1/project/balance/${id}`)
+export const upsertProjectWallet = (data: Partial<ProjectWallet>) => {
+  return api.post<any, ProjectWallet>('/v1/project/wallet/upsert', data)
 }

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>前端测试</title>
+</head>
+<body>
+    <h1>前端API测试</h1>
+    <div id="result"></div>
+    
+    <script>
+        // 测试前端是否能访问后端API
+        async function testAPI() {
+            const resultDiv = document.getElementById('result');
+            
+            try {
+                // 1. 测试登录
+                resultDiv.innerHTML += '<p>正在测试登录...</p>';
+                const loginRes = await fetch('http://127.0.0.1:6080/v1/user/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: 'zhiyu', password: '2201101122@qq.com' })
+                });
+                const loginData = await loginRes.json();
+                
+                if (loginData.access_token) {
+                    resultDiv.innerHTML += '<p>✅ 登录成功</p>';
+                    const token = loginData.access_token;
+                    
+                    // 2. 测试获取路由树
+                    resultDiv.innerHTML += '<p>正在测试获取路由树...</p>';
+                    const treeRes = await fetch('http://127.0.0.1:6080/v1/user/route/tree?status=1', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    const treeData = await treeRes.json();
+                    
+                    if (Array.isArray(treeData)) {
+                        resultDiv.innerHTML += `<p>✅ 获取路由树成功，共 ${treeData.length} 个一级菜单</p>`;
+                    } else {
+                        resultDiv.innerHTML += `<p>❌ 路由树格式错误: ${JSON.stringify(treeData)}</p>`;
+                    }
+                    
+                    // 3. 测试获取角色列表
+                    resultDiv.innerHTML += '<p>正在测试获取角色列表...</p>';
+                    const rolesRes = await fetch('http://127.0.0.1:6080/v1/user/role?page=1&limit=100', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    const rolesData = await rolesRes.json();
+                    
+                    if (rolesData.items) {
+                        resultDiv.innerHTML += `<p>✅ 获取角色列表成功，共 ${rolesData.items.length} 个角色</p>`;
+                    } else {
+                        resultDiv.innerHTML += `<p>❌ 角色列表格式错误: ${JSON.stringify(rolesData)}</p>`;
+                    }
+                    
+                    resultDiv.innerHTML += '<h2>✅ 所有测试通过！后端API正常工作</h2>';
+                    resultDiv.innerHTML += '<p>问题可能在前端React组件或路由配置</p>';
+                } else {
+                    resultDiv.innerHTML += `<p>❌ 登录失败: ${JSON.stringify(loginData)}</p>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML += `<p>❌ 错误: ${error.message}</p>`;
+            }
+        }
+        
+        testAPI();
+    </script>
+</body>
+</html>

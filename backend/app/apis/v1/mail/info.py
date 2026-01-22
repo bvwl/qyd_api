@@ -6,7 +6,7 @@ from app.crud.mail.info import email_info_crud
 from app.utils.time_tool import parse_time
 from app.schemas.base import BaseOut
 from fastapi import APIRouter, Query, Body, HTTPException, Path, Depends
-from app.apis.deps import get_current_user
+from app.apis.deps import get_current_user, get_admin_user
 
 app = APIRouter()
 
@@ -153,7 +153,7 @@ async def put(
 @app.delete("/{id}", response_model=BaseOut, description='删除邮箱信息', summary='删除邮箱信息')
 async def delete(
     id: UUID = Path(..., description='主键ID'),
-    current_user: dict = Depends(get_current_user)
+    admin_user: dict = Depends(get_admin_user)
 ):
     """
     删除邮箱信息

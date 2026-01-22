@@ -16,8 +16,32 @@ export default function Login() {
       await login(values.email, values.password)
       message.success('登录成功')
       navigate('/')
-    } catch (error) {
-      message.error('登录失败，请检查邮箱和密码')
+    } catch (error: any) {
+      // 根据错误状态码显示不同的错误信息
+      if (error.response) {
+        const { status, data } = error.response
+        switch (status) {
+          case 400:
+            message.error(data?.detail || '邮箱或密码错误')
+            break
+          case 401:
+            message.error('登录失败，请检查邮箱和密码')
+            break
+          case 403:
+            message.error('账户已被禁用，请联系管理员')
+            break
+          case 500:
+            message.error('服务器错误，请稍后重试')
+            break
+          default:
+            message.error(data?.detail || '登录失败，请稍后重试')
+            break
+        }
+      } else if (error.request) {
+        message.error('网络连接失败，请检查网络')
+      } else {
+        message.error('登录失败，请稍后重试')
+      }
     } finally {
       setLoading(false)
     }

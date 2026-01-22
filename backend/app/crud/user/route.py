@@ -80,14 +80,53 @@ class CRUD:
         offset = (page - 1) * limit
         query = query.limit(limit).offset(offset)
         
-        # 使用 prefetch_related 预加载关联数据
-        res = await query.prefetch_related('parent', 'children', 'roles')
+        # 预加载roles
+        res = await query.prefetch_related('roles')
         
         if not res:
             raise HTTPException(status_code=404, detail='未查询到数据')
         
         num = len(res)
-        items = [Out.model_validate(obj) for obj in res]
+        
+        # 手动构建返回数据，避免Pydantic验证未加载的关联字段
+        items = []
+        for obj in res:
+            # 获取roles数据
+            roles_data = []
+            for r in obj.roles:
+                roles_data.append({
+                    'id': r.id,
+                    'name': r.name,
+                    'code': r.code,
+                    'description': r.description
+                })
+            
+            item_dict = {
+                'id': obj.id,
+                'name': obj.name,
+                'path': obj.path,
+                'component': obj.component,
+                'title': obj.title,
+                'icon': obj.icon,
+                'sort': obj.sort,
+                'redirect': obj.redirect,
+                'is_hidden': obj.is_hidden,
+                'is_cache': obj.is_cache,
+                'is_affix': obj.is_affix,
+                'route_type': obj.route_type,
+                'permission': obj.permission,
+                'api_method': obj.api_method,
+                'api_path': obj.api_path,
+                'status': obj.status,
+                'parent_id': obj.parent_id,
+                'create_time': obj.create_time,
+                'update_time': obj.update_time,
+                'message': '成功',
+                'children': [],  # 空列表，不加载children
+                'roles': roles_data
+            }
+            items.append(Out.model_validate(item_dict))
+        
         return OutList(message='成功', count=count, num=num, items=items)
 
     # 更新

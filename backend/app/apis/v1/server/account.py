@@ -4,7 +4,7 @@ from app.schemas.server.account import Create, Update, Out, OutList
 from app.crud.server.account import server_account_crud
 from app.schemas.base import BaseOut
 from fastapi import APIRouter, Query, Body, HTTPException, Path, Depends
-from app.apis.deps import get_current_user
+from app.apis.deps import get_current_user, get_admin_user
 
 app = APIRouter()
 
@@ -105,7 +105,7 @@ async def put(
 @app.delete("/{id}", response_model=BaseOut, description="删除代理账号", summary="删除代理账号")
 async def delete(
     id: UUID = Path(..., description="主键ID"),
-    current_user: dict = Depends(get_current_user)
+    admin_user: dict = Depends(get_admin_user)
 ):
     try:
         return await server_account_crud.delete(id)

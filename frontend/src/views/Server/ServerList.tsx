@@ -24,6 +24,7 @@ const ServerList = () => {
   const [searchIsSale, setSearchIsSale] = useState<number>()
   const [createTimeRange, setCreateTimeRange] = useState<[Dayjs, Dayjs] | null>(null)
   const [updateTimeRange, setUpdateTimeRange] = useState<[Dayjs, Dayjs] | null>(null)
+  const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([])
   const [form] = Form.useForm()
   const { hasPermission } = useUserStore()
 
@@ -63,14 +64,22 @@ const ServerList = () => {
         limit: 1000,
       })
       setGroupList(res.items || [])
+      return true  // 返回成功状态
     } catch (error) {
       setGroupList([])
+      return false  // 返回失败状态
     }
   }
 
   useEffect(() => {
-    fetchData()
-    fetchGroupList()
+    const loadData = async () => {
+      // 先加载分组列表，成功后再加载服务器数据
+      const groupSuccess = await fetchGroupList()
+      if (groupSuccess) {
+        fetchData()
+      }
+    }
+    loadData()
   }, [page, pageSize])
 
   const handleSearch = () => {
@@ -85,6 +94,7 @@ const ServerList = () => {
     setSearchIsSale(undefined)
     setCreateTimeRange(null)
     setUpdateTimeRange(null)
+    setSelectedRowKeys([])
     setPage(1)
     setTimeout(() => {
       fetchData()
@@ -125,6 +135,30 @@ const ServerList = () => {
     } catch (error) {
       message.error('删除失败')
     }
+  }
+
+  const handleBatchDelete = async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要删除的服务器')
+      return
+    }
+
+    Modal.confirm({
+      title: '批量删除确认',
+      content: `确定要删除选中的 ${selectedRowKeys.length} 个服务器吗？`,
+      okText: '确定',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          await Promise.all(selectedRowKeys.map(id => deleteServer(id)))
+          message.success(`成功删除 ${selectedRowKeys.length} 个服务器`)
+          setSelectedRowKeys([])
+          fetchData()
+        } catch (error) {
+          message.error('批量删除失败')
+        }
+      }
+    })
   }
 
   const handleSubmit = async () => {
@@ -289,11 +323,22 @@ const ServerList = () => {
             </Button>
             <Button onClick={handleReset}>重置</Button>
           </Space>
-          {isAdmin && (
-            <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
-              新增服务器
-            </Button>
-          )}
+          <Space>
+            {selectedRowKeys.length > 0 && isAdmin && (
+              <Button 
+                danger 
+                icon={<DeleteOutlined />} 
+                onClick={handleBatchDelete}
+              >
+                批量删除 ({selectedRowKeys.length})
+              </Button>
+            )}
+            {isAdmin && (
+              <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+                新增服务器
+              </Button>
+            )}
+          </Space>
         </div>
       </div>
 
@@ -302,6 +347,11 @@ const ServerList = () => {
         dataSource={data}
         rowKey="id"
         loading={loading}
+        rowSelection={{
+          selectedRowKeys,
+          onChange: (selectedKeys) => setSelectedRowKeys(selectedKeys as string[]),
+          preserveSelectedRowKeys: true,
+        }}
         pagination={{
           current: page,
           pageSize: pageSize,

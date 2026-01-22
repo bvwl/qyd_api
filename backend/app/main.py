@@ -17,7 +17,7 @@ from app.core import (
     response_validation_exception_handler,
     global_exception_handler,
 )
-from app.core.settings import TORTOISE_ORM
+from app.core.settings import get_tortoise_config
 from app import app as main_router
 from app.apis.v1.mail.outlook import auto_check_email_status
 from app.utils.log_middleware import LoggingMiddleware
@@ -120,7 +120,7 @@ async def lifespan(app: FastAPI):
 
     # 初始化数据库连接
     try:
-        await Tortoise.init(config=TORTOISE_ORM)
+        await Tortoise.init(config=get_tortoise_config())
         db_logger.info("数据库初始化完成")
     except Exception as e:
         db_logger.error(f"数据库初始化失败: {e}", exc_info=True)
@@ -166,9 +166,31 @@ async def lifespan(app: FastAPI):
     scheduler.start()
     scheduler_logger.info("调度器已启动")
     
+    # 启动Redis队列处理
+    try:
+        from app.core.settings import REDIS_ENABLED
+        if REDIS_ENABLED:
+            from app.utils.project_account_queue import project_account_queue
+            await project_account_queue.start()
+            app_logger.info("Redis队列处理已启动")
+        else:
+            app_logger.info("Redis未启用，跳过队列处理启动")
+    except Exception as e:
+        app_logger.warning(f"Redis队列处理启动失败: {e}")
+    
     try:
         yield
     finally:
+        # 停止Redis队列处理
+        try:
+            from app.core.settings import REDIS_ENABLED
+            if REDIS_ENABLED:
+                from app.utils.project_account_queue import project_account_queue
+                await project_account_queue.stop()
+                app_logger.info("Redis队列处理已停止")
+        except Exception as e:
+            app_logger.warning(f"Redis队列处理停止失败: {e}")
+        
         await shutdown_handler()
 
 

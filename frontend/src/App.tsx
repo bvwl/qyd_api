@@ -11,12 +11,12 @@ import LogList from './views/User/LogList'
 import ProjectList from './views/Project/ProjectList'
 import ProjectAccount from './views/Project/ProjectAccount'
 import ProjectWallet from './views/Project/ProjectWallet'
-import ProjectBalance from './views/Project/ProjectBalance'
 import CountryList from './views/Server/CountryList'
 import GroupList from './views/Server/GroupList'
 import ServerList from './views/Server/ServerList'
 import ServerAccount from './views/Server/ServerAccount'
 import MailList from './views/Mail/MailList'
+import MailViewer from './views/Mail/MailViewer'
 import Dashboard from './views/Dashboard/index'
 import Diagnostic from './views/Diagnostic'
 import UserApi from './views/ApiDocs/UserApi'
@@ -26,6 +26,7 @@ import ProjectApi from './views/ApiDocs/ProjectApi'
 import ProjectAccountApi from './views/ApiDocs/ProjectAccountApi'
 import ServerApi from './views/ApiDocs/ServerApi'
 import MailApi from './views/ApiDocs/MailApi'
+import PermissionManageWorking from './views/User/PermissionManageWorking'
 import ProtectedRoute from './components/ProtectedRoute/index'
 import 'dayjs/locale/zh-cn'
 
@@ -56,17 +57,18 @@ function App() {
               <Route path="user/list" element={<UserList />} />
               <Route path="user/role" element={<RoleList />} />
               <Route path="user/route" element={<RouteList />} />
+              <Route path="user/permission" element={<PermissionManageWorking />} />
               <Route path="user/token" element={<TokenList />} />
               <Route path="user/log" element={<LogList />} />
               <Route path="project/list" element={<ProjectList />} />
               <Route path="project/account" element={<ProjectAccount />} />
               <Route path="project/wallet" element={<ProjectWallet />} />
-              <Route path="project/balance" element={<ProjectBalance />} />
               <Route path="server/country" element={<CountryList />} />
               <Route path="server/group" element={<GroupList />} />
               <Route path="server/list" element={<ServerList />} />
               <Route path="server/account" element={<ServerAccount />} />
               <Route path="mail/list" element={<MailList />} />
+              <Route path="mail/viewer" element={<MailViewer />} />
               <Route path="api-docs/user" element={<UserApi />} />
               <Route path="api-docs/user-create" element={<UserCreate />} />
               <Route path="api-docs/role" element={<RoleApi />} />

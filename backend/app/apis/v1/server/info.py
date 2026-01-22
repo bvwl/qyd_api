@@ -4,14 +4,19 @@ from app.schemas.server.info import Create, Update, Out, OutList
 from app.crud.server.info import server_info_crud
 from app.utils.time_tool import parse_time
 from app.schemas.base import BaseOut
-from fastapi import APIRouter, Query, Body, HTTPException, Path
+from fastapi import APIRouter, Query, Body, HTTPException, Path, Depends
+
+from app.core.verify import get_current_user, get_admin_user
 
 app = APIRouter()
 
 
 # 创建服务器信息
 @app.post("", response_model=Out, description='创建服务器信息', summary='创建服务器信息')
-async def post(item: Create = Body(..., description='创建数据')):
+async def post(
+    item: Create = Body(..., description='创建数据'),
+    current_user: dict = Depends(get_current_user)
+):
     """
     创建服务器信息记录
     """
@@ -27,7 +32,10 @@ async def post(item: Create = Body(..., description='创建数据')):
 
 # 查询服务器单个信息
 @app.get("/{id}", response_model=Out, description='获取服务器信息', summary='获取服务器信息')
-async def get(id: UUID = Path(..., description='ID')):
+async def get(
+    id: UUID = Path(..., description='ID'),
+    current_user: dict = Depends(get_current_user)
+):
     """
     获取服务器信息记录
     """
@@ -62,6 +70,7 @@ async def gets(
             None, description='更新时间结束 (支持 YYYY-MM-DD / YYYY-MM-DD HH:mm:ss / 13位时间戳)'),
         page: int = Query(1, ge=1, description='页码'),
         limit: int = Query(10, ge=1, le=1000, description='每页数量'),
+    current_user: dict = Depends(get_current_user)
 ):
     try:
         return await server_info_crud.get_multi(
@@ -88,6 +97,7 @@ async def gets(
 @app.put("/{id}", response_model=Out, description='更新服务器信息', summary='更新服务器信息')
 async def put(id: UUID = Path(..., description='主键ID'),
               item: Update = Body(..., description='更新数据'),
+    current_user: dict = Depends(get_current_user)
               ):
     """
     部分更新服务器信息，只更新传入的非空字段
@@ -104,7 +114,10 @@ async def put(id: UUID = Path(..., description='主键ID'),
 
 # 删除服务器信息
 @app.delete("/{id}", response_model=BaseOut, description='删除服务器信息', summary='删除服务器信息')
-async def delete(id: UUID = Path(..., description='主键ID')):
+async def delete(
+    id: UUID = Path(..., description='主键ID'),
+    admin_user: dict = Depends(get_admin_user)
+):
     """
     删除服务器信息
     """
@@ -122,7 +135,10 @@ async def delete(id: UUID = Path(..., description='主键ID')):
 
 # 创建或更新服务器信息
 @app.post("/upsert", response_model=Out, description='创建或更新服务器信息', summary='创建或更新服务器信息')
-async def post_or_put(item: Create = Body(..., description='创建或更新数据')):
+async def post_or_put(
+    item: Create = Body(..., description='创建或更新数据'),
+    current_user: dict = Depends(get_current_user)
+):
     """
     创建或更新服务器信息
     """

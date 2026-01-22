@@ -1,4 +1,5 @@
 from uuid import UUID
+from datetime import datetime
 from fastapi import HTTPException
 
 from app.models.project import ProjectAccount
@@ -11,11 +12,16 @@ class CRUD:
     # 创建
     async def create(self, item: Create) -> Out:
         # 处理外键字段
-        data = item.model_dump(exclude={'project_id', 'server_id'})
+        data = item.model_dump(exclude={'project_id', 'server_id', 'balance', 'variable', 'balance_history'})
         if item.project_id:
             data['project_id'] = item.project_id
         if item.server_id:
             data['server_id'] = item.server_id
+        
+        # 余额字段：如果传入则使用，否则使用默认值0
+        data['balance'] = item.balance if item.balance is not None else 0
+        data['variable'] = 0  # 创建时变动余额为0
+        data['balance_history'] = {}  # 创建时历史为空
 
         res = await ProjectAccount.create(**data)
         if not res:
@@ -45,9 +51,15 @@ class CRUD:
                         create_time_start: str | int | None = None,
                         create_time_end: str | int | None = None,
                         update_time_start: str | int | None = None,
-                        update_time_end: str | int | None = None
+                        update_time_end: str | int | None = None,
+                        user_id: UUID | None = None
                         ) -> OutList:
         query = ProjectAccount.all()
+        
+        # 数据权限过滤：如果user_id不为None，则只查询该用户关联的项目的账号
+        if user_id:
+            query = query.filter(project__users__id=user_id)
+        
         if account:
             query = query.filter(account__icontains=account)
         if status is not None:
@@ -95,7 +107,39 @@ class CRUD:
         res = await ProjectAccount.get_or_none(id=id)
         if not res:
             raise HTTPException(status_code=404, detail='数据不存在')
-        update_data = item.model_dump(exclude_unset=True)
+        
+        update_data = item.model_dump(exclude_unset=True, exclude={'balance', 'variable', 'balance_history'})
+        
+        # 如果传入了余额，需要计算变动余额和更新历史
+        if item.balance is not None:
+            new_balance = item.balance
+            
+            # 获取当前日期
+            today = datetime.now().strftime('%Y-%m-%d')
+            
+            # 初始化 balance_history
+            if res.balance_history is None:
+                res.balance_history = {}
+            
+            # 实时更新当天的余额记录（覆盖）
+            res.balance_history[today] = float(new_balance)
+            
+            # 按日期排序并保留最近7条记录
+            sorted_data = dict(sorted(res.balance_history.items(), key=lambda x: x[0], reverse=True))
+            res.balance_history = dict(list(sorted_data.items())[:7])
+            
+            # 实时计算变动余额：当前余额 - 昨天的余额
+            if len(res.balance_history) >= 2:
+                dates = list(res.balance_history.keys())
+                today_balance = res.balance_history[dates[0]]  # 今天的余额（最新）
+                yesterday_balance = res.balance_history[dates[1]]  # 昨天的余额
+                update_data['variable'] = today_balance - yesterday_balance
+            else:
+                update_data['variable'] = 0
+            
+            update_data['balance'] = new_balance
+            update_data['balance_history'] = res.balance_history
+        
         if not update_data:
             raise HTTPException(status_code=400, detail='没有更新数据')
 
@@ -114,23 +158,48 @@ class CRUD:
 
     # 创建或更新
     async def upsert(self, item: Create) -> Out:
-        # 处理外键字段
-        data = item.model_dump(exclude={'project_id', 'server_id'})
-        if item.project_id:
-            data['project_id'] = item.project_id
-        if item.server_id:
-            data['server_id'] = item.server_id
+        # 获取当前日期
+        today = datetime.now().strftime('%Y-%m-%d')
         
-        record, created = await ProjectAccount.get_or_create(
-            defaults=data,
+        # 查询现有记录
+        existing = await ProjectAccount.get_or_none(
             account=item.account,
             project_id=item.project_id
         )
-        if not created:
-            await record.update_from_dict(item.model_dump(exclude_unset=True))
-            await record.save()
-        await record.fetch_related('project', 'server')
-        return Out.model_validate(record)
+        
+        if existing:
+            # 如果记录存在，更新余额
+            if item.balance is not None:
+                new_balance = item.balance
+                
+                # 初始化 balance_history
+                if existing.balance_history is None:
+                    existing.balance_history = {}
+                
+                # 实时更新当天的余额记录（覆盖）
+                existing.balance_history[today] = float(new_balance)
+                
+                # 按日期排序并保留最近7条记录
+                sorted_data = dict(sorted(existing.balance_history.items(), key=lambda x: x[0], reverse=True))
+                existing.balance_history = dict(list(sorted_data.items())[:7])
+                
+                # 实时计算变动余额：当前余额 - 昨天的余额
+                if len(existing.balance_history) >= 2:
+                    dates = list(existing.balance_history.keys())
+                    today_balance = existing.balance_history[dates[0]]  # 今天的余额（最新）
+                    yesterday_balance = existing.balance_history[dates[1]]  # 昨天的余额
+                    existing.variable = today_balance - yesterday_balance
+                else:
+                    existing.variable = 0
+                
+                existing.balance = new_balance
+                await existing.save()
+            
+            await existing.fetch_related('project', 'server')
+            return Out.model_validate(existing)
+        else:
+            # 如果记录不存在，创建新记录
+            return await self.create(item)
 
 
 project_account_crud = CRUD()

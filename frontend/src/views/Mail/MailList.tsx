@@ -8,7 +8,7 @@ import type { EmailInfo, ServerInfo } from '@/types'
 import { Status, EmailType } from '@/types'
 import { STATUS_MAP, EMAIL_TYPE_MAP } from '@/utils/constants'
 import { formatDateTime, maskPassword } from '@/utils/format'
-import dayjs, { Dayjs } from 'dayjs'
+import { Dayjs } from 'dayjs'
 
 const { RangePicker } = DatePicker
 
@@ -23,6 +23,7 @@ export default function MailList() {
   const [searchEmailType, setSearchEmailType] = useState<EmailType>()
   const [createTimeRange, setCreateTimeRange] = useState<[Dayjs, Dayjs] | null>(null)
   const [updateTimeRange, setUpdateTimeRange] = useState<[Dayjs, Dayjs] | null>(null)
+  const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([])
   const [modalVisible, setModalVisible] = useState(false)
   const [batchModalVisible, setBatchModalVisible] = useState(false)
   const [editingEmail, setEditingEmail] = useState<EmailInfo | null>(null)
@@ -59,8 +60,10 @@ export default function MailList() {
     try {
       const res = await getServerList({ limit: 1000 })
       setServers(res.items || [])
+      return true  // 返回成功状态
     } catch (error) {
       setServers([])
+      return false  // 返回失败状态
     }
   }
 
@@ -69,7 +72,10 @@ export default function MailList() {
   }, [page, pageSize, searchEmail, searchStatus, searchEmailType])
 
   useEffect(() => {
-    fetchServers()
+    const loadData = async () => {
+      await fetchServers()
+    }
+    loadData()
   }, [])
 
   const handleAdd = () => {
@@ -97,6 +103,30 @@ export default function MailList() {
           message.error('删除失败')
         }
       },
+    })
+  }
+
+  const handleBatchDelete = async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要删除的邮箱')
+      return
+    }
+
+    Modal.confirm({
+      title: '批量删除确认',
+      content: `确定要删除选中的 ${selectedRowKeys.length} 个邮箱吗？`,
+      okText: '确定',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          await Promise.all(selectedRowKeys.map(id => deleteEmail(id)))
+          message.success(`成功删除 ${selectedRowKeys.length} 个邮箱`)
+          setSelectedRowKeys([])
+          fetchData()
+        } catch (error) {
+          message.error('批量删除失败')
+        }
+      }
     })
   }
 
@@ -273,16 +303,27 @@ export default function MailList() {
           <Button type="primary" icon={<SearchOutlined />} onClick={() => { setPage(1); fetchData(); }}>
             搜索
           </Button>
-          <Button onClick={() => { setSearchEmail(''); setSearchStatus(undefined); setSearchEmailType(undefined); setCreateTimeRange(null); setUpdateTimeRange(null); setPage(1); setTimeout(fetchData, 0); }}>
+          <Button onClick={() => { setSearchEmail(''); setSearchStatus(undefined); setSearchEmailType(undefined); setCreateTimeRange(null); setUpdateTimeRange(null); setSelectedRowKeys([]); setPage(1); setTimeout(fetchData, 0); }}>
             重置
           </Button>
           <Button icon={<SyncOutlined />} onClick={handleBatchUpdate}>
             批量更新状态
           </Button>
         </Space>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
-          新增邮箱
-        </Button>
+        <Space>
+          {selectedRowKeys.length > 0 && (
+            <Button 
+              danger 
+              icon={<DeleteOutlined />} 
+              onClick={handleBatchDelete}
+            >
+              批量删除 ({selectedRowKeys.length})
+            </Button>
+          )}
+          <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+            新增邮箱
+          </Button>
+        </Space>
       </div>
 
       <Table
@@ -291,6 +332,11 @@ export default function MailList() {
         columns={columns}
         rowKey="id"
         scroll={{ x: 1200 }}
+        rowSelection={{
+          selectedRowKeys,
+          onChange: (selectedKeys) => setSelectedRowKeys(selectedKeys as string[]),
+          preserveSelectedRowKeys: true,
+        }}
         pagination={{
           current: page,
           pageSize,

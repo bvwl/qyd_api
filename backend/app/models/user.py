@@ -174,6 +174,16 @@ class UserLog(BaseModel):
 
 
 # =======================
+# 路由类型枚举
+# =======================
+
+class RouteType(IntEnum):
+    MENU = 1      # 菜单
+    BUTTON = 2    # 按钮
+    API = 3       # 接口
+
+
+# =======================
 # 前端路由模型（菜单权限）
 # =======================
 
@@ -206,6 +216,28 @@ class FrontendRoute(BaseModel):
     is_cache = fields.BooleanField(default=True, description="是否缓存页面")
     is_affix = fields.BooleanField(default=False, description="是否固定在标签页")
 
+    # 权限配置（新增）
+    route_type = fields.IntEnumField(
+        RouteType,
+        default=RouteType.MENU,
+        description="路由类型(1:菜单,2:按钮,3:接口)"
+    )
+    permission = fields.CharField(
+        max_length=128,
+        null=True,
+        description="权限标识（如：user:create, user:edit）"
+    )
+    api_method = fields.CharField(
+        max_length=16,
+        null=True,
+        description="API方法(GET/POST/PUT/DELETE)"
+    )
+    api_path = fields.CharField(
+        max_length=255,
+        null=True,
+        description="API路径"
+    )
+
     # 多对多关联：路由 <-> 角色
     roles: ManyToManyRelation["UserRole"] = fields.ManyToManyField(
         "models.UserRole",
@@ -230,6 +262,8 @@ class FrontendRoute(BaseModel):
             ("parent_id", "sort"),  # 按父级查询子路由（树形结构常用）
             ("path",),  # 按路径查询
             ("name",),  # 按名称模糊查询
+            ("permission",),  # 按权限标识查询
+            ("route_type",),  # 按路由类型查询
             ("create_time",),  # 时间范围查询
         ]
 

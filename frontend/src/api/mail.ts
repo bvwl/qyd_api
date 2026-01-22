@@ -7,6 +7,10 @@ export const getEmailList = (params?: PaginationParams & {
   status?: number
   email_type?: EmailType
   server_id?: string
+  create_time_start?: string
+  create_time_end?: string
+  update_time_start?: string
+  update_time_end?: string
 }) => {
   return api.get<any, ApiResponse<EmailInfo>>('/v1/mail/info', { params })
 }
@@ -67,4 +71,47 @@ export const checkEmailStatus = (data: {
   email_type?: EmailType
 }) => {
   return api.post<any, ApiResponse>('/v1/mail/outlook/check', data)
+}
+
+// 获取收件箱邮件列表
+export const getInboxMessages = (params: {
+  email: string
+  top?: number
+}) => {
+  return api.get<any, {
+    code: number
+    message: string
+    data: Array<{
+      id: string
+      subject: string
+      from: string
+      from_name: string
+      received_time: string
+      body_preview: string
+      has_attachments: boolean
+      is_read: boolean
+    }>
+    count: number
+  }>('/v1/mail/outlook/inbox', { params })
+}
+
+// 获取邮件详情
+export const getMessageDetail = (messageId: string, email: string) => {
+  return api.get<any, {
+    code: number
+    message: string
+    data: {
+      id: string
+      subject: string
+      from: string
+      from_name: string
+      to: string[]
+      cc: string[]
+      received_time: string
+      body_type: string
+      body_content: string
+      has_attachments: boolean
+      is_read: boolean
+    }
+  }>(`/v1/mail/outlook/message/${messageId}`, { params: { email } })
 }

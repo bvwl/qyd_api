@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_serializer
 
-from app.models.user import Status
+from app.models.user import Status, RouteType
 from app.utils.time_tool import CN_TZ
 from .role import Base as RoleBase
 
@@ -25,6 +25,10 @@ class Base(BaseModel):
     is_hidden: bool = Field(False, description="是否隐藏菜单")
     is_cache: bool = Field(True, description="是否缓存页面")
     is_affix: bool = Field(False, description="是否固定在标签页")
+    route_type: RouteType = Field(RouteType.MENU, description="路由类型(1:菜单,2:按钮,3:接口)")
+    permission: str | None = Field(None, max_length=128, description="权限标识")
+    api_method: str | None = Field(None, max_length=16, description="API方法")
+    api_path: str | None = Field(None, max_length=255, description="API路径")
     status: Status = Field(Status.OK, description="状态(1:正常,2:异常)")
 
     class Config:
@@ -53,6 +57,10 @@ class Update(BaseModel):
     is_hidden: bool | None = Field(None, description="是否隐藏菜单")
     is_cache: bool | None = Field(None, description="是否缓存页面")
     is_affix: bool | None = Field(None, description="是否固定在标签页")
+    route_type: RouteType | None = Field(None, description="路由类型(1:菜单,2:按钮,3:接口)")
+    permission: str | None = Field(None, max_length=128, description="权限标识")
+    api_method: str | None = Field(None, max_length=16, description="API方法")
+    api_path: str | None = Field(None, max_length=255, description="API路径")
     status: Status | None = Field(None, description="状态(1:正常,2:异常)")
     parent_id: UUID | None = Field(None, description="父级路由ID")
     role_ids: List[UUID] | None = Field(None, description="关联角色ID列表")
@@ -70,13 +78,10 @@ class Out(Base):
 
     parent_id: UUID | None = Field(None, description="父级路由ID")
 
-    # 父路由信息（可选）
-    parent: "Out | None" = Field(None, description="父级路由")
-
     # 子路由列表
     children: List["Out"] = Field(default_factory=list, description="子路由列表")
 
-    # 关联的角色列表
+    # 关联的角色列表（简化版，只包含基本信息）
     roles: List[RoleBase] = Field(default_factory=list, description="角色列表")
 
     @field_serializer("create_time", "update_time")
@@ -85,6 +90,8 @@ class Out(Base):
 
     class Config:
         from_attributes = True
+        # 忽略额外的字段，避免未加载的关联数据导致验证失败
+        extra = 'ignore'
 
 
 class OutList(BaseModel):

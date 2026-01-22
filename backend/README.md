@@ -6,12 +6,14 @@
 
 - **框架**: FastAPI (异步Web框架)
 - **ORM**: Tortoise ORM (异步ORM)
-- **数据库**: MySQL
+- **数据库**: MySQL 8.0 (支持主从读写分离)
+- **缓存/队列**: Redis 7.0
 - **认证**: JWT (python-jose)
 - **密码加密**: bcrypt
 - **数据验证**: Pydantic
 - **任务调度**: APScheduler
-- **日志**: 自定义日志系统 (按模块分类)
+- **日志**: 自定义日志系统 (按模块分类、自动轮转压缩)
+- **邮件集成**: Outlook API
 - **API文档**: Swagger UI / ReDoc (自动生成)
 
 ## 项目结构
@@ -28,6 +30,8 @@ backend/
 │   │       └── mail/      # 邮箱相关API
 │   ├── core/              # 核心配置
 │   │   ├── settings.py    # 配置管理
+│   │   ├── database.py    # 数据库配置 (支持读写分离)
+│   │   ├── rd.py          # Redis配置
 │   │   ├── tools.py       # 工具函数 (密码加密等)
 │   │   └── verify.py      # 验证函数
 │   ├── crud/              # 数据库操作层
@@ -36,12 +40,15 @@ backend/
 │   ├── utils/             # 工具类
 │   │   ├── jwt_tool.py    # JWT工具
 │   │   ├── time_tool.py   # 时间处理
-│   │   └── logs.py        # 日志工具
+│   │   ├── logs.py        # 日志工具
+│   │   ├── redis_queue.py # Redis队列基类
+│   │   └── project_account_queue.py  # 项目账号队列
 │   ├── clients/           # 外部客户端 (Outlook等)
 │   ├── logs/              # 日志配置
 │   └── main.py            # 应用入口
 ├── db/                    # 数据库脚本
 │   ├── init_roles_and_admin.py  # 初始化角色和管理员
+│   ├── init_routes.py     # 初始化路由权限
 │   └── README.md
 ├── migrations/            # 数据库迁移
 ├── logs/                  # 日志文件目录
@@ -70,12 +77,26 @@ cp .env.example .env
 编辑 `.env` 文件，配置以下内容：
 
 ```env
-# 数据库配置
+# 数据库配置 (主库)
 DB_HOST=127.0.0.1
-DB_PORT=3306
+DB_PORT=3307
 DB_USER=qyd
 DB_PASSWORD=your_password_here
 DB_NAME=qyd
+
+# 从库配置 (可选，用于读写分离)
+DB_SLAVE_HOSTS=127.0.0.1:3308,127.0.0.1:3309
+
+# Redis配置 (可选，用于队列处理)
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6378
+REDIS_PASSWORD=redis_fNmAxZ
+REDIS_DB=0
+
+# Redis队列配置
+REDIS_QUEUE_BATCH_SIZE=100        # 批量处理大小
+REDIS_QUEUE_NUM_WORKERS=4         # 工作线程数
+REDIS_QUEUE_CACHE_EXPIRE=3600     # 缓存过期时间(秒)
 
 # JWT配置
 JWT_SECRET_KEY=your-secret-key-here
@@ -218,6 +239,58 @@ from app.utils.time_tool import parse_time
 # 自动解析
 start_time = parse_time("2024-01-01")
 end_time = parse_time("2024-12-31", is_end=True)  # 自动设置为23:59:59
+```
+
+### 7. Redis队列批量处理
+
+支持大批量数据的异步处理：
+
+```python
+from app.utils.project_account_queue import project_account_queue
+
+# 添加任务到队列
+await project_account_queue.add_task({
+    "project_id": "xxx",
+    "account": "test",
+    # ... 其他字段
+})
+```
+
+特性：
+- **智能缓存**: 先检查Redis缓存，已处理的数据跳过
+- **读写分离**: 使用从库查询，主库更新/创建
+- **批量处理**: 可配置批量大小和工作线程数
+- **独立管道**: 缓存操作和任务清理使用独立管道
+- **自动过期**: 缓存1小时自动过期
+
+### 8. MySQL读写分离
+
+系统支持一主多从架构：
+
+- **主库**: 处理所有写操作 (INSERT, UPDATE, DELETE)
+- **从库**: 处理所有读操作 (SELECT)
+- **自动路由**: ORM自动根据操作类型选择数据库
+
+配置方式：
+```env
+# 主库
+DB_HOST=127.0.0.1
+DB_PORT=3307
+
+# 从库（多个用逗号分隔）
+DB_SLAVE_HOSTS=127.0.0.1:3308,127.0.0.1:3309
+```
+
+在代码中使用：
+```python
+# 读操作（自动使用从库）
+users = await User.all()
+
+# 写操作（自动使用主库）
+await User.create(email="test@example.com")
+
+# 显式指定使用主库
+users = await User.all().using_db(Tortoise.get_connection("default"))
 ```
 
 ## API规范

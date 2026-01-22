@@ -4,7 +4,7 @@ import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined } from '@ant
 import type { Role } from '@/types'
 import { getRoleList, createRole, updateRole, deleteRole } from '@/api/user'
 import { useUserStore } from '@/store/useUserStore'
-import dayjs, { Dayjs } from 'dayjs'
+import { Dayjs } from 'dayjs'
 
 const { RangePicker } = DatePicker
 

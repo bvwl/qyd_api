@@ -57,8 +57,10 @@ const ServerAccountList = () => {
         limit: 1000,
       })
       setUserList(res.items || [])
+      return true  // 返回成功状态
     } catch (error) {
       setUserList([])
+      return false  // 返回失败状态
     }
   }
 
@@ -67,7 +69,11 @@ const ServerAccountList = () => {
   }, [page, pageSize, searchUserId])
 
   useEffect(() => {
-    fetchUserList()
+    const loadData = async () => {
+      // 先加载用户列表
+      await fetchUserList()
+    }
+    loadData()
   }, [])
 
   const handleAdd = () => {

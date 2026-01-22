@@ -1,17 +1,21 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Query, Body, HTTPException, Path
+from fastapi import APIRouter, Query, Body, HTTPException, Path, Depends
 
 from app.schemas.user.token import Create, Update, Out, OutList
 from app.crud.user.token import token_crud
 from app.schemas.base import BaseOut
+from app.core.verify import get_current_user, get_admin_user
 
 
 app = APIRouter()
 
 
 @app.post("", response_model=Out, description="创建Token", summary="创建Token")
-async def post(item: Create = Body(..., description="创建数据")):
+async def post(
+    item: Create = Body(..., description="创建数据"),
+    current_user: dict = Depends(get_current_user)
+):
     """
     创建Token记录
     """
@@ -26,7 +30,10 @@ async def post(item: Create = Body(..., description="创建数据")):
 
 
 @app.get("/{id}", response_model=Out, description="获取Token信息", summary="获取Token信息")
-async def get(id: UUID = Path(..., description="ID")):
+async def get(
+    id: UUID = Path(..., description="ID"),
+    current_user: dict = Depends(get_current_user)
+):
     """
     获取单个Token记录
     """
@@ -71,6 +78,7 @@ async def gets(
     ),
     page: int = Query(1, ge=1, description="页码"),
     limit: int = Query(10, ge=1, le=1000, description="每页数量"),
+    current_user: dict = Depends(get_current_user)
 ):
     """
     分页查询Token列表
@@ -100,6 +108,7 @@ async def gets(
 async def put(
     id: UUID = Path(..., description="主键ID"),
     item: Update = Body(..., description="更新数据"),
+    current_user: dict = Depends(get_current_user)
 ):
     """
     部分更新Token信息，只更新传入的非空字段
@@ -115,7 +124,10 @@ async def put(
 
 
 @app.delete("/{id}", response_model=BaseOut, description="删除Token", summary="删除Token")
-async def delete(id: UUID = Path(..., description="主键ID")):
+async def delete(
+    id: UUID = Path(..., description="主键ID"),
+    admin_user: dict = Depends(get_admin_user)
+):
     """
     删除Token
     """
@@ -132,7 +144,10 @@ async def delete(id: UUID = Path(..., description="主键ID")):
 
 
 @app.post("/upsert", response_model=Out, description="创建或更新Token", summary="创建或更新Token")
-async def post_or_put(item: Create = Body(..., description="创建或更新数据")):
+async def post_or_put(
+    item: Create = Body(..., description="创建或更新数据"),
+    current_user: dict = Depends(get_current_user)
+):
     """
     创建或更新Token
     """

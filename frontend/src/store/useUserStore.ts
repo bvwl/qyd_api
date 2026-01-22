@@ -11,6 +11,7 @@ interface UserState {
   login: (email: string, password: string) => Promise<void>
   logout: () => void
   fetchUserInfo: () => Promise<void>
+  setUserInfo: (userInfo: User) => void
   hasPermission: (permission: string) => boolean
   checkTokenValid: () => boolean
 }
@@ -93,6 +94,10 @@ export const useUserStore = create<UserState>()(
             get().logout()
           }
         }
+      },
+
+      setUserInfo: (userInfo: User) => {
+        set({ userInfo })
       },
 
       hasPermission: (permission: string) => {

@@ -112,6 +112,11 @@ class ProjectAccount(BaseModel):
         description="账号类型(1:邮箱,2:钱包,3:x,4:其他1,5:其他2)",
     )
     data = fields.JSONField(null=True, description="扩展数据")
+    
+    # 余额相关字段
+    balance = fields.DecimalField(max_digits=18, decimal_places=6, default=0, description="余额")
+    variable = fields.DecimalField(max_digits=18, decimal_places=6, default=0, description="变动余额")
+    balance_history = fields.JSONField(null=True, description="历史余额（可根据需要拆分为独立流水表）")
 
     project = fields.ForeignKeyField("models.ProjectInfo", related_name="accounts", description="所属项目")
     server = fields.ForeignKeyField("models.ServerInfo", related_name="project_accounts", null=True,
@@ -125,35 +130,11 @@ class ProjectAccount(BaseModel):
             ("project_id", "status", "account_type"),  # 按项目、状态和类型查询
             ("status", "account_type", "create_time"),  # 按状态和类型查询
             ("server_id", "status"),  # 按服务器和状态查询
+            ("balance",),  # 按余额查询
             # account 已有 index=True，无需重复声明
         ]
 
     def __repr__(self):
         return f"<ProjectAccount(id={self.id}, account={self.account})>"
-
-    __str__ = __repr__
-
-
-# 项目余额模型
-class ProjectBalance(BaseModel):
-    """
-    项目余额
-    """
-    account = fields.OneToOneField("models.ProjectAccount", related_name="balance", description="关联账号")
-    balance = fields.DecimalField(max_digits=18, decimal_places=6, description="余额")
-    variable = fields.DecimalField(max_digits=18, decimal_places=6, description="变动余额")
-    history = fields.JSONField(null=True, description="历史余额（可根据需要拆分为独立流水表）")
-
-    class Meta:
-        table = "project_balance"
-        table_description = "项目余额"
-        ordering = ["-create_time"]
-        indexes = [
-            ("account_id", "create_time"),  # 按账号和时间查询
-            ("create_time",),  # 时间范围查询
-        ]
-
-    def __repr__(self):
-        return f"<ProjectBalance(id={self.id})>"
 
     __str__ = __repr__

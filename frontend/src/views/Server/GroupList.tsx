@@ -61,14 +61,22 @@ const GroupList = () => {
         limit: 1000,
       })
       setCountryList(res.items || [])
+      return true  // 返回成功状态
     } catch (error) {
       setCountryList([])
+      return false  // 返回失败状态
     }
   }
 
   useEffect(() => {
-    fetchData()
-    fetchCountryList()
+    const loadData = async () => {
+      // 先加载国家列表，成功后再加载分组数据
+      const countrySuccess = await fetchCountryList()
+      if (countrySuccess) {
+        fetchData()
+      }
+    }
+    loadData()
   }, [page, pageSize])
 
   const handleSearch = () => {

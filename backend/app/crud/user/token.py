@@ -1,7 +1,8 @@
 from uuid import UUID
+import secrets
 from fastapi import HTTPException
 
-from app.models.user import UserToken
+from app.models.user import UserToken, Status
 from app.schemas.user.token import Create, Update, Out, OutList
 from app.schemas.base import BaseOut
 from app.utils.time_tool import parse_time
@@ -115,6 +116,30 @@ class CRUD:
             await record.save()
         await record.fetch_related('user')
         return Out.model_validate(record)
+
+    # 生成新Token
+    async def generate_token(self, user_id: UUID) -> Out:
+        """
+        为用户生成新的Token，旧Token将被设置为失效状态
+        """
+        # 生成新的token（64字符的随机字符串）
+        new_token = secrets.token_urlsafe(48)  # 生成64字符的URL安全token
+        
+        # 将该用户的所有旧token设置为失效
+        await UserToken.filter(user_id=user_id, status=Status.OK).update(status=Status.NOT)
+        
+        # 创建新token
+        token_data = {
+            'token': new_token,
+            'user_id': user_id,
+            'status': Status.OK
+        }
+        res = await UserToken.create(**token_data)
+        if not res:
+            raise HTTPException(status_code=500, detail='生成Token失败')
+        
+        await res.fetch_related('user')
+        return Out.model_validate(res)
 
 
 token_crud = CRUD()

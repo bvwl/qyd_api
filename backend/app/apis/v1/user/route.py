@@ -5,7 +5,7 @@ from fastapi import APIRouter, Query, Body, HTTPException, Path, Depends
 from app.schemas.user.route import Create, Update, Out, OutList
 from app.crud.user.route import route_crud
 from app.schemas.base import BaseOut
-from app.apis.deps import get_current_user
+from app.apis.deps import get_current_user, get_admin_user
 from app.utils.time_tool import parse_time
 
 
@@ -129,7 +129,7 @@ async def put(
 @app.delete("/{id}", response_model=BaseOut, description="删除路由", summary="删除路由")
 async def delete(
     id: UUID = Path(..., description="主键ID"),
-    current_user: dict = Depends(get_current_user)
+    admin_user: dict = Depends(get_admin_user)
 ):
     """
     删除路由

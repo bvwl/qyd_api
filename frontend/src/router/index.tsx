@@ -8,7 +8,16 @@ import RouteList from '@/views/User/RouteList'
 import TokenList from '@/views/User/TokenList'
 import LogList from '@/views/User/LogList'
 import MailList from '@/views/Mail/MailList'
+import MailViewer from '@/views/Mail/MailViewer'
+import ProjectList from '@/views/Project/ProjectList'
+import ProjectAccount from '@/views/Project/ProjectAccount'
+import ProjectWallet from '@/views/Project/ProjectWallet'
+import ServerList from '@/views/Server/ServerList'
+import CountryList from '@/views/Server/CountryList'
+import GroupList from '@/views/Server/GroupList'
+import ServerAccount from '@/views/Server/ServerAccount'
 import ProtectedRoute from '@/components/ProtectedRoute/index'
+import PermissionManageWorking from '@/views/User/PermissionManageWorking'
 
 const router = createBrowserRouter([
   {
@@ -40,6 +49,10 @@ const router = createBrowserRouter([
         element: <RouteList />,
       },
       {
+        path: 'user/permission',
+        element: <PermissionManageWorking />,
+      },
+      {
         path: 'user/token',
         element: <TokenList />,
       },
@@ -48,8 +61,40 @@ const router = createBrowserRouter([
         element: <LogList />,
       },
       {
+        path: 'project/list',
+        element: <ProjectList />,
+      },
+      {
+        path: 'project/account',
+        element: <ProjectAccount />,
+      },
+      {
+        path: 'project/wallet',
+        element: <ProjectWallet />,
+      },
+      {
+        path: 'server/list',
+        element: <ServerList />,
+      },
+      {
+        path: 'server/country',
+        element: <CountryList />,
+      },
+      {
+        path: 'server/group',
+        element: <GroupList />,
+      },
+      {
+        path: 'server/account',
+        element: <ServerAccount />,
+      },
+      {
         path: 'mail/list',
         element: <MailList />,
+      },
+      {
+        path: 'mail/viewer',
+        element: <MailViewer />,
       },
     ],
   },

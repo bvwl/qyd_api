@@ -10,6 +10,8 @@ from app.utils.time_tool import parse_time
 class CRUD:
     # 创建
     async def create(self, item: dict | Create) -> Out:
+        from app.models.user import UserInfo
+        
         # 统一处理为字典
         if isinstance(item, dict):
             data = item.copy()
@@ -31,7 +33,10 @@ class CRUD:
         
         # 处理多对多关系
         if user_ids:
-            await res.users.add(*user_ids)
+            # 获取UserInfo对象
+            users = await UserInfo.filter(id__in=user_ids).all()
+            if users:
+                await res.users.add(*users)
         
         await res.fetch_related('users')
         return Out.model_validate(res)
@@ -55,9 +60,15 @@ class CRUD:
                         create_time_start: str | int | None = None,
                         create_time_end: str | int | None = None,
                         update_time_start: str | int | None = None,
-                        update_time_end: str | int | None = None
+                        update_time_end: str | int | None = None,
+                        user_id: UUID | None = None
                         ) -> OutList:
         query = ProjectInfo.all()
+        
+        # 数据权限过滤：如果指定了user_id，只返回该用户关联的项目
+        if user_id:
+            query = query.filter(users__id=user_id)
+        
         if name:
             query = query.filter(name__icontains=name)
         if status is not None:
@@ -101,9 +112,15 @@ class CRUD:
                         create_time_start: str | int | None = None,
                         create_time_end: str | int | None = None,
                         update_time_start: str | int | None = None,
-                        update_time_end: str | int | None = None
+                        update_time_end: str | int | None = None,
+                        user_id: UUID | None = None
                         ) -> int:
         query = ProjectInfo.all()
+        
+        # 数据权限过滤
+        if user_id:
+            query = query.filter(users__id=user_id)
+        
         if name:
             query = query.filter(name__icontains=name)
         if status is not None:
@@ -120,6 +137,8 @@ class CRUD:
 
     # 更新
     async def update(self, id: UUID, item: dict | Update) -> Out:
+        from app.models.user import UserInfo
+        
         res = await ProjectInfo.get_or_none(id=id)
         if not res:
             raise HTTPException(status_code=404, detail='数据不存在')
@@ -152,7 +171,10 @@ class CRUD:
         if user_ids is not None:
             await res.users.clear()
             if user_ids:
-                await res.users.add(*user_ids)
+                # 获取UserInfo对象
+                users = await UserInfo.filter(id__in=user_ids).all()
+                if users:
+                    await res.users.add(*users)
         
         await res.fetch_related('users')
         return Out.model_validate(res)
@@ -167,6 +189,8 @@ class CRUD:
 
     # 创建或更新
     async def upsert(self, item: Create) -> Out:
+        from app.models.user import UserInfo
+        
         # 分离关联字段
         data = item.model_dump()
         user_ids = data.pop('user_ids', None)
@@ -184,7 +208,10 @@ class CRUD:
         if user_ids is not None:
             await record.users.clear()
             if user_ids:
-                await record.users.add(*user_ids)
+                # 获取UserInfo对象
+                users = await UserInfo.filter(id__in=user_ids).all()
+                if users:
+                    await record.users.add(*users)
         
         await record.fetch_related('users')
         return Out.model_validate(record)

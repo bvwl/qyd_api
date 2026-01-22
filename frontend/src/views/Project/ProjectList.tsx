@@ -1,13 +1,23 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Modal, Form, Input, message, Space, Popconfirm, Tag, Select, DatePicker } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined } from '@ant-design/icons'
-import type { Project } from '@/types'
+import { Table, Button, Modal, Form, Input, message, Space, Popconfirm, Tag, Select, DatePicker, Transfer, Tooltip } from 'antd'
+import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, TeamOutlined, CopyOutlined } from '@ant-design/icons'
+import type { Project, User } from '@/types'
 import { ProjectStatus } from '@/types'
 import { getProjectList, createProject, updateProject, deleteProject } from '@/api/project'
+import { getUserList } from '@/api/user'
 import { useUserStore } from '@/store/useUserStore'
 import dayjs, { Dayjs } from 'dayjs'
+import type { TableProps } from 'antd'
 
 const { RangePicker } = DatePicker
+
+type SortOrder = 'ascend' | 'descend' | null
+
+interface TransferItem {
+  key: string
+  title: string
+  description: string
+}
 
 const ProjectList = () => {
   const [data, setData] = useState<Project[]>([])
@@ -21,8 +31,17 @@ const ProjectList = () => {
   const [searchStatus, setSearchStatus] = useState<number>()
   const [createTimeRange, setCreateTimeRange] = useState<[Dayjs, Dayjs] | null>(null)
   const [updateTimeRange, setUpdateTimeRange] = useState<[Dayjs, Dayjs] | null>(null)
+  const [orderBy, setOrderBy] = useState<string>('-create_time')
+  const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([])
   const [form] = Form.useForm()
   const { hasPermission } = useUserStore()
+
+  // 人员管理相关状态
+  const [userModalVisible, setUserModalVisible] = useState(false)
+  const [managingProject, setManagingProject] = useState<Project | null>(null)
+  const [allUsers, setAllUsers] = useState<User[]>([])
+  const [selectedUserKeys, setSelectedUserKeys] = useState<string[]>([])
+  const [userLoading, setUserLoading] = useState(false)
 
   const isAdmin = hasPermission('ADMIN')
   const isGM = hasPermission('GM')
@@ -36,6 +55,7 @@ const ProjectList = () => {
         res_count: true,
         name: searchName || undefined,
         status: searchStatus,
+        order_by: orderBy,
         create_time_start: createTimeRange?.[0]?.format('YYYY-MM-DD'),
         create_time_end: createTimeRange?.[1]?.format('YYYY-MM-DD'),
         update_time_start: updateTimeRange?.[0]?.format('YYYY-MM-DD'),
@@ -66,6 +86,8 @@ const ProjectList = () => {
     setSearchStatus(undefined)
     setCreateTimeRange(null)
     setUpdateTimeRange(null)
+    setOrderBy('-create_time')
+    setSelectedRowKeys([])
     setPage(1)
     setTimeout(() => {
       fetchData()
@@ -101,6 +123,47 @@ const ProjectList = () => {
     }
   }
 
+  const handleBatchDelete = async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要删除的项目')
+      return
+    }
+
+    Modal.confirm({
+      title: '批量删除确认',
+      content: `确定要删除选中的 ${selectedRowKeys.length} 个项目吗？`,
+      okText: '确定',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          await Promise.all(selectedRowKeys.map(id => deleteProject(id)))
+          message.success(`成功删除 ${selectedRowKeys.length} 个项目`)
+          setSelectedRowKeys([])
+          fetchData()
+        } catch (error) {
+          message.error('批量删除失败')
+        }
+      }
+    })
+  }
+
+  const handleTableChange: TableProps<Project>['onChange'] = (_pagination, _filters, sorter: any) => {
+    if (sorter.field) {
+      const order = sorter.order === 'ascend' ? '' : '-'
+      setOrderBy(`${order}${sorter.field}`)
+      setPage(1)
+      setTimeout(() => {
+        fetchData()
+      }, 0)
+    }
+  }
+
+  const getSortOrder = (field: string): SortOrder => {
+    if (orderBy === field) return 'ascend'
+    if (orderBy === `-${field}`) return 'descend'
+    return null
+  }
+
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields()
@@ -115,6 +178,50 @@ const ProjectList = () => {
       fetchData()
     } catch (error) {
       message.error('操作失败')
+    }
+  }
+
+  // 打开人员管理弹窗
+  const handleManageUsers = async (record: Project) => {
+    setManagingProject(record)
+    setUserLoading(true)
+    setUserModalVisible(true)
+    
+    try {
+      // 获取所有用户
+      const usersRes = await getUserList({ page: 1, limit: 1000 })
+      setAllUsers(usersRes.items || [])
+      
+      // 设置当前项目已关联的用户，过滤掉无效值
+      const currentUserIds = (record.users?.map(u => u.id) || []).filter(id => id != null && id !== '')
+      setSelectedUserKeys(currentUserIds)
+    } catch (error) {
+      message.error('获取用户列表失败')
+      setAllUsers([])
+      setSelectedUserKeys([])
+    } finally {
+      setUserLoading(false)
+    }
+  }
+
+  // 保存人员关联
+  const handleSaveUsers = async () => {
+    if (!managingProject) return
+    
+    try {
+      setUserLoading(true)
+      // 过滤掉null、undefined等无效值
+      const validUserIds = selectedUserKeys.filter(id => id != null && id !== '')
+      await updateProject(managingProject.id, {
+        user_ids: validUserIds,
+      })
+      message.success('人员关联更新成功')
+      setUserModalVisible(false)
+      fetchData()
+    } catch (error) {
+      message.error('更新失败')
+    } finally {
+      setUserLoading(false)
     }
   }
 
@@ -133,11 +240,43 @@ const ProjectList = () => {
     return statusMap[status] || { text: '未知', color: 'default' }
   }
 
+  const handleCopyId = (id: string) => {
+    navigator.clipboard.writeText(id).then(() => {
+      message.success('项目ID已复制到剪贴板')
+    }).catch(() => {
+      message.error('复制失败')
+    })
+  }
+
   const columns = [
     {
       title: '项目名称',
       dataIndex: 'name',
       key: 'name',
+      sorter: true,
+      sortOrder: getSortOrder('name'),
+    },
+    {
+      title: '项目ID',
+      dataIndex: 'id',
+      key: 'id',
+      width: 280,
+      ellipsis: true,
+      render: (id: string) => (
+        <Space>
+          <Tooltip title={id}>
+            <span style={{ fontFamily: 'monospace', fontSize: '12px' }}>
+              {id.substring(0, 8)}...{id.substring(id.length - 8)}
+            </span>
+          </Tooltip>
+          <Button
+            type="link"
+            size="small"
+            icon={<CopyOutlined />}
+            onClick={() => handleCopyId(id)}
+          />
+        </Space>
+      ),
     },
     {
       title: '状态',
@@ -149,6 +288,24 @@ const ProjectList = () => {
       },
     },
     {
+      title: '关联人员',
+      dataIndex: 'users',
+      key: 'users',
+      render: (users: any[]) => (
+        <Space size={[0, 4]} wrap>
+          {users && users.length > 0 ? (
+            users.map(user => (
+              <Tag key={user.id} color="blue">
+                {user.nickname || user.email}
+              </Tag>
+            ))
+          ) : (
+            <span style={{ color: '#999' }}>未分配</span>
+          )}
+        </Space>
+      ),
+    },
+    {
       title: '内容',
       dataIndex: 'content',
       key: 'content',
@@ -158,11 +315,15 @@ const ProjectList = () => {
       title: '创建时间',
       dataIndex: 'create_time',
       key: 'create_time',
+      sorter: true,
+      sortOrder: getSortOrder('create_time'),
     },
     {
       title: '更新时间',
       dataIndex: 'update_time',
       key: 'update_time',
+      sorter: true,
+      sortOrder: getSortOrder('update_time'),
     },
     {
       title: '操作',
@@ -171,6 +332,13 @@ const ProjectList = () => {
         <Space>
           {(isAdmin || isGM) && (
             <>
+              <Button
+                type="link"
+                icon={<TeamOutlined />}
+                onClick={() => handleManageUsers(record)}
+              >
+                管理人员
+              </Button>
               <Button
                 type="link"
                 icon={<EditOutlined />}
@@ -243,11 +411,22 @@ const ProjectList = () => {
             </Button>
             <Button onClick={handleReset}>重置</Button>
           </Space>
-          {(isAdmin || isGM) && (
-            <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
-              新增项目
-            </Button>
-          )}
+          <Space>
+            {selectedRowKeys.length > 0 && (isAdmin || isGM) && (
+              <Button 
+                danger 
+                icon={<DeleteOutlined />} 
+                onClick={handleBatchDelete}
+              >
+                批量删除 ({selectedRowKeys.length})
+              </Button>
+            )}
+            {(isAdmin || isGM) && (
+              <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+                新增项目
+              </Button>
+            )}
+          </Space>
         </div>
       </div>
 
@@ -256,6 +435,12 @@ const ProjectList = () => {
         dataSource={data}
         rowKey="id"
         loading={loading}
+        onChange={handleTableChange}
+        rowSelection={{
+          selectedRowKeys,
+          onChange: (selectedKeys) => setSelectedRowKeys(selectedKeys as string[]),
+          preserveSelectedRowKeys: true,
+        }}
         pagination={{
           current: page,
           pageSize: pageSize,
@@ -306,6 +491,55 @@ const ProjectList = () => {
             <Input.TextArea placeholder="请输入项目内容" rows={4} />
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* 人员管理弹窗 */}
+      <Modal
+        title={`管理项目人员 - ${managingProject?.name || ''}`}
+        open={userModalVisible}
+        onOk={handleSaveUsers}
+        onCancel={() => setUserModalVisible(false)}
+        okText="保存"
+        cancelText="取消"
+        width={700}
+        confirmLoading={userLoading}
+      >
+        <div style={{ marginBottom: 16 }}>
+          <p style={{ color: '#666', marginBottom: 8 }}>
+            选择要关联到此项目的人员。关联后，这些人员可以查看和管理该项目的数据。
+          </p>
+        </div>
+        <Transfer
+          dataSource={allUsers.map(user => ({
+            key: user.id,
+            title: user.nickname || user.email,
+            description: user.email,
+          }))}
+          titles={['可选人员', '已关联人员']}
+          targetKeys={selectedUserKeys}
+          onChange={setSelectedUserKeys}
+          render={item => (
+            <div>
+              <div style={{ fontWeight: 500 }}>{item.title}</div>
+              <div style={{ fontSize: 12, color: '#999' }}>{item.description}</div>
+            </div>
+          )}
+          listStyle={{
+            width: 300,
+            height: 400,
+          }}
+          showSearch
+          filterOption={(inputValue, item) =>
+            item.title.toLowerCase().includes(inputValue.toLowerCase()) ||
+            item.description.toLowerCase().includes(inputValue.toLowerCase())
+          }
+          locale={{
+            itemUnit: '人',
+            itemsUnit: '人',
+            searchPlaceholder: '搜索人员',
+            notFoundContent: '无数据',
+          }}
+        />
       </Modal>
     </div>
   )

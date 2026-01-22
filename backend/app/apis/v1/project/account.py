@@ -1,6 +1,7 @@
 from uuid import UUID
+from typing import List
 
-from fastapi import APIRouter, Query, Body, HTTPException, Path
+from fastapi import APIRouter, Query, Body, HTTPException, Path, Depends
 
 from app.schemas.project.account import Create, Update, Out, OutList
 from app.crud.project.account import project_account_crud
@@ -8,11 +9,16 @@ from app.utils.time_tool import parse_time
 from app.schemas.base import BaseOut
 
 
+from app.core.verify import get_current_user, get_admin_user
+
 app = APIRouter()
 
 
 @app.post("", response_model=Out, description="创建项目账号", summary="创建项目账号")
-async def post(item: Create = Body(..., description="创建数据")):
+async def post(
+    item: Create = Body(..., description="创建数据"),
+    current_user: dict = Depends(get_current_user)
+):
     """
     创建项目账号记录
     """
@@ -27,7 +33,10 @@ async def post(item: Create = Body(..., description="创建数据")):
 
 
 @app.get("/{id}", response_model=Out, description="获取项目账号", summary="获取项目账号")
-async def get(id: UUID = Path(..., description="ID")):
+async def get(
+    id: UUID = Path(..., description="ID"),
+    current_user: dict = Depends(get_current_user)
+):
     """
     获取单个项目账号记录
     """
@@ -75,6 +84,7 @@ async def gets(
     ),
     page: int = Query(1, ge=1, description="页码"),
     limit: int = Query(10, ge=1, le=1000, description="每页数量"),
+    current_user: dict = Depends(get_current_user)
 ):
     """
     分页查询项目账号列表
@@ -107,6 +117,7 @@ async def gets(
 async def put(
     id: UUID = Path(..., description="主键ID"),
     item: Update = Body(..., description="更新数据"),
+    current_user: dict = Depends(get_current_user)
 ):
     """
     部分更新项目账号，只更新传入的非空字段
@@ -122,7 +133,10 @@ async def put(
 
 
 @app.delete("/{id}", response_model=BaseOut, description="删除项目账号", summary="删除项目账号")
-async def delete(id: UUID = Path(..., description="主键ID")):
+async def delete(
+    id: UUID = Path(..., description="主键ID"),
+    admin_user: dict = Depends(get_admin_user)
+):
     """
     删除项目账号
     """
@@ -140,7 +154,10 @@ async def delete(id: UUID = Path(..., description="主键ID")):
 
 
 @app.post("/upsert", response_model=Out, description="创建或更新项目账号", summary="创建或更新项目账号")
-async def post_or_put(item: Create = Body(..., description="创建或更新数据")):
+async def post_or_put(
+    item: Create = Body(..., description="创建或更新数据"),
+    current_user: dict = Depends(get_current_user)
+):
     """
     创建或更新项目账号
     """
@@ -152,6 +169,48 @@ async def post_or_put(item: Create = Body(..., description="创建或更新数�
         return await project_account_crud.upsert(filter_kwargs, item)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/batch-upsert", response_model=BaseOut, description="批量创建或更新项目账号（使用Redis队列）", summary="批量创建或更新项目账号")
+async def batch_upsert(
+    items: List[Create] = Body(..., description="批量创建或更新数据"),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    批量创建或更新项目账号
+    使用Redis队列异步处理，避免数据库压力和接口长时间占用
+    """
+    try:
+        from app.utils.project_account_queue import project_account_queue
+        from app.core.settings import REDIS_ENABLED
+        
+        if not REDIS_ENABLED:
+            raise HTTPException(status_code=503, detail="Redis未启用，无法使用批量处理功能")
+        
+        # 将数据添加到Redis队列
+        success_count = 0
+        fail_count = 0
+        
+        for item in items:
+            # 转换为字典，使用mode='json'确保UUID和Enum都能被序列化
+            data = item.model_dump(mode='json')
+            # 添加到队列
+            if await project_account_queue.add_to_queue(data):
+                success_count += 1
+            else:
+                fail_count += 1
+        
+        # 获取当前队列大小
+        queue_size = await project_account_queue.get_queue_size()
+        
+        return BaseOut(
+            message=f"成功添加 {success_count} 条数据到队列，失败 {fail_count} 条，当前队列大小: {queue_size}",
+            count=success_count
+        )
     except HTTPException:
         raise
     except Exception as e:

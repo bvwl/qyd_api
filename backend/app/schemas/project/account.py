@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from typing import List
 from uuid import UUID
 
@@ -23,15 +24,31 @@ class Base(BaseModel):
         description="账号类型(1:邮箱,2:钱包,3:x,4:其他1,5:其他2)",
     )
     data: dict | None = Field(None, description="扩展数据")
+    
+    # 余额相关字段
+    balance: Decimal = Field(0, description="余额")
+    variable: Decimal = Field(0, description="变动余额")
+    balance_history: dict | None = Field(None, description="历史余额")
 
     class Config:
         from_attributes = True
 
 
-class Create(Base):
+class Create(BaseModel):
     """
     创建项目账号请求模型
     """
+    account: str = Field(..., description="账号")
+    password: str | None = Field(None, description="密码（加密存储）")
+    status: Status = Field(Status.OK, description="账号状态(1:正常,2:异常)")
+    account_type: AccountType = Field(
+        AccountType.EMAIL,
+        description="账号类型(1:邮箱,2:钱包,3:x,4:其他1,5:其他2)",
+    )
+    data: dict | None = Field(None, description="扩展数据")
+    balance: Decimal | None = Field(None, description="余额（可选，默认0）")
+    variable: Decimal | None = Field(None, description="变动余额（可选，默认0）")
+    balance_history: dict | None = Field(None, description="历史余额")
     project_id: UUID = Field(..., description="所属项目ID")
     server_id: UUID | None = Field(None, description="关联服务器信息ID")
 
@@ -48,6 +65,9 @@ class Update(BaseModel):
         description="账号类型(1:邮箱,2:钱包,3:x,4:其他1,5:其他2)",
     )
     data: dict | None = Field(None, description="扩展数据")
+    balance: Decimal | None = Field(None, description="余额")
+    variable: Decimal | None = Field(None, description="变动余额")
+    balance_history: dict | None = Field(None, description="历史余额")
     project_id: UUID | None = Field(None, description="所属项目ID")
     server_id: UUID | None = Field(None, description="关联服务器信息ID")
 
@@ -65,7 +85,7 @@ class Out(Base):
     project_id: UUID = Field(..., description="所属项目ID")
     server_id: UUID | None = Field(None, description="关联服务器信息ID")
 
-    # 关联的项目、服务器和钱包基础信息
+    # 关联的项目和服务器基础信息
     project: ProjectInfoBase = Field(..., description="项目信息")
     server: ServerInfoBase | None = Field(None, description="服务器信息")
 

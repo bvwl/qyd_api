@@ -22,6 +22,8 @@ class RouteLite(BaseModel):
 
     class Config:
         from_attributes = True
+        # 忽略额外的字段，避免关联数据导致验证失败
+        extra = 'ignore'
 
 
 class Base(BaseModel):

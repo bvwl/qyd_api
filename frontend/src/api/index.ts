@@ -1,6 +1,13 @@
 import axios, { AxiosError } from 'axios'
 import { message } from 'antd'
 
+// 配置message的全局配置，减少主题警告
+message.config({
+  top: 100,
+  duration: 3,
+  maxCount: 3,
+})
+
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:6080/api',
   timeout: 30000,
@@ -33,6 +40,45 @@ api.interceptors.response.use(
   (error: AxiosError<{ detail: string }>) => {
     if (error.response) {
       const { status, data } = error.response
+      const url = error.config?.url || ''
+      const method = error.config?.method || ''
+      
+      // 特殊处理：以下接口返回404时不显示错误（表示没有数据）
+      const isProjectAccountQuery = url.includes('/v1/project/account') && method === 'get'
+      const isProjectWalletQuery = url.includes('/v1/project/wallet') && method === 'get'
+      const isProjectInfoQuery = url.includes('/v1/project/info') && method === 'get'
+      const isUserTokenQuery = url.includes('/v1/user/token') && method === 'get'
+      const isUserQuery = url.includes('/v1/user/user') && method === 'get'
+      const isMailQuery = url.includes('/v1/mail/info') && method === 'get'
+      const isServerQuery = url.includes('/v1/server/info') && method === 'get'
+      const isServerGroupQuery = url.includes('/v1/server/group') && method === 'get'
+      const isServerAccountQuery = url.includes('/v1/server/account') && method === 'get'
+      const isServerCountryQuery = url.includes('/v1/server/country') && method === 'get'
+      const is404 = status === 404
+      
+      // 特殊处理：登录接口的错误由组件自己处理，不在这里显示
+      const isLoginRequest = url.includes('/v1/user/auth/login')
+      
+      if (is404 && (
+        isProjectAccountQuery || 
+        isProjectWalletQuery || 
+        isProjectInfoQuery ||
+        isUserTokenQuery || 
+        isUserQuery ||
+        isMailQuery || 
+        isServerQuery || 
+        isServerGroupQuery ||
+        isServerAccountQuery ||
+        isServerCountryQuery
+      )) {
+        // 这些查询接口404不显示错误提示，静默处理
+        return Promise.reject(error)
+      }
+      
+      // 登录接口的错误不在这里显示，由登录组件处理
+      if (isLoginRequest) {
+        return Promise.reject(error)
+      }
       
       switch (status) {
         case 401:

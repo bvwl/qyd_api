@@ -2,7 +2,15 @@ import api from './index'
 import type { ServerCountry, ServerGroup, ServerInfo, ServerAccount, ApiResponse, PaginationParams } from '@/types'
 
 // 国家信息
-export const getCountryList = (params?: PaginationParams & { status?: number }) => {
+export const getCountryList = (params?: PaginationParams & { 
+  name?: string
+  short_name?: string
+  status?: number
+  create_time_start?: string
+  create_time_end?: string
+  update_time_start?: string
+  update_time_end?: string
+}) => {
   return api.get<any, ApiResponse<ServerCountry>>('/v1/server/country', { params })
 }
 
@@ -23,7 +31,14 @@ export const deleteCountry = (id: string) => {
 }
 
 // 分组信息
-export const getGroupList = (params?: PaginationParams & { country_id?: string; status?: number }) => {
+export const getGroupList = (params?: PaginationParams & { 
+  country_id?: string
+  status?: number
+  create_time_start?: string
+  create_time_end?: string
+  update_time_start?: string
+  update_time_end?: string
+}) => {
   return api.get<any, ApiResponse<ServerGroup>>('/v1/server/group', { params })
 }
 
@@ -44,7 +59,16 @@ export const deleteGroup = (id: string) => {
 }
 
 // 服务器信息
-export const getServerList = (params?: PaginationParams & { host?: string; group_id?: string; status?: number; is_sale?: number }) => {
+export const getServerList = (params?: PaginationParams & { 
+  host?: string
+  group_id?: string
+  status?: number
+  is_sale?: number
+  create_time_start?: string
+  create_time_end?: string
+  update_time_start?: string
+  update_time_end?: string
+}) => {
   return api.get<any, ApiResponse<ServerInfo>>('/v1/server/info', { params })
 }
 
@@ -65,7 +89,13 @@ export const deleteServer = (id: string) => {
 }
 
 // 服务器账号
-export const getServerAccountList = (params?: PaginationParams & { user_id?: string }) => {
+export const getServerAccountList = (params?: PaginationParams & { 
+  user_id?: string
+  create_time_start?: string
+  create_time_end?: string
+  update_time_start?: string
+  update_time_end?: string
+}) => {
   return api.get<any, ApiResponse<ServerAccount>>('/v1/server/account', { params })
 }
 

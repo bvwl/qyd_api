@@ -11,7 +11,15 @@ export const register = (data: { email: string; password: string; nickname: stri
 }
 
 // 用户管理
-export const getUserList = (params: PaginationParams & { email?: string; nickname?: string; status?: number }) => {
+export const getUserList = (params: PaginationParams & { 
+  email?: string
+  nickname?: string
+  status?: number
+  create_time_start?: string
+  create_time_end?: string
+  update_time_start?: string
+  update_time_end?: string
+}) => {
   return api.get<any, ApiResponse<User>>('/v1/user/user', { params })
 }
 
@@ -49,7 +57,14 @@ export const removeUserRole = (userId: string, roleCode: string) => {
 }
 
 // 角色管理
-export const getRoleList = (params?: PaginationParams) => {
+export const getRoleList = (params?: PaginationParams & { 
+  name?: string
+  code?: string
+  create_time_start?: string
+  create_time_end?: string
+  update_time_start?: string
+  update_time_end?: string
+}) => {
   return api.get<any, ApiResponse<Role>>('/v1/user/role', { params })
 }
 
@@ -70,7 +85,15 @@ export const deleteRole = (id: string) => {
 }
 
 // 路由管理
-export const getRouteList = (params?: PaginationParams) => {
+export const getRouteList = (params?: PaginationParams & {
+  name?: string
+  path?: string
+  status?: number
+  create_time_start?: string
+  create_time_end?: string
+  update_time_start?: string
+  update_time_end?: string
+}) => {
   return api.get<any, ApiResponse<Route>>('/v1/user/route', { params })
 }
 
@@ -90,8 +113,35 @@ export const deleteRoute = (id: string) => {
   return api.delete(`/v1/user/route/${id}`)
 }
 
+// 获取路由树
+export const getRouteTree = (params?: { status?: number; route_type?: number }) => {
+  return api.get<any, Route[]>('/v1/user/route/tree', { params })
+}
+
+// 获取当前用户的路由权限
+export const getUserRoutes = () => {
+  return api.get<any, Route[]>('/v1/user/route/user-routes')
+}
+
+// 获取角色的路由权限
+export const getRoleRoutes = (roleId: string) => {
+  return api.get<any, Route[]>(`/v1/user/role/${roleId}/routes`)
+}
+
+// 设置角色的路由权限
+export const setRoleRoutes = (roleId: string, routeIds: string[]) => {
+  return api.post(`/v1/user/role/${roleId}/routes`, routeIds)
+}
+
 // Token 管理
-export const getTokenList = (params?: PaginationParams & { user_id?: string; status?: number }) => {
+export const getTokenList = (params?: PaginationParams & { 
+  user_id?: string
+  status?: number
+  create_time_start?: string
+  create_time_end?: string
+  update_time_start?: string
+  update_time_end?: string
+}) => {
   return api.get<any, ApiResponse<UserToken>>('/v1/user/token', { params })
 }
 
@@ -111,8 +161,18 @@ export const deleteToken = (id: string) => {
   return api.delete(`/v1/user/token/${id}`)
 }
 
+// 生成新Token
+export const generateToken = () => {
+  return api.post<any, UserToken>('/v1/user/token/generate')
+}
+
 // 日志管理
-export const getLogList = (params?: PaginationParams & { user_id?: string; action?: number }) => {
+export const getLogList = (params?: PaginationParams & { 
+  user_id?: string
+  action?: number
+  create_time_start?: string
+  create_time_end?: string
+}) => {
   return api.get<any, ApiResponse<UserLog>>('/v1/user/log', { params })
 }
 

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Space, Tag, Input, Select, message, Modal, Form, DatePicker } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, TeamOutlined } from '@ant-design/icons'
-import type { ColumnsType } from 'antd/es/table'
+import { Table, Button, Space, Tag, Input, Select, message, Modal, Form, DatePicker, Tooltip } from 'antd'
+import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, TeamOutlined, CopyOutlined } from '@ant-design/icons'
+import type { ColumnsType, TableProps } from 'antd/es/table'
 import { getUserList, createUser, updateUser, deleteUser, getUserRoles, assignUserRoles } from '@/api/user'
 import { getRoleList } from '@/api/user'
 import type { User, Role } from '@/types'
@@ -13,6 +13,8 @@ import dayjs, { Dayjs } from 'dayjs'
 
 const { RangePicker } = DatePicker
 
+type SortOrder = 'ascend' | 'descend' | null
+
 export default function UserList() {
   const [loading, setLoading] = useState(false)
   const [dataSource, setDataSource] = useState<User[]>([])
@@ -23,6 +25,8 @@ export default function UserList() {
   const [searchStatus, setSearchStatus] = useState<number>()
   const [createTimeRange, setCreateTimeRange] = useState<[Dayjs, Dayjs] | null>(null)
   const [updateTimeRange, setUpdateTimeRange] = useState<[Dayjs, Dayjs] | null>(null)
+  const [orderBy, setOrderBy] = useState<string>('-create_time')
+  const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([])
   const [modalVisible, setModalVisible] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [roles, setRoles] = useState<Role[]>([])
@@ -46,6 +50,7 @@ export default function UserList() {
         res_count: true,
         email: searchEmail || undefined,
         status: searchStatus,
+        order_by: orderBy,
         create_time_start: createTimeRange?.[0]?.format('YYYY-MM-DD'),
         create_time_end: createTimeRange?.[1]?.format('YYYY-MM-DD'),
         update_time_start: updateTimeRange?.[0]?.format('YYYY-MM-DD'),
@@ -129,6 +134,30 @@ export default function UserList() {
     })
   }
 
+  const handleBatchDelete = async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要删除的用户')
+      return
+    }
+
+    Modal.confirm({
+      title: '批量删除确认',
+      content: `确定要删除选中的 ${selectedRowKeys.length} 个用户吗？`,
+      okText: '确定',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          await Promise.all(selectedRowKeys.map(id => deleteUser(id)))
+          message.success(`成功删除 ${selectedRowKeys.length} 个用户`)
+          setSelectedRowKeys([])
+          fetchData()
+        } catch (error) {
+          message.error('批量删除失败')
+        }
+      }
+    })
+  }
+
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields()
@@ -191,16 +220,63 @@ export default function UserList() {
     return colorMap[code] || 'default'
   }
 
+  const handleTableChange: TableProps<User>['onChange'] = (_pagination, _filters, sorter: any) => {
+    if (sorter.field) {
+      const order = sorter.order === 'ascend' ? '' : '-'
+      setOrderBy(`${order}${sorter.field}`)
+      setPage(1)
+      setTimeout(() => {
+        fetchData()
+      }, 0)
+    }
+  }
+
+  const getSortOrder = (field: string): SortOrder => {
+    if (orderBy === field) return 'ascend'
+    if (orderBy === `-${field}`) return 'descend'
+    return null
+  }
+
+  const handleCopyId = (id: string) => {
+    navigator.clipboard.writeText(id).then(() => {
+      message.success('用户ID已复制到剪贴板')
+    }).catch(() => {
+      message.error('复制失败')
+    })
+  }
+
   const columns: ColumnsType<User> = [
     {
       title: '邮箱',
       dataIndex: 'email',
       key: 'email',
+      sorter: true,
+      sortOrder: getSortOrder('email'),
+    },
+    {
+      title: 'ID',
+      dataIndex: 'id',
+      key: 'id',
+      width: 100,
+      render: (id: string) => (
+        <Tooltip title={id}>
+          <Button
+            type="link"
+            size="small"
+            icon={<CopyOutlined />}
+            onClick={() => handleCopyId(id)}
+          >
+            复制
+          </Button>
+        </Tooltip>
+      ),
     },
     {
       title: '昵称',
       dataIndex: 'nickname',
       key: 'nickname',
+      sorter: true,
+      sortOrder: getSortOrder('nickname'),
     },
     {
       title: '状态',
@@ -228,6 +304,8 @@ export default function UserList() {
       title: '创建时间',
       dataIndex: 'create_time',
       key: 'create_time',
+      sorter: true,
+      sortOrder: getSortOrder('create_time'),
       render: (text: string) => formatDateTime(text),
     },
     {
@@ -308,13 +386,24 @@ export default function UserList() {
           <Button type="primary" icon={<SearchOutlined />} onClick={() => { setPage(1); fetchData(); }}>
             搜索
           </Button>
-          <Button onClick={() => { setSearchEmail(''); setSearchStatus(undefined); setCreateTimeRange(null); setUpdateTimeRange(null); setPage(1); setTimeout(fetchData, 0); }}>
+          <Button onClick={() => { setSearchEmail(''); setSearchStatus(undefined); setCreateTimeRange(null); setUpdateTimeRange(null); setOrderBy('-create_time'); setSelectedRowKeys([]); setPage(1); setTimeout(fetchData, 0); }}>
             重置
           </Button>
         </Space>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
-          新增用户
-        </Button>
+        <Space>
+          {selectedRowKeys.length > 0 && isAdmin && (
+            <Button 
+              danger 
+              icon={<DeleteOutlined />} 
+              onClick={handleBatchDelete}
+            >
+              批量删除 ({selectedRowKeys.length})
+            </Button>
+          )}
+          <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+            新增用户
+          </Button>
+        </Space>
       </div>
 
       <Table
@@ -322,6 +411,12 @@ export default function UserList() {
         dataSource={dataSource}
         columns={columns}
         rowKey="id"
+        onChange={handleTableChange}
+        rowSelection={{
+          selectedRowKeys,
+          onChange: (selectedKeys) => setSelectedRowKeys(selectedKeys as string[]),
+          preserveSelectedRowKeys: true,
+        }}
         pagination={{
           current: page,
           pageSize,

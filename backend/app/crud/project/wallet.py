@@ -28,6 +28,7 @@ class CRUD:
     async def get_multi(self,
                         project_id: UUID | None = None,
                         chain: str | None = None,
+                        public_key: str | None = None,
                         page: int = 1,
                         limit: int = 10,
                         res_count: bool = False,
@@ -44,6 +45,9 @@ class CRUD:
         
         if chain:
             query = query.filter(chain__icontains=chain)
+        
+        if public_key:
+            query = query.filter(public_key__icontains=public_key)
         
         if create_time_start:
             query = query.filter(create_time__gte=parse_time(create_time_start))

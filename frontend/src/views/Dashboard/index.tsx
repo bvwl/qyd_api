@@ -1,11 +1,15 @@
 import { useState, useEffect } from 'react'
-import { Card, Row, Col, Statistic, Table, Tag, Spin, Alert } from 'antd'
-import { UserOutlined, ProjectOutlined, TeamOutlined, DatabaseOutlined } from '@ant-design/icons'
+import { Card, Row, Col, Statistic, Table, Tag, Spin, Alert, Button, message, Modal, Input, Space, Typography } from 'antd'
+import { UserOutlined, ProjectOutlined, TeamOutlined, DatabaseOutlined, CopyOutlined, ReloadOutlined, EyeOutlined, EyeInvisibleOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { getUserList } from '@/api/user'
 import { getProjectList } from '@/api/project'
 import { getProjectAccountList } from '@/api/project'
+import { getTokenList, generateToken } from '@/api/user'
 import { useUserStore } from '@/store/useUserStore'
+import type { UserToken } from '@/types'
+
+const { Text } = Typography
 
 interface DashboardStats {
   user_count?: number
@@ -44,8 +48,11 @@ const ROLE_NAME_MAP: Record<string, string> = {
 
 export default function Dashboard() {
   const [loading, setLoading] = useState(false)
+  const [tokenLoading, setTokenLoading] = useState(false)
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [projects, setProjects] = useState<ProjectWithAccounts[]>([])
+  const [userToken, setUserToken] = useState<UserToken | null>(null)
+  const [tokenVisible, setTokenVisible] = useState(false)
   const userInfo = useUserStore((state) => state.userInfo)
 
   const fetchData = async () => {
@@ -159,7 +166,61 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchData()
+    if (userInfo?.id) {
+      fetchUserToken()
+    }
   }, [userInfo])
+
+  const fetchUserToken = async () => {
+    if (!userInfo?.id) return
+    
+    try {
+      const res = await getTokenList({
+        user_id: userInfo.id,
+        status: 1,  // 只获取正常状态的token
+        page: 1,
+        limit: 1,
+      })
+      if (res.items && res.items.length > 0) {
+        setUserToken(res.items[0])
+      } else {
+        setUserToken(null)
+      }
+    } catch (error) {
+      setUserToken(null)
+    }
+  }
+
+  const handleGenerateToken = () => {
+    Modal.confirm({
+      title: '确认生成新Token',
+      content: '生成新Token后，旧Token将立即失效。确定要继续吗？',
+      okText: '确定',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          setTokenLoading(true)
+          const newToken = await generateToken()
+          setUserToken(newToken)
+          message.success('Token生成成功')
+        } catch (error) {
+          message.error('Token生成失败')
+        } finally {
+          setTokenLoading(false)
+        }
+      },
+    })
+  }
+
+  const handleCopyToken = () => {
+    if (!userToken?.token) return
+    
+    navigator.clipboard.writeText(userToken.token).then(() => {
+      message.success('Token已复制到剪贴板')
+    }).catch(() => {
+      message.error('复制失败，请手动复制')
+    })
+  }
 
   const columns: ColumnsType<ProjectWithAccounts> = [
     {
@@ -218,6 +279,78 @@ export default function Dashboard() {
           当前角色：<Tag color="blue">{ROLE_NAME_MAP[stats.role] || stats.role}</Tag>
           邮箱：{stats.user_email}
         </p>
+      </Card>
+
+      {/* API Token 卡片 */}
+      <Card 
+        title="API Token" 
+        style={{ marginBottom: 24 }}
+        extra={
+          <Button
+            type="primary"
+            icon={<ReloadOutlined />}
+            onClick={handleGenerateToken}
+            loading={tokenLoading}
+          >
+            重新生成
+          </Button>
+        }
+      >
+        {userToken ? (
+          <Space direction="vertical" style={{ width: '100%' }}>
+            <div>
+              <Text type="secondary">Token:</Text>
+              <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Input
+                  value={userToken.token}
+                  readOnly
+                  type={tokenVisible ? 'text' : 'password'}
+                  style={{ flex: 1, fontFamily: 'monospace' }}
+                  suffix={
+                    <Space.Compact>
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={tokenVisible ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+                        onClick={() => setTokenVisible(!tokenVisible)}
+                      />
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={<CopyOutlined />}
+                        onClick={handleCopyToken}
+                      />
+                    </Space.Compact>
+                  }
+                />
+              </div>
+            </div>
+            <div>
+              <Text type="secondary">创建时间: </Text>
+              <Text>{userToken.create_time}</Text>
+            </div>
+            <Alert
+              message="提示"
+              description="请妥善保管您的Token，不要泄露给他人。重新生成Token后，旧Token将立即失效。"
+              type="info"
+              showIcon
+            />
+          </Space>
+        ) : (
+          <div style={{ textAlign: 'center', padding: '20px 0' }}>
+            <Text type="secondary">您还没有Token</Text>
+            <div style={{ marginTop: 16 }}>
+              <Button
+                type="primary"
+                icon={<ReloadOutlined />}
+                onClick={handleGenerateToken}
+                loading={tokenLoading}
+              >
+                生成Token
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* 统计卡片 */}

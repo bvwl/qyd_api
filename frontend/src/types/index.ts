@@ -86,6 +86,10 @@ export interface Route {
   is_hidden: boolean
   is_cache: boolean
   is_affix: boolean
+  route_type: number  // 1:菜单, 2:按钮, 3:接口
+  permission?: string  // 权限标识
+  api_method?: string  // API方法
+  api_path?: string    // API路径
   status: Status
   parent_id?: string
   parent?: Route
@@ -132,6 +136,10 @@ export interface ProjectAccount {
   status: Status
   account_type: AccountType
   data?: Record<string, any>
+  // 余额相关字段
+  balance: number | string  // 后端返回字符串类型的 Decimal
+  variable: number | string  // 后端返回字符串类型的 Decimal
+  balance_history?: any
   project_id: string
   project?: Project
   server_id?: string
@@ -144,22 +152,11 @@ export interface ProjectWallet {
   id: string
   private_key: string
   public_key: string
-  mnemonic: string
+  mnemonic?: string  // 可选，私钥导入的钱包可能没有助记词
   chain: string
   remark?: string
-  project_id: string
+  project_id?: string  // 可选，钱包可以独立存在
   project?: Project
-  create_time: string
-  update_time: string
-}
-
-export interface ProjectBalance {
-  id: string
-  balance: number
-  variable: number
-  history?: any[]
-  account_id: string
-  account?: ProjectAccount
   create_time: string
   update_time: string
 }

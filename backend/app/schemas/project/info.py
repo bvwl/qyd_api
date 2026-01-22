@@ -6,7 +6,21 @@ from pydantic import BaseModel, Field, field_serializer
 
 from app.models.project import ProjectStatus
 from app.utils.time_tool import CN_TZ
-from app.schemas.user.info import Base as UserBase
+
+
+class UserBase(BaseModel):
+    """
+    用户基础信息模型（包含ID）
+    用于在项目信息中显示关联的用户
+    """
+    id: UUID = Field(..., description="用户ID")
+    email: str = Field(..., description="邮箱")
+    nickname: str = Field(..., description="昵称")
+    avatar: str | None = Field(None, description="头像")
+    status: int = Field(..., description="用户状态")
+
+    class Config:
+        from_attributes = True
 
 
 class Base(BaseModel):

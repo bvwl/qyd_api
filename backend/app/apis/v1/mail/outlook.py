@@ -1,18 +1,22 @@
 from datetime import datetime, timedelta
 from loguru import logger
-from fastapi import APIRouter, Body, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Body, HTTPException, Query, BackgroundTasks, Depends
 from app.clients.outlook import AzureAuthManager
 from app.schemas.mail.info import EmailType
 from app.schemas.mail.outlook import AuthUrlOut, GetTokenIn, SendMailIn, GetEmailsIn, GetEmailsOut
 from app.schemas.base import BaseOut
 from app.crud.mail.info import email_info_crud
 from app.utils.time_tool import parse_time, CN_TZ
+from app.core.verify import get_current_user
 
 app = APIRouter()
 
 
 @app.get("/auth/url", response_model=AuthUrlOut, summary="获取授权URL", description="生成微软OAuth2授权URL和PKCE验证码")
-async def get_auth_url(email: str = Query(..., description="邮箱地址")):
+async def get_auth_url(
+    email: str = Query(..., description="邮箱地址"),
+    current_user: dict = Depends(get_current_user)
+):
     """
     获取微软授权URL
     """
@@ -25,7 +29,10 @@ async def get_auth_url(email: str = Query(..., description="邮箱地址")):
 
 
 @app.post("/auth/token", response_model=BaseOut, summary="获取Token", description="使用授权回调URL获取Access Token")
-async def get_token(item: GetTokenIn = Body(..., description="获取Token参数")):
+async def get_token(
+    item: GetTokenIn = Body(..., description="获取Token参数"),
+    current_user: dict = Depends(get_current_user)
+):
     """
     使用回调URL获取Token
     """
@@ -42,7 +49,10 @@ async def get_token(item: GetTokenIn = Body(..., description="获取Token参数"
 
 
 @app.post("/send", response_model=BaseOut, summary="发送邮件", description="使用Outlook API发送邮件")
-async def send_mail(item: SendMailIn = Body(..., description="发送邮件参数")):
+async def send_mail(
+    item: SendMailIn = Body(..., description="发送邮件参数"),
+    current_user: dict = Depends(get_current_user)
+):
     """
     发送邮件
     """
@@ -59,7 +69,10 @@ async def send_mail(item: SendMailIn = Body(..., description="发送邮件参数
 
 
 @app.post("/messages", response_model=GetEmailsOut, summary="获取邮件", description="获取收件箱中指定发件人的邮件")
-async def get_emails(item: GetEmailsIn = Body(..., description="获取邮件参数")):
+async def get_emails(
+    item: GetEmailsIn = Body(..., description="获取邮件参数"),
+    current_user: dict = Depends(get_current_user)
+):
     """
     获取邮件列表
     """
@@ -87,6 +100,7 @@ async def check_email_status(
             None, description='更新时间开始 (支持 YYYY-MM-DD / YYYY-MM-DD HH:mm:ss / 13位时间戳)'),
         update_time_end: str | int | None = Query(
             None, description='更新时间结束 (支持 YYYY-MM-DD / YYYY-MM-DD HH:mm:ss / 13位时间戳)'),
+        current_user: dict = Depends(get_current_user)
 ):
     if not any([ create_time_start, create_time_end, update_time_start, update_time_end]):
         return BaseOut(message="请选择时间范围")
