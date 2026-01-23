@@ -2,17 +2,24 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { User } from '@/types'
 import { login as loginApi, getUserDetail } from '@/api/user'
+import { getUserMenus, getUserPermissions } from '@/api/rbac'
+import type { Menu } from '@/api/rbac'
 
 interface UserState {
   token: string
   userInfo: User | null
   permissions: string[]
+  menus: Menu[]
   isLoggedIn: boolean
   login: (email: string, password: string) => Promise<void>
   logout: () => void
   fetchUserInfo: () => Promise<void>
+  fetchUserPermissions: () => Promise<void>
+  fetchUserMenus: () => Promise<void>
   setUserInfo: (userInfo: User) => void
-  hasPermission: (permission: string) => boolean
+  hasPermission: (permission: string | string[]) => boolean
+  hasAnyPermission: (permissions: string[]) => boolean
+  hasAllPermissions: (permissions: string[]) => boolean
   checkTokenValid: () => boolean
 }
 
@@ -22,6 +29,7 @@ export const useUserStore = create<UserState>()(
       token: '',
       userInfo: null,
       permissions: [],
+      menus: [],
       isLoggedIn: false,
 
       login: async (email: string, password: string) => {
@@ -37,22 +45,9 @@ export const useUserStore = create<UserState>()(
           isLoggedIn: true,
         })
         
-        // 提取用户权限
-        if (res.user.roles) {
-          const permissions: string[] = []
-          res.user.roles.forEach(role => {
-            // 添加角色代码作为权限
-            permissions.push(role.code)
-            
-            // 添加路由权限
-            if (role.routes) {
-              role.routes.forEach(route => {
-                permissions.push(route.name)
-              })
-            }
-          })
-          set({ permissions })
-        }
+        // 获取用户权限和菜单
+        await get().fetchUserPermissions()
+        await get().fetchUserMenus()
       },
 
       logout: () => {
@@ -64,6 +59,7 @@ export const useUserStore = create<UserState>()(
           token: '',
           userInfo: null,
           permissions: [],
+          menus: [],
           isLoggedIn: false,
         })
       },
@@ -74,20 +70,6 @@ export const useUserStore = create<UserState>()(
           try {
             const user = await getUserDetail(userInfo.id)
             set({ userInfo: user })
-            
-            // 更新权限
-            if (user.roles) {
-              const permissions: string[] = []
-              user.roles.forEach(role => {
-                permissions.push(role.code)
-                if (role.routes) {
-                  role.routes.forEach(route => {
-                    permissions.push(route.name)
-                  })
-                }
-              })
-              set({ permissions })
-            }
           } catch (error) {
             console.error('获取用户信息失败:', error)
             // 如果获取失败（可能token过期），清除登录状态
@@ -96,11 +78,29 @@ export const useUserStore = create<UserState>()(
         }
       },
 
+      fetchUserPermissions: async () => {
+        try {
+          const res = await getUserPermissions()
+          set({ permissions: res.data })
+        } catch (error) {
+          console.error('获取用户权限失败:', error)
+        }
+      },
+
+      fetchUserMenus: async () => {
+        try {
+          const res = await getUserMenus()
+          set({ menus: res.data })
+        } catch (error) {
+          console.error('获取用户菜单失败:', error)
+        }
+      },
+
       setUserInfo: (userInfo: User) => {
         set({ userInfo })
       },
 
-      hasPermission: (permission: string) => {
+      hasPermission: (permission: string | string[]) => {
         const { permissions, userInfo } = get()
         
         // 管理员拥有所有权限
@@ -108,7 +108,47 @@ export const useUserStore = create<UserState>()(
           return true
         }
         
+        // 支持单个权限或权限数组
+        if (Array.isArray(permission)) {
+          // 检查是否有任何一个权限或角色匹配
+          return permission.some(p => {
+            // 先检查是否是角色代码
+            if (userInfo?.roles?.some(role => role.code === p)) {
+              return true
+            }
+            // 再检查是否是权限字符串
+            return permissions.includes(p)
+          })
+        }
+        
+        // 单个权限：先检查角色，再检查权限
+        if (userInfo?.roles?.some(role => role.code === permission)) {
+          return true
+        }
+        
         return permissions.includes(permission)
+      },
+
+      hasAnyPermission: (permissionList: string[]) => {
+        const { permissions, userInfo } = get()
+        
+        // 管理员拥有所有权限
+        if (userInfo?.roles?.some(role => role.code === 'ADMIN')) {
+          return true
+        }
+        
+        return permissionList.some(p => permissions.includes(p))
+      },
+
+      hasAllPermissions: (permissionList: string[]) => {
+        const { permissions, userInfo } = get()
+        
+        // 管理员拥有所有权限
+        if (userInfo?.roles?.some(role => role.code === 'ADMIN')) {
+          return true
+        }
+        
+        return permissionList.every(p => permissions.includes(p))
       },
 
       checkTokenValid: () => {
@@ -129,6 +169,7 @@ export const useUserStore = create<UserState>()(
         token: state.token,
         userInfo: state.userInfo,
         permissions: state.permissions,
+        menus: state.menus,
         isLoggedIn: state.isLoggedIn,
       }),
     }

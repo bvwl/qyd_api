@@ -5,7 +5,7 @@ from app.crud.server.country import server_country_crud
 from app.schemas.base import BaseOut
 from fastapi import APIRouter, Query, Body, HTTPException, Path, Depends
 
-from app.core.verify import get_current_user, get_admin_user
+from app.apis.deps import get_current_user, get_admin_user
 
 app = APIRouter()
 

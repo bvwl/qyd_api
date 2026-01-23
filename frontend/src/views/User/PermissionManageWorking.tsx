@@ -82,11 +82,17 @@ export default function PermissionManageWorking() {
       const response = await fetch(`http://127.0.0.1:6080/v1/user/role/${role.id}/routes`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
-      const routes = await response.json()
+      const data = await response.json()
       
       if (response.ok) {
-        const ids = extractIds(routes)
-        setCheckedKeys(ids)
+        // 新的API返回格式: { tree: [...], checked_keys: [...] }
+        // checked_keys 只包含叶子节点，Tree组件会自动计算父节点的半选状态
+        if (data && data.checked_keys && Array.isArray(data.checked_keys)) {
+          setCheckedKeys(data.checked_keys)
+          console.log(`成功加载 ${data.checked_keys.length} 个选中的权限（叶子节点）`)
+        } else {
+          message.error('权限数据格式异常')
+        }
       } else {
         message.error('加载权限失败')
       }
@@ -96,24 +102,16 @@ export default function PermissionManageWorking() {
     }
   }
 
-  const extractIds = (routes: any[]): string[] => {
-    const ids: string[] = []
-    const extract = (list: any[]) => {
-      list.forEach((r: any) => {
-        ids.push(r.id)
-        if (r.children) extract(r.children)
-      })
-    }
-    extract(routes)
-    return ids
-  }
-
   const handleSave = async () => {
     if (!selectedRole) return
     
     setSaving(true)
     try {
       const token = localStorage.getItem('access_token')
+      // 直接保存用户选中的节点
+      // 后端会自动过滤父节点，只保存叶子节点（实际权限）
+      console.log('保存的权限ID:', checkedKeys)
+      
       const response = await fetch(`http://127.0.0.1:6080/v1/user/role/${selectedRole.id}/routes`, {
         method: 'POST',
         headers: {

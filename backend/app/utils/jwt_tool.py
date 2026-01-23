@@ -80,3 +80,17 @@ class JWTTool:
 
 
 JwtToken = JWTTool()
+
+
+def create_access_token(data: dict, expires_delta: int | None = None) -> str:
+    """
+    创建访问令牌的便捷函数
+    
+    Args:
+        data: 要编码的数据
+        expires_delta: 过期时间（秒），如果为None则使用默认配置
+        
+    Returns:
+        str: JWT token
+    """
+    return JwtToken.create_token(data, expires_delta)

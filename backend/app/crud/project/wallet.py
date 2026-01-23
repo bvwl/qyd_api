@@ -36,9 +36,17 @@ class CRUD:
                         create_time_start: str | int | None = None,
                         create_time_end: str | int | None = None,
                         update_time_start: str | int | None = None,
-                        update_time_end: str | int | None = None
+                        update_time_end: str | int | None = None,
+                        user_project_ids: list[str] | None = None
                         ) -> OutList:
         query = ProjectWallet.all()
+        
+        # 数据权限过滤：如果指定了user_project_ids，只返回这些项目的钱包
+        if user_project_ids is not None:
+            if len(user_project_ids) == 0:
+                # 用户没有关联任何项目，返回空列表
+                return OutList(message='成功', count=0, num=0, items=[])
+            query = query.filter(project_id__in=user_project_ids)
         
         if project_id:
             query = query.filter(project_id=project_id)

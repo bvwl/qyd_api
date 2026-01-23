@@ -5,7 +5,7 @@ from fastapi import APIRouter, Query, Body, HTTPException, Path, Depends
 from app.schemas.user.log import Create, Update, Out, OutList
 from app.crud.user.log import log_crud
 from app.schemas.base import BaseOut
-from app.core.verify import get_current_user, get_admin_user
+from app.apis.deps import get_current_user, get_admin_user
 
 
 app = APIRouter()

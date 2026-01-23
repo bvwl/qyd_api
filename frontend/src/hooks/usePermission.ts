@@ -1,89 +1,63 @@
-import { useEffect, useState } from 'react'
-import { getUserRoutes } from '@/api/user'
-import type { Route } from '@/types'
-
-interface PermissionState {
-  routes: Route[]
-  permissions: Set<string>
-  loading: boolean
-}
+import { useUserStore } from '@/store/useUserStore'
 
 /**
- * 权限管理 Hook
+ * 权限管理 Hook (RBAC v2)
  * 用于检查用户是否有某个权限
  */
 export const usePermission = () => {
-  const [state, setState] = useState<PermissionState>({
-    routes: [],
-    permissions: new Set(),
-    loading: true,
-  })
+  const { permissions, userInfo, hasPermission, hasAnyPermission, hasAllPermissions } = useUserStore()
 
-  useEffect(() => {
-    loadUserPermissions()
-  }, [])
-
-  const loadUserPermissions = async () => {
-    try {
-      const routes = await getUserRoutes()
-      const permissions = new Set<string>()
-      
-      // 递归收集所有权限标识
-      const collectPermissions = (routeList: Route[]) => {
-        routeList.forEach(route => {
-          if (route.permission) {
-            permissions.add(route.permission)
-          }
-          if (route.children && route.children.length > 0) {
-            collectPermissions(route.children)
-          }
-        })
-      }
-      
-      collectPermissions(routes)
-      
-      setState({
-        routes,
-        permissions,
-        loading: false,
-      })
-    } catch (error) {
-      console.error('加载用户权限失败:', error)
-      setState(prev => ({ ...prev, loading: false }))
-    }
+  /**
+   * 检查是否是管理员
+   */
+  const isAdmin = (): boolean => {
+    return userInfo?.roles?.some(role => role.code === 'ADMIN') || false
   }
 
   /**
    * 检查是否有某个权限
-   * @param permission 权限标识，如 'user:create'
+   * @param permission 权限标识，如 'user:create' 或权限数组
    */
-  const hasPermission = (permission: string): boolean => {
-    return state.permissions.has(permission)
+  const checkPermission = (permission: string | string[]): boolean => {
+    // 管理员拥有所有权限
+    if (isAdmin()) {
+      return true
+    }
+
+    return hasPermission(permission)
   }
 
   /**
    * 检查是否有任意一个权限
-   * @param permissions 权限标识数组
+   * @param permissionList 权限标识数组
    */
-  const hasAnyPermission = (permissions: string[]): boolean => {
-    return permissions.some(p => state.permissions.has(p))
+  const checkAnyPermission = (permissionList: string[]): boolean => {
+    // 管理员拥有所有权限
+    if (isAdmin()) {
+      return true
+    }
+
+    return hasAnyPermission(permissionList)
   }
 
   /**
    * 检查是否有所有权限
-   * @param permissions 权限标识数组
+   * @param permissionList 权限标识数组
    */
-  const hasAllPermissions = (permissions: string[]): boolean => {
-    return permissions.every(p => state.permissions.has(p))
+  const checkAllPermissions = (permissionList: string[]): boolean => {
+    // 管理员拥有所有权限
+    if (isAdmin()) {
+      return true
+    }
+
+    return hasAllPermissions(permissionList)
   }
 
   return {
-    routes: state.routes,
-    permissions: state.permissions,
-    loading: state.loading,
-    hasPermission,
-    hasAnyPermission,
-    hasAllPermissions,
-    reload: loadUserPermissions,
+    permissions,
+    isAdmin,
+    hasPermission: checkPermission,
+    hasAnyPermission: checkAnyPermission,
+    hasAllPermissions: checkAllPermissions,
   }
 }

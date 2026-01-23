@@ -143,6 +143,7 @@ def get_tortoise_config():
                     "app.models.server",
                     "app.models.user",
                     "app.models.project",
+                    "app.models.rbac_v2",  # 新增 RBAC v2 模型
                     "aerich.models",
                 ],
                 "default_connection": "default",

@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Table, Button, Space, Tag, Input, Select, message, Modal, Form, DatePicker, Tooltip } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, TeamOutlined, CopyOutlined } from '@ant-design/icons'
+import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, CopyOutlined } from '@ant-design/icons'
 import type { ColumnsType, TableProps } from 'antd/es/table'
-import { getUserList, createUser, updateUser, deleteUser, getUserRoles, assignUserRoles } from '@/api/user'
+import { getUserList, createUser, updateUser, deleteUser } from '@/api/user'
 import { getRoleList } from '@/api/user'
 import type { User, Role } from '@/types'
 import { UserStatus } from '@/types'
@@ -31,12 +31,6 @@ export default function UserList() {
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [roles, setRoles] = useState<Role[]>([])
   const [form] = Form.useForm()
-  
-  // 角色管理相关状态
-  const [roleModalVisible, setRoleModalVisible] = useState(false)
-  const [selectedUser, setSelectedUser] = useState<User | null>(null)
-  const [selectedRoles, setSelectedRoles] = useState<string[]>([])
-  const [roleLoading, setRoleLoading] = useState(false)
   
   const hasPermission = useUserStore((state) => state.hasPermission)
   const isAdmin = hasPermission('ADMIN')
@@ -175,40 +169,6 @@ export default function UserList() {
     }
   }
 
-  // 打开角色管理弹窗
-  const handleManageRoles = async (user: User) => {
-    setSelectedUser(user)
-    setRoleModalVisible(true)
-    
-    try {
-      setRoleLoading(true)
-      const userRoles = await getUserRoles(user.id)
-      setSelectedRoles(userRoles.map(r => r.code))
-    } catch (error) {
-      message.error('获取用户角色失败')
-      setSelectedRoles([])
-    } finally {
-      setRoleLoading(false)
-    }
-  }
-
-  // 保存角色分配
-  const handleSaveRoles = async () => {
-    if (!selectedUser) return
-
-    try {
-      setRoleLoading(true)
-      await assignUserRoles(selectedUser.id, selectedRoles)
-      message.success('角色分配成功')
-      setRoleModalVisible(false)
-      fetchData() // 刷新列表
-    } catch (error) {
-      message.error('角色分配失败')
-    } finally {
-      setRoleLoading(false)
-    }
-  }
-
   // 获取角色标签颜色
   const getRoleColor = (code: string) => {
     const colorMap: Record<string, string> = {
@@ -313,16 +273,6 @@ export default function UserList() {
       key: 'action',
       render: (_, record) => (
         <Space>
-          {isAdmin && (
-            <Button
-              type="link"
-              size="small"
-              icon={<TeamOutlined />}
-              onClick={() => handleManageRoles(record)}
-            >
-              角色
-            </Button>
-          )}
           <Button
             type="link"
             size="small"
@@ -495,50 +445,6 @@ export default function UserList() {
             </Select>
           </Form.Item>
         </Form>
-      </Modal>
-
-      {/* 角色管理弹窗 */}
-      <Modal
-        title={`管理用户角色 - ${selectedUser?.nickname}`}
-        open={roleModalVisible}
-        onOk={handleSaveRoles}
-        onCancel={() => setRoleModalVisible(false)}
-        confirmLoading={roleLoading}
-        width={600}
-      >
-        <div style={{ marginBottom: 16 }}>
-          <p style={{ marginBottom: 8, color: '#666' }}>
-            当前用户：{selectedUser?.email}
-          </p>
-          <p style={{ marginBottom: 16, color: '#999', fontSize: 12 }}>
-            选择要分配给该用户的角色（可多选）
-          </p>
-        </div>
-        
-        <Select
-          mode="multiple"
-          style={{ width: '100%' }}
-          placeholder="请选择角色"
-          value={selectedRoles}
-          onChange={setSelectedRoles}
-          loading={roleLoading}
-          options={roles.map(role => ({
-            label: `${role.name} (${role.code})`,
-            value: role.code,
-          }))}
-        />
-
-        <div style={{ marginTop: 16, padding: 12, background: '#f5f5f5', borderRadius: 4 }}>
-          <p style={{ margin: 0, fontSize: 12, color: '#666' }}>
-            <strong>角色说明：</strong>
-          </p>
-          <ul style={{ margin: '8px 0 0 0', paddingLeft: 20, fontSize: 12, color: '#666' }}>
-            <li><strong>ADMIN</strong>：管理员，拥有所有权限</li>
-            <li><strong>GM</strong>：项目管理员，负责项目运营和管理</li>
-            <li><strong>IT</strong>：技术人员，负责系统维护和技术支持</li>
-            <li><strong>MANUAL</strong>：手动操作员，负责日常手动操作（默认角色）</li>
-          </ul>
-        </div>
       </Modal>
     </div>
   )

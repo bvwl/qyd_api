@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends
 from tortoise import Tortoise
 from app.core.database import get_db_info
 from app.core.settings import DB_READ_WRITE_SPLIT, get_read_db, get_write_db
-from app.core.verify import get_current_user
+from app.apis.deps import get_current_user
 
 router = APIRouter()
 

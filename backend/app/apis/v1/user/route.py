@@ -12,6 +12,143 @@ from app.utils.time_tool import parse_time
 app = APIRouter()
 
 
+@app.get("/tree", response_model=list, description="获取路由树", summary="获取路由树")
+async def get_tree(
+    status: int | None = Query(None, description="状态筛选"),
+    route_type: int | None = Query(None, description="路由类型筛选"),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    获取路由树形结构
+    """
+    try:
+        from app.models.user import FrontendRoute
+        
+        # 构建查询条件
+        query = FrontendRoute.all()
+        if status is not None:
+            query = query.filter(status=status)
+        if route_type is not None:
+            query = query.filter(route_type=route_type)
+        
+        # 获取所有路由，预加载关联数据
+        routes = await query.prefetch_related('roles').order_by('sort', 'create_time')
+        
+        # 构建路由树
+        def build_tree(parent_id=None):
+            """递归构建路由树"""
+            result = []
+            for route in routes:
+                if route.parent_id == parent_id:
+                    # 手动构建字典，避免Pydantic验证问题
+                    route_dict = {
+                        'id': str(route.id),
+                        'name': route.name,
+                        'path': route.path,
+                        'component': route.component,
+                        'title': route.title,
+                        'icon': route.icon,
+                        'sort': route.sort,
+                        'redirect': route.redirect,
+                        'is_hidden': route.is_hidden,
+                        'is_cache': route.is_cache,
+                        'is_affix': route.is_affix,
+                        'route_type': route.route_type,
+                        'permission': route.permission,
+                        'api_method': route.api_method,
+                        'api_path': route.api_path,
+                        'status': route.status,
+                        'parent_id': str(route.parent_id) if route.parent_id else None,
+                        'create_time': route.create_time.strftime("%Y-%m-%d %H:%M:%S"),
+                        'update_time': route.update_time.strftime("%Y-%m-%d %H:%M:%S"),
+                    }
+                    children = build_tree(route.id)
+                    if children:
+                        route_dict['children'] = children
+                    result.append(route_dict)
+            return result
+        
+        return build_tree(None)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/user-routes", response_model=list, description="获取当前用户的路由权限", summary="获取当前用户的路由权限")
+async def get_user_routes(
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    获取当前登录用户的路由权限（树形结构）
+    根据用户的角色，返回该用户有权访问的所有路由
+    """
+    try:
+        from app.models.user import UserInfo, FrontendRoute
+        
+        # 获取用户ID（兼容两种格式）
+        user_id = current_user.get('user_id') or current_user.get('id')
+        if not user_id:
+            raise HTTPException(status_code=401, detail="无法获取用户ID")
+        
+        # 获取当前用户及其角色和路由
+        user = await UserInfo.get(id=user_id).prefetch_related('roles__routes')
+        
+        # 收集所有路由ID（去重）
+        route_ids = set()
+        for role in user.roles:
+            for route in role.routes:
+                if route.status == 1:  # 只包含正常状态的路由
+                    route_ids.add(route.id)
+        
+        if not route_ids:
+            return []
+        
+        # 获取所有相关路由
+        routes = await FrontendRoute.filter(id__in=list(route_ids)).order_by('sort', 'create_time')
+        
+        # 构建路由树
+        def build_tree(parent_id=None):
+            """递归构建路由树"""
+            result = []
+            for route in routes:
+                if route.parent_id == parent_id:
+                    route_dict = {
+                        'id': str(route.id),
+                        'name': route.name,
+                        'path': route.path,
+                        'component': route.component,
+                        'title': route.title,
+                        'icon': route.icon,
+                        'sort': route.sort,
+                        'redirect': route.redirect,
+                        'is_hidden': route.is_hidden,
+                        'is_cache': route.is_cache,
+                        'is_affix': route.is_affix,
+                        'route_type': route.route_type,
+                        'permission': route.permission,
+                        'api_method': route.api_method,
+                        'api_path': route.api_path,
+                        'status': route.status,
+                        'parent_id': str(route.parent_id) if route.parent_id else None,
+                        'create_time': route.create_time.strftime("%Y-%m-%d %H:%M:%S"),
+                        'update_time': route.update_time.strftime("%Y-%m-%d %H:%M:%S"),
+                    }
+                    children = build_tree(route.id)
+                    if children:
+                        route_dict['children'] = children
+                    result.append(route_dict)
+            return result
+        
+        return build_tree(None)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("", response_model=Out, description="创建路由", summary="创建路由")
 async def post(
     item: Create = Body(..., description="创建数据"),

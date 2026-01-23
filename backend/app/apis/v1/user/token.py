@@ -5,7 +5,7 @@ from fastapi import APIRouter, Query, Body, HTTPException, Path, Depends
 from app.schemas.user.token import Create, Update, Out, OutList
 from app.crud.user.token import token_crud
 from app.schemas.base import BaseOut
-from app.core.verify import get_current_user, get_admin_user
+from app.apis.deps import get_current_user, get_admin_user
 
 
 app = APIRouter()
@@ -153,6 +153,27 @@ async def post_or_put(
     """
     try:
         return await token_crud.upsert(item)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/generate", response_model=Out, description="生成新的API Token", summary="生成API Token")
+async def generate(
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    为当前用户生成新的API Token（JWT格式，10年有效期）
+    - 旧Token将被设置为失效状态
+    - 新Token使用JWT格式，包含用户ID、邮箱和角色信息
+    - 有效期为10年
+    """
+    try:
+        user_id = current_user.get('user_id') or current_user.get('id')
+        return await token_crud.generate_token(user_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:

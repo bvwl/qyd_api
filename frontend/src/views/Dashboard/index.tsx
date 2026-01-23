@@ -276,8 +276,17 @@ export default function Dashboard() {
           欢迎回来，{stats.user_nickname}！
         </h2>
         <p style={{ margin: '8px 0 0', color: '#666' }}>
-          当前角色：<Tag color="blue">{ROLE_NAME_MAP[stats.role] || stats.role}</Tag>
-          邮箱：{stats.user_email}
+          当前角色：
+          {userInfo?.roles && userInfo.roles.length > 0 ? (
+            userInfo.roles.map((role) => (
+              <Tag key={role.code} color="blue" style={{ marginLeft: 4 }}>
+                {ROLE_NAME_MAP[role.code] || role.name}
+              </Tag>
+            ))
+          ) : (
+            <Tag color="blue">{ROLE_NAME_MAP[stats.role] || stats.role}</Tag>
+          )}
+          <span style={{ marginLeft: 16 }}>邮箱：{stats.user_email}</span>
         </p>
       </Card>
 
@@ -428,21 +437,6 @@ export default function Dashboard() {
           }}
         />
       </Card>
-
-      {/* 角色说明 */}
-      {(stats.role === 'IT' || stats.role === 'MANUAL') && (
-        <Card
-          title="提示"
-          style={{ marginTop: 24 }}
-          type="inner"
-        >
-          <p style={{ margin: 0, color: '#666' }}>
-            <strong>注意：</strong>
-            {stats.role === 'IT' && ' 作为技术人员，您只能查看和管理分配给您的项目。'}
-            {stats.role === 'MANUAL' && ' 作为手动操作员，您只能查看和操作分配给您的项目。'}
-          </p>
-        </Card>
-      )}
     </div>
   )
 }

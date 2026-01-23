@@ -29,7 +29,7 @@ interface PermissionProps {
 }
 
 /**
- * 权限控制组件
+ * 权限控制组件 (RBAC v2)
  * 根据用户权限决定是否显示子组件
  * 
  * @example
@@ -57,12 +57,7 @@ export const Permission = ({
   children,
   fallback = null,
 }: PermissionProps) => {
-  const { hasPermission, hasAnyPermission, hasAllPermissions, loading } = usePermission()
-
-  // 加载中不显示
-  if (loading) {
-    return null
-  }
+  const { hasPermission, hasAnyPermission, hasAllPermissions } = usePermission()
 
   // 检查权限
   let hasAccess = true

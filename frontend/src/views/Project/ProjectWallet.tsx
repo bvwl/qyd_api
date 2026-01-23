@@ -257,7 +257,7 @@ const ProjectWalletList = () => {
       key: 'action',
       render: (_: any, record: ProjectWallet) => (
         <Space>
-          {(isAdmin || isGM) && (
+          {isAdmin && (
             <>
               <Button
                 type="link"
@@ -338,7 +338,7 @@ const ProjectWalletList = () => {
           </Button>
         </Space>
         <Space>
-          {selectedRowKeys.length > 0 && (isAdmin || isGM) && (
+          {selectedRowKeys.length > 0 && isAdmin && (
             <Button 
               danger 
               icon={<DeleteOutlined />} 
@@ -347,9 +347,11 @@ const ProjectWalletList = () => {
               批量删除 ({selectedRowKeys.length})
             </Button>
           )}
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
-            新增钱包
-          </Button>
+          {isAdmin && (
+            <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+              新增钱包
+            </Button>
+          )}
         </Space>
       </div>
 

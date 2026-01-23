@@ -125,7 +125,7 @@ export const getUserRoutes = () => {
 
 // 获取角色的路由权限
 export const getRoleRoutes = (roleId: string) => {
-  return api.get<any, Route[]>(`/v1/user/role/${roleId}/routes`)
+  return api.get<any, { tree: Route[]; checked_keys: string[] }>(`/v1/user/role/${roleId}/routes`)
 }
 
 // 设置角色的路由权限

@@ -83,8 +83,25 @@ async def gets(
 ):
     """
     分页查询项目钱包列表
+    根据用户角色返回不同的数据：
+    - ADMIN/GM: 返回所有项目的钱包
+    - IT/MANUAL: 只返回分配给该用户的项目的钱包
     """
     try:
+        from app.utils.data_permission import filter_by_user_projects
+        
+        # 获取用户ID
+        user_id = current_user.get('user_id') or current_user.get('id')
+        
+        # 根据用户权限过滤项目
+        user_project_ids = await filter_by_user_projects(user_id)
+        
+        # 如果指定了project_id，需要检查用户是否有权限访问该项目
+        if project_id and user_project_ids is not None:
+            if str(project_id) not in user_project_ids:
+                # 用户没有权限访问该项目
+                return OutList(message='成功', count=0, num=0, items=[])
+        
         return await project_wallet_crud.get_multi(
             project_id=project_id,
             chain=chain,
@@ -96,6 +113,7 @@ async def gets(
             update_time_end=parse_time(update_time_end, True),
             page=page,
             limit=limit,
+            user_project_ids=user_project_ids,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -130,7 +148,7 @@ async def delete(
     admin_user: dict = Depends(get_admin_user)
 ):
     """
-    删除项目钱包
+    删除项目钱包（仅管理员）
     """
     try:
         return await project_wallet_crud.delete(id)

@@ -15,7 +15,7 @@ class Base(BaseModel):
 
     字段与数据库模型 UserToken 保持一致
     """
-    token: str = Field(..., max_length=255, description="访问令牌")
+    token: str = Field(..., description="访问令牌")  # 移除max_length限制，支持长JWT Token
     status: Status = Field(Status.OK, description="是否已失效(1:正常,2:异常)")
 
     class Config:
@@ -33,7 +33,7 @@ class Update(BaseModel):
     """
     更新 Token 请求模型，支持部分更新
     """
-    token: str | None = Field(None, max_length=255, description="访问令牌")
+    token: str | None = Field(None, description="访问令牌")  # 移除max_length限制
     status: Status | None = Field(None, description="是否已失效(1:正常,2:异常)")
 
 
