@@ -9,7 +9,7 @@ from app.utils.time_tool import parse_time
 from app.schemas.base import BaseOut
 
 
-from app.core.verify import get_current_user, get_admin_user
+from app.apis.deps import get_current_user, get_admin_user, get_gm_user
 
 app = APIRouter()
 
@@ -88,8 +88,26 @@ async def gets(
 ):
     """
     分页查询项目账号列表
+    根据用户角色返回不同的数据：
+    - ADMIN/GM: 返回所有项目的账号
+    - IT/MANUAL: 只返回分配给该用户的项目的账号
     """
     try:
+        from app.utils.data_permission import filter_by_user_projects
+        
+        # 获取用户ID
+        user_id = current_user.get('user_id') or current_user.get('id')
+        
+        # 根据用户权限过滤项目
+        user_project_ids = await filter_by_user_projects(user_id)
+        
+        # 如果指定了project_id，需要检查用户是否有权限访问该项目
+        if project_id and user_project_ids is not None:
+            if str(project_id) not in user_project_ids:
+                # 用户没有权限访问该项目
+                from app.schemas.project.account import OutList
+                return OutList(message='成功', count=0, num=0, items=[])
+        
         return await project_account_crud.get_multi(
             account=account,
             status=status,
@@ -104,6 +122,7 @@ async def gets(
             page=page,
             limit=limit,
             res_count=res_count,
+            user_project_ids=user_project_ids,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -135,10 +154,10 @@ async def put(
 @app.delete("/{id}", response_model=BaseOut, description="删除项目账号", summary="删除项目账号")
 async def delete(
     id: UUID = Path(..., description="主键ID"),
-    admin_user: dict = Depends(get_admin_user)
+    gm_user: dict = Depends(get_gm_user)
 ):
     """
-    删除项目账号
+    删除项目账号（需要GM或管理员权限）
     """
     try:
         await project_account_crud.delete(id)

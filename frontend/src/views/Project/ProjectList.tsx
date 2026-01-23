@@ -29,6 +29,7 @@ const ProjectList = () => {
   const [editingProject, setEditingProject] = useState<Project | null>(null)
   const [searchName, setSearchName] = useState('')
   const [searchStatus, setSearchStatus] = useState<number>()
+  const [searchUserId, setSearchUserId] = useState<string>()
   const [createTimeRange, setCreateTimeRange] = useState<[Dayjs, Dayjs] | null>(null)
   const [updateTimeRange, setUpdateTimeRange] = useState<[Dayjs, Dayjs] | null>(null)
   const [orderBy, setOrderBy] = useState<string>('-create_time')
@@ -42,6 +43,9 @@ const ProjectList = () => {
   const [allUsers, setAllUsers] = useState<User[]>([])
   const [selectedUserKeys, setSelectedUserKeys] = useState<string[]>([])
   const [userLoading, setUserLoading] = useState(false)
+  
+  // 用户筛选列表
+  const [filterUsers, setFilterUsers] = useState<User[]>([])
 
   const isAdmin = hasPermission('ADMIN')
   const isGM = hasPermission('GM')
@@ -55,6 +59,7 @@ const ProjectList = () => {
         res_count: true,
         name: searchName || undefined,
         status: searchStatus,
+        user_id: searchUserId,
         order_by: orderBy,
         create_time_start: createTimeRange?.[0]?.format('YYYY-MM-DD'),
         create_time_end: createTimeRange?.[1]?.format('YYYY-MM-DD'),
@@ -72,9 +77,25 @@ const ProjectList = () => {
     }
   }
 
+  // 加载用户列表（用于筛选）
+  const fetchFilterUsers = async () => {
+    if (!isAdmin && !isGM) return // 只有管理员和GM可以按用户筛选
+    
+    try {
+      const res = await getUserList({ page: 1, limit: 1000 })
+      setFilterUsers(res.items || [])
+    } catch (error) {
+      setFilterUsers([])
+    }
+  }
+
   useEffect(() => {
     fetchData()
   }, [page, pageSize])
+  
+  useEffect(() => {
+    fetchFilterUsers()
+  }, [])
 
   const handleSearch = () => {
     setPage(1)
@@ -84,6 +105,7 @@ const ProjectList = () => {
   const handleReset = () => {
     setSearchName('')
     setSearchStatus(undefined)
+    setSearchUserId(undefined)
     setCreateTimeRange(null)
     setUpdateTimeRange(null)
     setOrderBy('-create_time')
@@ -392,6 +414,23 @@ const ProjectList = () => {
               <Select.Option value={ProjectStatus.ACCOUNT_UNSUPPORTED}>账号不支持</Select.Option>
               <Select.Option value={ProjectStatus.IP_UNSUPPORTED}>IP不支持</Select.Option>
             </Select>
+            {(isAdmin || isGM) && (
+              <Select
+                placeholder="关联用户"
+                value={searchUserId}
+                onChange={setSearchUserId}
+                style={{ width: 200 }}
+                allowClear
+                showSearch
+                filterOption={(input, option) =>
+                  (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                }
+                options={filterUsers.map(user => ({
+                  label: user.nickname || user.email,
+                  value: user.id,
+                }))}
+              />
+            )}
             <RangePicker
               placeholder={['创建开始日期', '创建结束日期']}
               value={createTimeRange}

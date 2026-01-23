@@ -6,7 +6,7 @@ from app.utils.time_tool import parse_time
 from app.schemas.base import BaseOut
 from fastapi import APIRouter, Query, Body, HTTPException, Path, Depends
 
-from app.core.verify import get_current_user, get_admin_user
+from app.apis.deps import get_current_user, get_admin_user
 
 app = APIRouter()
 
@@ -72,7 +72,21 @@ async def gets(
         limit: int = Query(10, ge=1, le=1000, description='每页数量'),
     current_user: dict = Depends(get_current_user)
 ):
+    """
+    获取服务器信息列表
+    权限要求：ADMIN, GM, IT 可以访问，MANUAL 不能访问
+    """
     try:
+        from app.utils.data_permission import get_user_data_scope, has_resource_access
+        
+        # 获取用户ID和角色
+        user_id = current_user.get('user_id') or current_user.get('id')
+        scope = await get_user_data_scope(user_id)
+        
+        # 检查是否有访问服务器资源的权限
+        if not has_resource_access(scope['roles'], 'server'):
+            raise HTTPException(status_code=403, detail='没有权限访问服务器资源')
+        
         return await server_info_crud.get_multi(
             host=host,
             domain=domain,

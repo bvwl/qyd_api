@@ -119,7 +119,7 @@ class UserToken(BaseModel):
         related_name="tokens",
         description="所属用户"
     )
-    token = fields.CharField(max_length=255, description="访问令牌")
+    token = fields.TextField(description="访问令牌")  # 使用TextField支持长Token
     status = fields.IntEnumField(
         Status, default=Status.OK, description="是否已失效"
     )

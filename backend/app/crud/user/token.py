@@ -117,24 +117,44 @@ class CRUD:
         await record.fetch_related('user')
         return Out.model_validate(record)
 
-    # 生成新Token
+    # 生成新Token（使用JWT，10年有效期）
     async def generate_token(self, user_id: UUID) -> Out:
         """
-        为用户生成新的Token，旧Token将被设置为失效状态
+        为用户生成新的JWT Token，10年有效期
+        旧Token将被设置为失效状态
         """
-        # 生成新的token（64字符的随机字符串）
-        new_token = secrets.token_urlsafe(48)  # 生成64字符的URL安全token
+        from app.utils.jwt_tool import create_access_token
+        from app.models.user import UserInfo
+        
+        # 获取用户信息
+        user = await UserInfo.get(id=user_id).prefetch_related('roles')
+        if not user:
+            raise HTTPException(status_code=404, detail='用户不存在')
+        
+        # 获取用户角色
+        user_roles = [role.code for role in user.roles]
+        
+        # 生成JWT Token，10年有效期（315360000秒）
+        token_data = {
+            'id': str(user.id),
+            'email': user.email,
+            'roles': user_roles
+        }
+        new_token = create_access_token(
+            data=token_data,
+            expires_delta=315360000  # 10年 = 10 * 365 * 24 * 60 * 60
+        )
         
         # 将该用户的所有旧token设置为失效
         await UserToken.filter(user_id=user_id, status=Status.OK).update(status=Status.NOT)
         
-        # 创建新token
-        token_data = {
+        # 创建新token记录
+        token_record = {
             'token': new_token,
             'user_id': user_id,
             'status': Status.OK
         }
-        res = await UserToken.create(**token_data)
+        res = await UserToken.create(**token_record)
         if not res:
             raise HTTPException(status_code=500, detail='生成Token失败')
         

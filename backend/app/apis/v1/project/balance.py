@@ -8,7 +8,7 @@ from app.utils.time_tool import parse_time
 from app.schemas.base import BaseOut
 
 
-from app.core.verify import get_current_user, get_admin_user
+from app.apis.deps import get_current_user, get_admin_user, get_gm_user
 
 app = APIRouter()
 
@@ -136,10 +136,10 @@ async def put(
 @app.delete("/{id}", response_model=BaseOut, description="删除项目余额", summary="删除项目余额")
 async def delete(
     id: UUID = Path(..., description="主键ID"),
-    admin_user: dict = Depends(get_admin_user)
+    gm_user: dict = Depends(get_gm_user)
 ):
     """
-    删除项目余额
+    删除项目余额（需要GM或管理员权限）
     """
     try:
         await project_balance_crud.delete(id)

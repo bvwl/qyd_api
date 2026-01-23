@@ -97,15 +97,16 @@ export default function PermissionManage() {
       setTreeLoading(true)
       setError('')
       console.log('开始加载角色路由，角色ID:', roleId)
-      const routes = await getRoleRoutes(roleId)
-      console.log('角色路由响应:', routes)
+      const response = await getRoleRoutes(roleId)
+      console.log('角色路由响应:', response)
       
-      if (Array.isArray(routes)) {
-        const routeIds = extractRouteIds(routes)
-        setCheckedKeys(routeIds)
-        console.log(`成功加载 ${routeIds.length} 个权限`)
+      if (response && response.checked_keys && Array.isArray(response.checked_keys)) {
+        // 只设置叶子节点为选中状态
+        // Tree组件会自动计算父节点的半选状态
+        setCheckedKeys(response.checked_keys)
+        console.log(`成功加载 ${response.checked_keys.length} 个选中的权限（叶子节点）`)
       } else {
-        console.warn('角色路由响应格式异常:', routes)
+        console.warn('角色路由响应格式异常:', response)
         setError('角色路由数据格式异常')
       }
     } catch (error: any) {
@@ -164,6 +165,9 @@ export default function PermissionManage() {
 
     try {
       setSaving(true)
+      // Tree组件的checkedKeys包含所有选中的节点（包括半选的父节点）
+      // 后端会自动补全父节点，所以这里直接传递所有选中的节点即可
+      console.log('保存的权限ID:', checkedKeys)
       await setRoleRoutes(selectedRole.id, checkedKeys)
       message.success('权限保存成功')
     } catch (error) {

@@ -52,13 +52,16 @@ class CRUD:
                         create_time_end: str | int | None = None,
                         update_time_start: str | int | None = None,
                         update_time_end: str | int | None = None,
-                        user_id: UUID | None = None
+                        user_project_ids: list[str] | None = None
                         ) -> OutList:
         query = ProjectAccount.all()
         
-        # 数据权限过滤：如果user_id不为None，则只查询该用户关联的项目的账号
-        if user_id:
-            query = query.filter(project__users__id=user_id)
+        # 数据权限过滤：如果指定了user_project_ids，只返回这些项目的账号
+        if user_project_ids is not None:
+            if len(user_project_ids) == 0:
+                # 如果用户没有关联任何项目，返回空列表
+                return OutList(message='成功', count=0, num=0, items=[])
+            query = query.filter(project_id__in=user_project_ids)
         
         if account:
             query = query.filter(account__icontains=account)

@@ -61,13 +61,21 @@ class CRUD:
                         create_time_end: str | int | None = None,
                         update_time_start: str | int | None = None,
                         update_time_end: str | int | None = None,
-                        user_id: UUID | None = None
+                        user_id: UUID | None = None,
+                        user_project_ids: list[str] | None = None
                         ) -> OutList:
         query = ProjectInfo.all()
         
         # 数据权限过滤：如果指定了user_id，只返回该用户关联的项目
         if user_id:
             query = query.filter(users__id=user_id)
+        
+        # 数据权限过滤：如果指定了user_project_ids，只返回这些项目
+        if user_project_ids is not None:
+            if len(user_project_ids) == 0:
+                # 如果用户没有关联任何项目，返回空列表
+                return OutList(message='成功', count=0, num=0, items=[])
+            query = query.filter(id__in=user_project_ids)
         
         if name:
             query = query.filter(name__icontains=name)
@@ -113,13 +121,20 @@ class CRUD:
                         create_time_end: str | int | None = None,
                         update_time_start: str | int | None = None,
                         update_time_end: str | int | None = None,
-                        user_id: UUID | None = None
+                        user_id: UUID | None = None,
+                        user_project_ids: list[str] | None = None
                         ) -> int:
         query = ProjectInfo.all()
         
         # 数据权限过滤
         if user_id:
             query = query.filter(users__id=user_id)
+        
+        # 数据权限过滤：如果指定了user_project_ids，只返回这些项目
+        if user_project_ids is not None:
+            if len(user_project_ids) == 0:
+                return 0
+            query = query.filter(id__in=user_project_ids)
         
         if name:
             query = query.filter(name__icontains=name)

@@ -5,6 +5,7 @@ import type { Project, ProjectAccount, ProjectWallet, ApiResponse, PaginationPar
 export const getProjectList = (params?: PaginationParams & { 
   name?: string
   status?: number
+  user_id?: string
   create_time_start?: string
   create_time_end?: string
   update_time_start?: string
