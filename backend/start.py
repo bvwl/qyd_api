@@ -59,6 +59,7 @@ def run_server() -> None:
     logging.info(f"启动服务: {host}:{port}")
     logging.info(f"调试模式: {reload}")
     logging.info(f"工作进程: {workers}")
+    logging.info(f"提示: 如需队列处理，请手动运行: python start_queue_worker.py")
 
     uvicorn.run(
         "app.main:app",

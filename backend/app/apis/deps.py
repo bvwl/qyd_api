@@ -51,9 +51,9 @@ async def get_current_user(user_info: dict = Depends(get_current_user_from_jwt))
 async def get_admin_user(user_info: dict = Depends(get_current_user_from_jwt)):
     """验证管理员权限"""
     try:
-        from app.models.user import User
+        from app.models.user import UserInfo
         user_id = UUID(user_info["user_id"])
-        user = await User.filter(id=user_id).prefetch_related("roles").first()
+        user = await UserInfo.filter(id=user_id).prefetch_related("roles").first()
         
         if not user:
             raise HTTPException(status_code=403, detail="User not found")
@@ -74,9 +74,9 @@ async def get_admin_user(user_info: dict = Depends(get_current_user_from_jwt)):
 async def get_gm_user(user_info: dict = Depends(get_current_user_from_jwt)):
     """验证GM权限"""
     try:
-        from app.models.user import User
+        from app.models.user import UserInfo
         user_id = UUID(user_info["user_id"])
-        user = await User.filter(id=user_id).prefetch_related("roles").first()
+        user = await UserInfo.filter(id=user_id).prefetch_related("roles").first()
         
         if not user:
             raise HTTPException(status_code=403, detail="User not found")

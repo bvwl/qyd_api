@@ -1,6 +1,6 @@
 # QYD 后端服务
 
-基于 FastAPI 的高性能异步后端服务，提供完整的RESTful API。
+基于 FastAPI 的高性能异步后端服务，提供完整的RESTful API。支持每秒处理2000-15000条数据，具备企业级特性。
 
 ## 技术栈
 
@@ -133,7 +133,7 @@ python db/init_roles_and_admin.py
 
 ## 启动服务
 
-### 开发模式
+### 开发模式（单进程）
 
 ```bash
 python start.py
@@ -141,14 +141,59 @@ python start.py
 
 服务将在 `http://localhost:6080` 启动
 
-### 生产模式
+配置 `.env`：
+```bash
+APP_WORKERS=1
+ENABLE_QUEUE_WORKERS=1    # 开发环境可以启用队列处理
+```
+
+### 生产模式（分离队列处理）
+
+#### 标准性能（2000条/秒）
 
 ```bash
-# 使用 Docker
-docker-compose up -d
+# 配置环境
+cp .env.high_performance .env
 
-# 或使用 Gunicorn
-gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:6080
+# 终端1：启动HTTP服务
+python start.py
+
+# 终端2：启动队列处理
+python start_queue_worker.py
+```
+
+#### 超高性能（10000+条/秒）
+
+```bash
+# 配置环境
+cp .env.ultra_high_performance .env
+
+# 终端1：启动HTTP服务
+python start.py
+
+# 终端2-4：启动3个队列进程
+python start_queue_worker.py &
+python start_queue_worker.py &
+python start_queue_worker.py &
+```
+
+#### 使用Supervisor管理（推荐）
+
+```bash
+# 安装Supervisor
+sudo apt-get install supervisor
+
+# 配置文件示例见：
+# ../docs/performance/REDIS_QUEUE_SEPARATION_GUIDE.md
+
+# 启动服务
+sudo supervisorctl start qyd:*
+```
+
+### 使用Docker
+
+```bash
+docker-compose up -d
 ```
 
 ## API文档
@@ -157,6 +202,49 @@ gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:6080
 
 - **Swagger UI**: http://localhost:6080/docs
 - **ReDoc**: http://localhost:6080/redoc
+
+## 性能配置
+
+系统支持多种性能配置：
+
+### 配置文件
+
+| 文件 | 性能 | 适用场景 |
+|------|------|---------|
+| `.env.example` | 基础 | 开发环境 |
+| `.env.high_performance` | 2700条/秒 | 生产环境（标准） |
+| `.env.ultra_high_performance` | 12000条/秒 | 生产环境（高负载） |
+
+### 性能测试
+
+```bash
+# 标准测试（10000条数据）
+python test_queue_performance.py
+
+# 超高性能测试（50000条数据）
+python test_ultra_performance.py
+
+# 清理测试数据
+python test_ultra_performance.py --cleanup
+```
+
+### 性能监控
+
+```bash
+# 监控队列大小
+redis-cli ZCARD qyd:project_account_keys_zset
+
+# 监控数据库连接
+mysql -e "SHOW PROCESSLIST;" | wc -l
+
+# 监控Redis连接
+redis-cli INFO clients | grep connected_clients
+```
+
+详细的性能优化指南请参考：
+- [队列分离快速开始](../docs/performance/QUEUE_SEPARATION_QUICK_START.md)
+- [扩展到10000+条/秒](../docs/performance/SCALE_TO_10K_GUIDE.md)
+- [性能快速参考](../docs/performance/PERFORMANCE_QUICK_REFERENCE.md)
 
 ## 核心功能
 
