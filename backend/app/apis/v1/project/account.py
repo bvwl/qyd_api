@@ -154,40 +154,80 @@ async def put(
 @app.delete("/{id}", response_model=BaseOut, description="删除项目账号", summary="删除项目账号")
 async def delete(
     id: UUID = Path(..., description="主键ID"),
-    gm_user: dict = Depends(get_gm_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """
-    删除项目账号（需要GM或管理员权限）
+    删除项目账号
+    - 用户可以删除自己有权限的项目下的账号
+    - 管理员可以删除所有账号
     """
     try:
+        from app.utils.data_permission import filter_by_user_projects, has_resource_access
+        
+        user_id = current_user['user_id']
+        user_roles = current_user.get('roles', [])
+        
+        # 检查是否有访问项目的权限（项目账号属于项目资源）
+        if not has_resource_access(user_roles, 'project'):
+            raise HTTPException(status_code=403, detail="没有访问项目的权限")
+        
+        # 获取要删除的账号
+        account = await project_account_crud.get(id)
+        if not account:
+            raise HTTPException(status_code=404, detail="账号不存在")
+        
+        # 检查项目权限
+        allowed_project_ids = await filter_by_user_projects(user_id)
+        
+        # 如果不是全局权限（ADMIN/GM），检查是否有该项目的权限
+        if allowed_project_ids is not None:
+            if str(account.project_id) not in [str(pid) for pid in allowed_project_ids]:
+                raise HTTPException(status_code=403, detail="没有权限删除该项目下的账号")
+        
+        # 执行删除
         await project_account_crud.delete(id)
         return BaseOut(message="成功", count=1)
     except HTTPException:
         raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except HTTPException:
-        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/upsert", response_model=Out, description="创建或更新项目账号", summary="创建或更新项目账号")
+@app.post("/upsert", response_model=BaseOut, description="创建或更新项目账号（使用Redis队列）", summary="创建或更新项目账号")
 async def post_or_put(
     item: Create = Body(..., description="创建或更新数据"),
     current_user: dict = Depends(get_current_user)
 ):
     """
-    创建或更新项目账号
+    创建或更新项目账号（使用Redis队列异步处理）
+    根据 account 和 project_id 判断是否存在：
+    - 如果存在，只更新传入的非空字段
+    - 如果不存在，创建新记录
+    
+    数据会被添加到Redis队列，由后台worker异步处理
     """
     try:
-        filter_kwargs = {
-            "account": item.account,
-            "project_id": item.project_id,
-        }
-        return await project_account_crud.upsert(filter_kwargs, item)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        from app.utils.project_account_queue import project_account_queue
+        from app.core.settings import REDIS_ENABLED
+        
+        if not REDIS_ENABLED:
+            raise HTTPException(status_code=503, detail="Redis未启用，无法使用队列处理功能")
+        
+        # 转换为字典，使用mode='json'确保UUID和Enum都能被序列化
+        data = item.model_dump(mode='json')
+        
+        # 添加到队列
+        if await project_account_queue.add_to_queue(data):
+            # 获取当前队列大小
+            queue_size = await project_account_queue.get_queue_size()
+            return BaseOut(
+                message=f"成功添加到队列，当前队列大小: {queue_size}",
+                count=1
+            )
+        else:
+            raise HTTPException(status_code=500, detail="添加到队列失败")
     except HTTPException:
         raise
     except Exception as e:

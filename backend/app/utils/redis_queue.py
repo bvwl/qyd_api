@@ -7,7 +7,6 @@ import json
 import time
 from datetime import datetime
 from typing import Dict, List, Any, Optional, Callable
-from loguru import logger
 from redis.asyncio import Redis, ConnectionPool
 from tortoise.transactions import in_transaction
 from tortoise.expressions import Q
@@ -16,6 +15,10 @@ from app.core.settings import (
     REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, REDIS_DB,
     REDIS_MAX_CONNECTIONS, REDIS_TIMEOUT, REDIS_KEY_PREFIX, REDIS_ENABLED
 )
+from app.utils.logs import getLogger
+
+# 使用自定义日志记录器
+logger = getLogger('app')
 
 
 class RedisQueueHandler:
@@ -39,8 +42,10 @@ class RedisQueueHandler:
             batch_size: 每批处理的数量
             num_workers: 工作线程数量
         """
-        self._redis = None
+        self._redis = None  # 队列 Redis (DB 0)
+        self._redis_cache = None  # 缓存 Redis (DB 1)
         self._pool = None
+        self._cache_pool = None
         
         # 队列配置
         self.queue_name = queue_name
@@ -50,6 +55,7 @@ class RedisQueueHandler:
         # Redis key配置
         self.task_key_prefix = f"{REDIS_KEY_PREFIX}{queue_name}_item_"
         self.task_key_zset = f"{REDIS_KEY_PREFIX}{queue_name}_keys_zset"
+        self.cache_key_prefix = f"{REDIS_KEY_PREFIX}{queue_name}_cache_"
         
         # 批处理配置
         self.batch_size = batch_size
@@ -66,22 +72,24 @@ class RedisQueueHandler:
         
         # 数据过期时间
         self.data_expire_seconds = 86400  # 1天
+        self.cache_expire_seconds = 3600  # 缓存1小时
         
         # 工作线程列表
         self._workers = []
         self._running = False
     
     async def init_redis(self):
-        """初始化Redis连接"""
+        """初始化Redis连接（队列DB 0 和 缓存DB 1）"""
         if not REDIS_ENABLED:
             logger.warning("Redis未启用，队列功能将不可用")
             return
         
+        # 初始化队列连接池 (DB 0)
         if not self._pool:
             try:
-                redis_url = f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
+                redis_url = f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
                 if REDIS_PASSWORD:
-                    redis_url = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
+                    redis_url = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/0"
                 
                 self._pool = ConnectionPool.from_url(
                     redis_url,
@@ -92,24 +100,55 @@ class RedisQueueHandler:
                     decode_responses=True,
                     retry_on_timeout=True
                 )
-                logger.info(f"Redis连接池初始化成功 [{self.queue_name}]")
+                logger.info(f"Redis队列连接池初始化成功 (DB 0) [{self.queue_name}]")
             except Exception as e:
-                logger.error(f"Redis连接池初始化失败 [{self.queue_name}]: {e}")
+                logger.error(f"Redis队列连接池初始化失败 [{self.queue_name}]: {e}")
+                raise
+        
+        # 初始化缓存连接池 (DB 1)
+        if not self._cache_pool:
+            try:
+                cache_url = f"redis://{REDIS_HOST}:{REDIS_PORT}/1"
+                if REDIS_PASSWORD:
+                    cache_url = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/1"
+                
+                self._cache_pool = ConnectionPool.from_url(
+                    cache_url,
+                    max_connections=REDIS_MAX_CONNECTIONS,
+                    socket_timeout=REDIS_TIMEOUT,
+                    socket_connect_timeout=REDIS_TIMEOUT,
+                    encoding='utf-8',
+                    decode_responses=True,
+                    retry_on_timeout=True
+                )
+                logger.info(f"Redis缓存连接池初始化成功 (DB 1) [{self.queue_name}]")
+            except Exception as e:
+                logger.error(f"Redis缓存连接池初始化失败 [{self.queue_name}]: {e}")
                 raise
         
         self._redis = Redis(connection_pool=self._pool)
+        self._redis_cache = Redis(connection_pool=self._cache_pool)
     
     async def get_redis(self) -> Redis:
-        """获取Redis连接"""
+        """获取队列Redis连接 (DB 0)"""
         if not self._redis:
             await self.init_redis()
         return self._redis
+    
+    async def get_redis_cache(self) -> Redis:
+        """获取缓存Redis连接 (DB 1)"""
+        if not self._redis_cache:
+            await self.init_redis()
+        return self._redis_cache
     
     async def close(self):
         """关闭Redis连接"""
         if self._redis:
             await self._redis.close()
-            logger.info(f"Redis连接已关闭 [{self.queue_name}]")
+            logger.info(f"Redis队列连接已关闭 [{self.queue_name}]")
+        if self._redis_cache:
+            await self._redis_cache.close()
+            logger.info(f"Redis缓存连接已关闭 [{self.queue_name}]")
     
     def _generate_task_key(self, data: Dict[str, Any]) -> str:
         """根据唯一字段生成任务key"""
@@ -234,49 +273,15 @@ class RedisQueueHandler:
             
             # 处理数据
             try:
-                # 1. 检查Redis缓存，找出未缓存的记录
-                cache_key_prefix = f"{self.task_key_prefix}cache_"
-                uncached_items = []
-                cached_keys = []
-                
-                async with redis.pipeline() as pipe:
-                    for item in items:
-                        # 生成缓存key
-                        key_parts = [str(item.get(field, '')) for field in self.unique_fields]
-                        cache_key = cache_key_prefix + '_'.join(key_parts)
-                        pipe.exists(cache_key)
-                    cache_results = await pipe.execute()
-                
-                # 分离已缓存和未缓存的数据
-                for i, exists in enumerate(cache_results):
-                    if exists:
-                        # 已缓存，说明已经处理过，跳过
-                        cached_keys.append(keys_to_process[i])
-                    else:
-                        # 未缓存，需要处理
-                        uncached_items.append(items[i])
-                
-                if cached_keys:
-                    logger.debug(
-                        f"[Worker-{worker_id}] 跳过 {len(cached_keys)} 条已缓存数据 [{self.queue_name}]"
-                    )
-                
-                if not uncached_items:
-                    # 所有数据都已缓存，直接删除Redis中的任务数据
-                    async with redis.pipeline() as pipe:
-                        for key in keys_to_process:
-                            pipe.delete(key)
-                        await pipe.execute()
-                    return True
-                
-                # 2. 构建查询条件（只查询未缓存的数据）
+                # 1. 构建查询条件
                 query_conditions = []
-                for item in uncached_items:
+                for item in items:
                     condition_dict = {field: item[field] for field in self.unique_fields}
                     query_conditions.append(Q(**condition_dict))
                 
-                # 3. 使用从库批量查询现有记录
+                # 2. 使用从库批量查询现有记录
                 from app.core.settings import get_read_db
+                from tortoise import Tortoise
                 read_db = get_read_db()
                 
                 existing_records = {}
@@ -287,39 +292,105 @@ class RedisQueueHandler:
                         batch_conditions = query_conditions[i:i + batch_size]
                         if batch_conditions:
                             combined_query = Q(*batch_conditions, join_type="OR")
-                            # 使用从库查询
-                            batch_records = await self.model_class.filter(combined_query).using_db(read_db)
+                            # 使用从库查询 - 直接指定connection
+                            batch_records = await self.model_class.filter(combined_query).using_db(Tortoise.get_connection(read_db))
                             for record in batch_records:
-                                # 使用唯一字段组合作为key
-                                key = tuple(getattr(record, field) for field in self.unique_fields)
+                                # 使用唯一字段组合作为key（转为字符串确保类型一致）
+                                key = tuple(str(getattr(record, field)) for field in self.unique_fields)
                                 existing_records[key] = record
                 
-                # 4. 准备批量更新和创建
+                # 3. 准备批量更新和创建
                 updates = []
                 creates = []
                 cache_items = []  # 需要缓存的记录
                 
-                for item in uncached_items:
-                    key = tuple(item[field] for field in self.unique_fields)
+                for item in items:
+                    # 过滤掉None值，避免违反非空约束
+                    # 同时排除 variable 和 balance_history，这两个字段由 balance 自动计算
+                    filtered_item = {
+                        k: v for k, v in item.items() 
+                        if v is not None and k not in ['variable', 'balance_history']
+                    }
+                    
+                    # 构建key时确保类型一致（都转为字符串）
+                    key = tuple(str(item[field]) for field in self.unique_fields)
+                    
+                    # 调试日志
+                    logger.debug(f"[Worker-{worker_id}] 处理数据 key={key}, existing_keys={list(existing_records.keys())}")
+                    
                     if key in existing_records:
-                        # 更新现有记录
+                        # 更新现有记录 - 只更新非空字段
                         record = existing_records[key]
-                        for field, value in item.items():
-                            if field not in self.unique_fields:  # 不更新唯一字段
+                        has_update = False
+                        
+                        # 检查是否传入了 balance
+                        has_balance = 'balance' in filtered_item
+                        
+                        for field, value in filtered_item.items():
+                            # 跳过唯一字段
+                            if field not in self.unique_fields:
                                 setattr(record, field, value)
-                        updates.append(record)
+                                has_update = True
+                        
+                        # 如果传入了 balance，需要计算 variable 和 balance_history
+                        if has_balance:
+                            from datetime import datetime
+                            from decimal import Decimal
+                            
+                            new_balance = Decimal(str(filtered_item['balance']))
+                            today = datetime.now().strftime('%Y-%m-%d')
+                            
+                            # 初始化 balance_history
+                            if record.balance_history is None:
+                                record.balance_history = {}
+                            
+                            # 实时更新当天的余额记录（覆盖，保留6位小数）
+                            record.balance_history[today] = float(new_balance.quantize(Decimal('0.000001')))
+                            
+                            # 按日期排序并保留最近7条记录
+                            sorted_data = dict(sorted(record.balance_history.items(), key=lambda x: x[0], reverse=True))
+                            record.balance_history = dict(list(sorted_data.items())[:7])
+                            
+                            # 实时计算变动余额：当前余额 - 昨天的余额
+                            if len(record.balance_history) >= 2:
+                                dates = list(record.balance_history.keys())
+                                today_balance = Decimal(str(record.balance_history[dates[0]]))  # 今天的余额（最新）
+                                yesterday_balance = Decimal(str(record.balance_history[dates[1]]))  # 昨天的余额
+                                record.variable = (today_balance - yesterday_balance).quantize(Decimal('0.01'))
+                            else:
+                                # 只有今天的记录，variable 等于 balance（从0增加到balance）
+                                record.variable = new_balance.quantize(Decimal('0.01'))
+                            
+                            has_update = True
+                        
+                        # 只有在有实际更新时才添加到更新列表
+                        if has_update:
+                            updates.append(record)
                         cache_items.append((key, "update"))
                     else:
-                        # 创建新记录
-                        creates.append(self.model_class(**item))
+                        # 创建新记录 - 使用过滤后的数据
+                        # 如果传入了 balance，需要初始化 variable 和 balance_history
+                        if 'balance' in filtered_item:
+                            from datetime import datetime
+                            from decimal import Decimal
+                            
+                            new_balance = Decimal(str(filtered_item['balance']))
+                            today = datetime.now().strftime('%Y-%m-%d')
+                            
+                            # 初始化 balance_history（记录当天的余额，保留6位小数）
+                            filtered_item['balance_history'] = {today: float(new_balance.quantize(Decimal('0.000001')))}
+                            # 创建时变动余额等于当前余额（从0增加到balance）
+                            filtered_item['variable'] = new_balance.quantize(Decimal('0.01'))
+                        
+                        creates.append(self.model_class(**filtered_item))
                         cache_items.append((key, "create"))
                 
-                # 5. 批量执行数据库操作（使用主库，在事务中）
+                # 4. 批量执行数据库操作（使用主库，在事务中）
                 async with in_transaction(connection_name="default"):
                     if updates:
                         # 获取需要更新的字段（排除唯一字段）
                         update_fields = [
-                            field for field in uncached_items[0].keys() 
+                            field for field in items[0].keys() 
                             if field not in self.unique_fields
                         ]
                         # 分批更新
@@ -346,31 +417,30 @@ class RedisQueueHandler:
                     f"更新 {len(updates)}，创建 {len(creates)}"
                 )
                 
-                # 6. 在另一个管道中批量添加Redis缓存（独立于数据库事务）
+                # 5. 在Redis DB 1中批量添加缓存（独立于数据库事务）
                 try:
-                    from app.core.settings import REDIS_QUEUE_CACHE_EXPIRE
-                    cache_expire_seconds = REDIS_QUEUE_CACHE_EXPIRE
+                    redis_cache = await self.get_redis_cache()
                     
-                    async with redis.pipeline() as cache_pipe:
+                    async with redis_cache.pipeline() as cache_pipe:
                         for key, operation in cache_items:
                             key_parts = [str(k) for k in key]
-                            cache_key = cache_key_prefix + '_'.join(key_parts)
-                            # 设置缓存，值为操作类型
-                            cache_pipe.setex(cache_key, cache_expire_seconds, operation)
+                            cache_key = self.cache_key_prefix + '_'.join(key_parts)
+                            # 设置缓存到 DB 1，值为操作类型，过期时间1小时
+                            cache_pipe.setex(cache_key, self.cache_expire_seconds, operation)
                         await cache_pipe.execute()
                     
                     logger.debug(
-                        f"[Worker-{worker_id}] 缓存添加成功 [{self.queue_name}]，"
-                        f"缓存 {len(cache_items)} 条记录"
+                        f"[Worker-{worker_id}] 缓存添加成功 (DB 1) [{self.queue_name}]，"
+                        f"缓存 {len(cache_items)} 条记录，过期时间 {self.cache_expire_seconds}秒"
                     )
                 except Exception as cache_error:
                     # 缓存操作失败不影响主流程，只记录警告
                     logger.warning(
-                        f"[Worker-{worker_id}] 缓存添加失败 [{self.queue_name}]: {cache_error}，"
+                        f"[Worker-{worker_id}] 缓存添加失败 (DB 1) [{self.queue_name}]: {cache_error}，"
                         f"数据库操作已成功，将继续处理"
                     )
                 
-                # 7. 在另一个管道中删除Redis任务数据（独立操作）
+                # 6. 在另一个管道中删除Redis任务数据（独立操作）
                 try:
                     async with redis.pipeline() as delete_pipe:
                         for key in keys_to_process:
@@ -389,13 +459,13 @@ class RedisQueueHandler:
                 
                 # 最终成功日志
                 logger.info(
-                    f"[Worker-{worker_id}] 成功处理 {len(uncached_items)} 条数据 [{self.queue_name}]，"
-                    f"更新 {len(updates)}，创建 {len(creates)}，跳过缓存 {len(cached_keys)}"
+                    f"[Worker-{worker_id}] 成功处理 {len(items)} 条数据 [{self.queue_name}]，"
+                    f"更新 {len(updates)}，创建 {len(creates)}"
                 )
                 return True
                 
             except Exception as db_error:
-                logger.error(f"[Worker-{worker_id}] 数据库操作失败 [{self.queue_name}]: {db_error}")
+                logger.error(f"[Worker-{worker_id}] 数据库操作失败 [{self.queue_name}]: {db_error}", exc_info=True)
                 # 数据库操作失败，重新添加到队列
                 try:
                     current_time = time.time()

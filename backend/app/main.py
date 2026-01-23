@@ -166,30 +166,36 @@ async def lifespan(app: FastAPI):
     scheduler.start()
     scheduler_logger.info("调度器已启动")
     
-    # 启动Redis队列处理
-    try:
-        from app.core.settings import REDIS_ENABLED
-        if REDIS_ENABLED:
-            from app.utils.project_account_queue import project_account_queue
-            await project_account_queue.start()
-            app_logger.info("Redis队列处理已启动")
-        else:
-            app_logger.info("Redis未启用，跳过队列处理启动")
-    except Exception as e:
-        app_logger.warning(f"Redis队列处理启动失败: {e}")
-    
-    try:
-        yield
-    finally:
-        # 停止Redis队列处理
+    # 启动Redis队列处理（可通过环境变量控制）
+    enable_queue_workers = os.getenv("ENABLE_QUEUE_WORKERS", "0").lower() in ("1", "true", "yes")
+    if enable_queue_workers:
         try:
             from app.core.settings import REDIS_ENABLED
             if REDIS_ENABLED:
                 from app.utils.project_account_queue import project_account_queue
-                await project_account_queue.stop()
-                app_logger.info("Redis队列处理已停止")
+                await project_account_queue.start()
+                app_logger.info("Redis队列处理已启动")
+            else:
+                app_logger.info("Redis未启用，跳过队列处理启动")
         except Exception as e:
-            app_logger.warning(f"Redis队列处理停止失败: {e}")
+            app_logger.warning(f"Redis队列处理启动失败: {e}")
+    else:
+        app_logger.info("队列处理已禁用（ENABLE_QUEUE_WORKERS=0）")
+    
+    try:
+        yield
+    finally:
+        # 停止Redis队列处理（如果启用）
+        enable_queue_workers = os.getenv("ENABLE_QUEUE_WORKERS", "0").lower() in ("1", "true", "yes")
+        if enable_queue_workers:
+            try:
+                from app.core.settings import REDIS_ENABLED
+                if REDIS_ENABLED:
+                    from app.utils.project_account_queue import project_account_queue
+                    await project_account_queue.stop()
+                    app_logger.info("Redis队列处理已停止")
+            except Exception as e:
+                app_logger.warning(f"Redis队列处理停止失败: {e}")
         
         await shutdown_handler()
 

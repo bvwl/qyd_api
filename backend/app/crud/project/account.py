@@ -1,5 +1,6 @@
 from uuid import UUID
 from datetime import datetime
+from decimal import Decimal
 from fastapi import HTTPException
 
 from app.models.project import ProjectAccount
@@ -11,21 +12,37 @@ from app.utils.time_tool import parse_time
 class CRUD:
     # 创建
     async def create(self, item: Create) -> Out:
-        # 处理外键字段
-        data = item.model_dump(exclude={'project_id', 'server_id', 'balance', 'variable', 'balance_history'})
-        if item.project_id:
-            data['project_id'] = item.project_id
-        if item.server_id:
-            data['server_id'] = item.server_id
+        # 过滤掉None值和需要自动计算的字段
+        filtered_item = {
+            k: v for k, v in item.model_dump().items() 
+            if v is not None and k not in ['variable', 'balance_history']
+        }
         
-        # 余额字段：如果传入则使用，否则使用默认值0
-        data['balance'] = item.balance if item.balance is not None else 0
-        data['variable'] = 0  # 创建时变动余额为0
-        data['balance_history'] = {}  # 创建时历史为空
-
-        res = await ProjectAccount.create(**data)
+        # 先创建记录
+        res = await ProjectAccount.create(**filtered_item)
         if not res:
             raise HTTPException(status_code=500, detail='创建失败')
+        
+        # 如果传入了 balance，需要更新 variable 和 balance_history
+        if 'balance' in filtered_item:
+            new_balance = Decimal(str(filtered_item['balance']))
+            today = datetime.now().strftime('%Y-%m-%d')
+            
+            # 初始化 balance_history（首次创建只有今天的记录）
+            balance_history = {today: float(new_balance.quantize(Decimal('0.000001')))}
+            
+            # 首次创建，variable 等于 balance（从0增加到balance）
+            variable = new_balance.quantize(Decimal('0.01'))
+            
+            # 使用 update 方法更新字段
+            await ProjectAccount.filter(id=res.id).update(
+                balance_history=balance_history,
+                variable=variable
+            )
+            
+            # 重新查询
+            res = await ProjectAccount.get(id=res.id)
+        
         await res.fetch_related('project', 'server')
         return Out.model_validate(res)
 
@@ -124,8 +141,8 @@ class CRUD:
             if res.balance_history is None:
                 res.balance_history = {}
             
-            # 实时更新当天的余额记录（覆盖）
-            res.balance_history[today] = float(new_balance)
+            # 实时更新当天的余额记录（覆盖，保留6位小数）
+            res.balance_history[today] = float(new_balance.quantize(Decimal('0.000001')))
             
             # 按日期排序并保留最近7条记录
             sorted_data = dict(sorted(res.balance_history.items(), key=lambda x: x[0], reverse=True))
@@ -134,11 +151,12 @@ class CRUD:
             # 实时计算变动余额：当前余额 - 昨天的余额
             if len(res.balance_history) >= 2:
                 dates = list(res.balance_history.keys())
-                today_balance = res.balance_history[dates[0]]  # 今天的余额（最新）
-                yesterday_balance = res.balance_history[dates[1]]  # 昨天的余额
-                update_data['variable'] = today_balance - yesterday_balance
+                today_balance = Decimal(str(res.balance_history[dates[0]]))  # 今天的余额（最新）
+                yesterday_balance = Decimal(str(res.balance_history[dates[1]]))  # 昨天的余额
+                update_data['variable'] = (today_balance - yesterday_balance).quantize(Decimal('0.01'))
             else:
-                update_data['variable'] = 0
+                # 只有今天的记录，variable 等于 balance（从0增加到balance）
+                update_data['variable'] = new_balance.quantize(Decimal('0.01'))
             
             update_data['balance'] = new_balance
             update_data['balance_history'] = res.balance_history
@@ -161,6 +179,11 @@ class CRUD:
 
     # 创建或更新
     async def upsert(self, item: Create) -> Out:
+        """
+        创建或更新项目账号
+        - 如果记录存在，只更新传入的非空字段（类似PUT）
+        - 如果记录不存在，创建新记录
+        """
         # 获取当前日期
         today = datetime.now().strftime('%Y-%m-%d')
         
@@ -171,7 +194,16 @@ class CRUD:
         )
         
         if existing:
-            # 如果记录存在，更新余额
+            # 如果记录存在，只更新非空字段
+            # 使用 exclude_unset=True 排除未设置的字段
+            # 使用 exclude_none=True 排除值为None的字段
+            update_data = item.model_dump(
+                exclude_unset=True,
+                exclude_none=True,
+                exclude={'balance', 'variable', 'balance_history', 'project_id', 'account'}
+            )
+            
+            # 如果传入了余额，需要计算变动余额和更新历史
             if item.balance is not None:
                 new_balance = item.balance
                 
@@ -179,8 +211,8 @@ class CRUD:
                 if existing.balance_history is None:
                     existing.balance_history = {}
                 
-                # 实时更新当天的余额记录（覆盖）
-                existing.balance_history[today] = float(new_balance)
+                # 实时更新当天的余额记录（覆盖，保留6位小数）
+                existing.balance_history[today] = float(new_balance.quantize(Decimal('0.000001')))
                 
                 # 按日期排序并保留最近7条记录
                 sorted_data = dict(sorted(existing.balance_history.items(), key=lambda x: x[0], reverse=True))
@@ -189,13 +221,19 @@ class CRUD:
                 # 实时计算变动余额：当前余额 - 昨天的余额
                 if len(existing.balance_history) >= 2:
                     dates = list(existing.balance_history.keys())
-                    today_balance = existing.balance_history[dates[0]]  # 今天的余额（最新）
-                    yesterday_balance = existing.balance_history[dates[1]]  # 昨天的余额
-                    existing.variable = today_balance - yesterday_balance
+                    today_balance = Decimal(str(existing.balance_history[dates[0]]))  # 今天的余额（最新）
+                    yesterday_balance = Decimal(str(existing.balance_history[dates[1]]))  # 昨天的余额
+                    update_data['variable'] = (today_balance - yesterday_balance).quantize(Decimal('0.01'))
                 else:
-                    existing.variable = 0
+                    # 只有今天的记录，variable 等于 balance（从0增加到balance）
+                    update_data['variable'] = new_balance.quantize(Decimal('0.01'))
                 
-                existing.balance = new_balance
+                update_data['balance'] = new_balance
+                update_data['balance_history'] = existing.balance_history
+            
+            # 只有在有更新数据时才执行更新
+            if update_data:
+                await existing.update_from_dict(update_data)
                 await existing.save()
             
             await existing.fetch_related('project', 'server')
