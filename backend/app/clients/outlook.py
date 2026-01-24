@@ -80,8 +80,8 @@ class AzureAuthManager(Req):
         从数据库读取邮箱配置和代理信息
         
         逻辑说明：
-        1. 查询 EmailInfo 模型，预加载 server_info 关联表。
-        2. 如果存在 server_info，根据端口号范围配置代理类型：
+        1. 查询 EmailInfo 模型，预加载 server 关联表。
+        2. 如果存在 server，根据端口号范围配置代理类型：
            - 20000 <= port < 30000: 使用 HTTP 代理
            - 30000 <= port < 40000: 使用 SOCKS5 代理
         3. 加载 client_id, access_token, refresh_token 到内存。
@@ -91,13 +91,14 @@ class AzureAuthManager(Req):
             1: 已配置 (完整配置)
             2: 仅配置了客户端ID (等待授权)
         """
-        mail_info = await EmailInfo.get_or_none(email=self.email).prefetch_related("server_info")
+        mail_info = await EmailInfo.get_or_none(email=self.email).prefetch_related("server")
         if mail_info:
             self.client_id = mail_info.client_id
             self.access_token = mail_info.access_token
             self.refresh_token_value = mail_info.refresh_token
-            server = await mail_info.server_info
-            if server:
+            # server 可能为 None，需要检查
+            if mail_info.server:
+                server = mail_info.server
                 host = server.domain or server.host
                 port = server.port
                 # 根据端口范围区分代理协议

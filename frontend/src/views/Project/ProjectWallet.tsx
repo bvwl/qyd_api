@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Modal, Form, Input, message, Space, Popconfirm, DatePicker, Select } from 'antd'
+import { Table, Button, Modal, Form, Input, App, Space, Popconfirm, DatePicker, Select } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, EyeOutlined, EyeInvisibleOutlined, SearchOutlined } from '@ant-design/icons'
 import type { ProjectWallet, Project } from '@/types'
 import { getProjectWalletList, createProjectWallet, updateProjectWallet, deleteProjectWallet, getProjectList } from '@/api/project'
@@ -12,6 +12,7 @@ const { RangePicker } = DatePicker
 type SortOrder = 'ascend' | 'descend' | null
 
 const ProjectWalletList = () => {
+  const { message } = App.useApp()
   const [data, setData] = useState<ProjectWallet[]>([])
   const [loading, setLoading] = useState(false)
   const [total, setTotal] = useState(0)

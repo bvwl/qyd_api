@@ -190,6 +190,7 @@ export interface ServerInfo {
   domain?: string
   is_sale: number
   port?: number
+  proxy_url?: string  // SOCKS5代理URL
   group_id?: string
   group?: ServerGroup
   create_time: string

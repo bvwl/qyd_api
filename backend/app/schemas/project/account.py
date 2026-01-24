@@ -105,3 +105,41 @@ class OutList(BaseModel):
     count: int = Field(0, description="总数")
     num: int = Field(0, description="当前数量")
     items: List[Out] = Field([], description="列表数据")
+
+
+class BalanceStats(BaseModel):
+    """
+    余额统计数据模型
+    """
+    max: float = Field(0.0, description="最高分")
+    min: float = Field(0.0, description="最低分")
+    avg: float = Field(0.0, description="平均分")
+    sum: float = Field(0.0, description="总分")
+
+
+class VariableStats(BaseModel):
+    """
+    变动统计数据模型
+    """
+    max: float = Field(0.0, description="变动最高分")
+    min: float = Field(0.0, description="变动最低分")
+    avg: float = Field(0.0, description="变动平均分")
+    sum: float = Field(0.0, description="变动总分")
+
+
+class StatsData(BaseModel):
+    """
+    统计数据模型
+    """
+    total_count: int = Field(0, description="统计账号数量")
+    balance: BalanceStats = Field(..., description="余额统计")
+    variable: VariableStats = Field(..., description="变动统计")
+
+
+class StatsOut(BaseModel):
+    """
+    统计输出模型
+    """
+    code: int = Field(1, description="状态码")
+    message: str = Field("成功", description="提示信息")
+    data: StatsData = Field(..., description="统计数据")

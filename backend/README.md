@@ -10,9 +10,10 @@
 - **缓存/队列**: Redis 7.0
 - **认证**: JWT (python-jose)
 - **密码加密**: bcrypt
+- **数据加密**: AES-CBC (Crypto.Cipher)
 - **数据验证**: Pydantic
 - **任务调度**: APScheduler
-- **日志**: 自定义日志系统 (按模块分类、自动轮转压缩)
+- **日志**: 自定义日志系统 (按模块分类、自动轮转压缩、90天保留期)
 - **邮件集成**: Outlook API
 - **API文档**: Swagger UI / ReDoc (自动生成)
 
@@ -42,7 +43,9 @@ backend/
 │   │   ├── time_tool.py   # 时间处理
 │   │   ├── logs.py        # 日志工具
 │   │   ├── redis_queue.py # Redis队列基类
-│   │   └── project_account_queue.py  # 项目账号队列
+│   │   ├── project_account_queue.py  # 项目账号队列
+│   │   ├── project_crypto.py  # 项目账号加密工具
+│   │   └── aes_crypto.py  # AES加密工具
 │   ├── clients/           # 外部客户端 (Outlook等)
 │   ├── logs/              # 日志配置
 │   └── main.py            # 应用入口
@@ -52,7 +55,14 @@ backend/
 │   └── README.md
 ├── migrations/            # 数据库迁移
 ├── logs/                  # 日志文件目录
+│   ├── api/2026/01/25/   # API日志（按年/月/日组织）
+│   ├── app/2026/01/25/   # 应用日志
+│   ├── database/2026/01/25/  # 数据库日志
+│   └── scheduler/2026/01/25/ # 调度器日志
 ├── tests/                 # 测试文件
+│   ├── test_project_account_encryption.py  # 加密功能测试
+│   ├── test_queue_encryption.py  # 队列加密测试
+│   └── test_log_structure.py  # 日志结构测试
 ├── scripts/               # 工具脚本
 ├── .env.example           # 环境变量示例
 ├── requirements.txt       # Python依赖
@@ -288,14 +298,24 @@ is_valid = hashing.verify("password", hashed)
 
 ### 4. 日志系统
 
-日志按模块分类：
+日志按模块分类，自动轮转压缩，保留90天：
 
-- `logs/app.log` - 应用日志
-- `logs/api.log` - API请求日志
-- `logs/database.log` - 数据库日志
-- `logs/scheduler.log` - 定时任务日志
+- `logs/api/年/月/日/api.log.时间戳.gz` - API请求日志
+- `logs/app/年/月/日/app.log.时间戳.gz` - 应用日志
+- `logs/database/年/月/日/database.log.时间戳.gz` - 数据库日志
+- `logs/scheduler/年/月/日/scheduler.log.时间戳.gz` - 定时任务日志
 
-日志自动按小时轮转和压缩。
+日志自动按小时轮转和压缩，超过90天自动删除。
+
+**测试日志结构**：
+```bash
+python test_log_structure.py
+```
+
+**整理旧日志**：
+```bash
+python scripts/organize_logs.py
+```
 
 ### 5. 异常处理
 
@@ -380,6 +400,58 @@ await User.create(email="test@example.com")
 # 显式指定使用主库
 users = await User.all().using_db(Tortoise.get_connection("default"))
 ```
+
+### 9. 项目账号敏感数据加密
+
+系统支持项目账号敏感字段的自动加密：
+
+**加密规则**：
+- **加密字段**: `private_key`、`mnemonic`
+- **加密方式**: AES-CBC
+- **密钥**: MD5(项目名称 + "9527")
+- **IV**: MD5("9527" + 项目名称)[:16]
+- **递归加密**: 支持所有层级的嵌套对象和数组
+
+**权限控制**：
+- **ADMIN**: 可以解密所有项目
+- **项目所属人**: 可以解密自己的项目
+- **其他用户**: 只能看到密文
+
+**使用方式**：
+```python
+from app.utils.project_crypto import encrypt_sensitive_fields, decrypt_sensitive_fields
+
+# 加密（创建/更新时自动调用）
+encrypted_data = encrypt_sensitive_fields(data, project_name)
+
+# 解密（查询时根据权限自动调用）
+decrypted_data = decrypt_sensitive_fields(encrypted_data, project_name)
+```
+
+**测试加密功能**：
+```bash
+# 测试加密/解密
+python test_project_account_encryption.py
+
+# 测试队列加密
+python test_queue_encryption.py
+```
+
+**特性**：
+- ✅ 创建/更新时自动加密
+- ✅ 查询时根据权限自动解密
+- ✅ Redis队列数据自动加密
+- ✅ 每个项目使用独立密钥
+- ✅ 递归处理所有层级
+
+**⚠️ 重要提醒**：
+- 项目名称不能修改，否则无法解密旧数据
+- 现有数据不会自动加密，需要手动迁移
+
+详细文档：
+- [项目账号加密详细文档](../docs/encryption/PROJECT_ACCOUNT_ENCRYPTION.md)
+- [加密快速参考](../docs/encryption/PROJECT_ACCOUNT_ENCRYPTION_QUICK_REF.md)
+- [加密流程图](../docs/encryption/PROJECT_ACCOUNT_ENCRYPTION_FLOW.md)
 
 ## API规范
 

@@ -5,13 +5,14 @@
 ## ✨ 核心特性
 
 - 🚀 **高性能**: 支持每秒处理2000-15000条数据（可扩展）
-- 🔐 **安全认证**: JWT Token认证，bcrypt密码加密
+- 🔐 **安全认证**: JWT Token认证，bcrypt密码加密，AES-CBC敏感数据加密
 - 👥 **RBAC权限**: 基于角色的访问控制，动态菜单
 - 📊 **读写分离**: MySQL主从架构，提升数据库性能
 - 🔄 **异步队列**: Redis队列批量处理，避免接口阻塞
-- 📝 **完善日志**: 按模块分类，自动轮转压缩
+- 📝 **完善日志**: 按模块分类，自动轮转压缩，90天保留期
 - 📧 **邮件集成**: Outlook API集成，HTML邮件查看器
 - 📱 **响应式UI**: 基于Ant Design 5，适配多种设备
+- 🔒 **数据加密**: 项目账号敏感字段自动加密，基于权限解密
 
 ## 📋 目录
 
@@ -112,8 +113,10 @@ npm run dev
 ### 项目管理
 - ✅ 项目信息管理
 - ✅ 项目账号管理 (支持批量操作)
+- ✅ 项目账号敏感数据加密 (AES-CBC，基于权限解密)
 - ✅ 项目钱包管理
-- ✅ 项目余额管理
+- ✅ 项目余额管理 (自动计算变动)
+- ✅ 项目统计和导出 (Excel)
 - ✅ 多状态支持 (正常、维护、结束等)
 
 ### 服务器管理
@@ -125,16 +128,19 @@ npm run dev
 ### 邮箱管理
 - ✅ 邮箱信息管理
 - ✅ Outlook集成
-- ✅ 邮件查看器 (支持HTML渲染、搜索、缓存)
+- ✅ 邮件查看 (支持HTML渲染、搜索、缓存)
+- ✅ 发送邮件功能
 - ✅ 邮箱状态监控
 - ✅ 8种邮箱类型支持
 
 ### 企业级特性
 - ✅ **RBAC权限控制**: 基于角色的访问控制，动态菜单
+- ✅ **数据加密**: 项目账号敏感字段AES-CBC加密，每个项目独立密钥
+- ✅ **权限解密**: 只有项目所属人和ADMIN可以解密敏感数据
 - ✅ **Redis队列**: 批量数据处理，避免接口阻塞
 - ✅ **智能缓存**: Redis缓存优化，减少数据库查询
 - ✅ **读写分离**: MySQL主从架构，提升性能
-- ✅ **日志系统**: 按模块分类、自动轮转压缩
+- ✅ **日志系统**: 按模块分类、自动轮转压缩、90天保留期
 - ✅ **异常处理**: 统一的错误处理机制
 - ✅ **高性能**: 支持2000-15000条/秒数据处理
 
@@ -225,6 +231,11 @@ qyd_api2/
 │   ├── tests/                  # 测试文件
 │   └── package.json            # 依赖配置
 ├── docs/                       # 项目文档
+│   ├── encryption/             # 加密功能文档
+│   ├── logs/                   # 日志管理文档
+│   ├── export/                 # 导出功能文档
+│   ├── server/                 # 服务器管理文档
+│   ├── mail/                   # 邮件功能文档
 │   ├── performance/            # 性能优化文档
 │   ├── guides/                 # 使用指南
 │   ├── summaries/              # 功能总结
@@ -237,6 +248,7 @@ qyd_api2/
 │   ├── test/                   # 测试脚本
 │   ├── debug/                  # 调试脚本
 │   └── utils/                  # 工具脚本
+├── QUICK_START_GUIDE.md        # 快速开始指南
 └── README.md                   # 项目说明文档
 ```
 
@@ -310,6 +322,26 @@ sudo apt-get install supervisor
 
 ## 📖 文档
 
+### 快速开始
+- [QUICK_START_GUIDE.md](QUICK_START_GUIDE.md) - 快速开始指南（推荐）
+
+### 加密功能文档 (`docs/encryption/`)
+
+| 文档 | 说明 |
+|------|------|
+| [PROJECT_ACCOUNT_ENCRYPTION.md](docs/encryption/PROJECT_ACCOUNT_ENCRYPTION.md) | 项目账号加密详细文档 |
+| [PROJECT_ACCOUNT_ENCRYPTION_QUICK_REF.md](docs/encryption/PROJECT_ACCOUNT_ENCRYPTION_QUICK_REF.md) | 加密功能快速参考 |
+| [PROJECT_ACCOUNT_ENCRYPTION_FLOW.md](docs/encryption/PROJECT_ACCOUNT_ENCRYPTION_FLOW.md) | 加密流程图 |
+| [SOCKS5_ACCOUNT_AES_ENCRYPTION.md](docs/encryption/SOCKS5_ACCOUNT_AES_ENCRYPTION.md) | SOCKS5账号加密 |
+
+### 日志管理文档 (`docs/logs/`)
+
+| 文档 | 说明 |
+|------|------|
+| [LOG_SYSTEM_COMPLETE.md](docs/logs/LOG_SYSTEM_COMPLETE.md) | 日志系统完整文档 |
+| [LOG_QUICK_REFERENCE.md](docs/logs/LOG_QUICK_REFERENCE.md) | 日志快速参考 |
+| [LOG_MANAGEMENT_UPDATE.md](docs/logs/LOG_MANAGEMENT_UPDATE.md) | 日志管理更新说明 |
+
 ### 性能优化文档 (`docs/performance/`)
 
 | 文档 | 说明 |
@@ -319,6 +351,12 @@ sudo apt-get install supervisor
 | [SCALE_TO_10K_GUIDE.md](docs/performance/SCALE_TO_10K_GUIDE.md) | 扩展到10000+条/秒指南 |
 | [PERFORMANCE_QUICK_REFERENCE.md](docs/performance/PERFORMANCE_QUICK_REFERENCE.md) | 性能配置快速参考 |
 | [UVICORN_WORKERS_VS_REDIS_WORKERS.md](docs/performance/UVICORN_WORKERS_VS_REDIS_WORKERS.md) | Uvicorn Workers问题详解 |
+
+### 导出功能文档 (`docs/export/`)
+
+- 项目统计导出功能
+- Excel导出实现
+- 导出状态列和修复
 
 ### 使用指南 (`docs/guides/`)
 
@@ -335,6 +373,8 @@ sudo apt-get install supervisor
 - 钱包功能更新
 - 项目用户管理
 - 复制ID功能
+- 项目账号功能总结
+- 项目整理总结
 
 ### RBAC设计文档 (`docs/rbac/`)
 
@@ -470,6 +510,25 @@ mysql -u qyd -p qyd < backup_20260123.sql
 
 ## 📝 更新日志
 
+### v1.1.0 (2026-01-25)
+
+**新功能**：
+- ✅ 项目账号敏感数据加密（AES-CBC，每个项目独立密钥）
+- ✅ 基于权限的自动解密（只有项目所属人和ADMIN可以解密）
+- ✅ Redis队列数据自动加密
+- ✅ 日志系统优化（90天保留期，四层目录结构）
+- ✅ 邮件菜单修复和优化
+
+**安全增强**：
+- ✅ 敏感字段递归加密（支持所有层级）
+- ✅ 每个项目使用独立密钥
+- ✅ 权限隔离，防止数据泄露
+
+**文档更新**：
+- ✅ 加密功能完整文档
+- ✅ 日志管理文档
+- ✅ 快速开始指南
+
 ### v1.0.0 (2026-01-23)
 
 **新功能**：
@@ -506,5 +565,5 @@ mysql -u qyd -p qyd < backup_20260123.sql
 ---
 
 **项目状态**: ✅ 生产就绪  
-**最后更新**: 2026-01-23  
-**版本**: v1.0.0
+**最后更新**: 2026-01-25  
+**版本**: v1.1.0

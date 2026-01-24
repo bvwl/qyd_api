@@ -73,26 +73,25 @@ export const checkEmailStatus = (data: {
   return api.post<any, ApiResponse>('/v1/mail/outlook/check', data)
 }
 
-// 获取收件箱邮件列表
+// 获取收件箱邮件列表（使用 messages 接口）
 export const getInboxMessages = (params: {
   email: string
   top?: number
 }) => {
-  return api.get<any, {
+  return api.post<any, {
     code: number
     message: string
     data: Array<{
-      id: string
-      subject: string
-      from: string
-      from_name: string
-      received_time: string
-      body_preview: string
-      has_attachments: boolean
-      is_read: boolean
+      from_email: string
+      title: string
+      content: string
     }>
-    count: number
-  }>('/v1/mail/outlook/inbox', { params })
+  }>('/v1/mail/outlook/messages', {
+    email: params.email,
+    from_email: '@',  // @ 表示查看所有邮件
+    num: params.top || 10,  // 默认获取10条
+    top: params.top || 10
+  })
 }
 
 // 获取邮件详情

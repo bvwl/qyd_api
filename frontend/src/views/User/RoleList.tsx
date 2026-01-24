@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Modal, Form, Input, message, Space, Popconfirm, Tag, DatePicker } from 'antd'
+import { Table, Button, Modal, Form, Input, App, Space, Popconfirm, Tag, DatePicker } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined } from '@ant-design/icons'
 import type { Role } from '@/types'
 import { getRoleList, createRole, updateRole, deleteRole } from '@/api/user'
@@ -9,6 +9,7 @@ import { Dayjs } from 'dayjs'
 const { RangePicker } = DatePicker
 
 const RoleList = () => {
+  const { message } = App.useApp()
   const [data, setData] = useState<Role[]>([])
   const [loading, setLoading] = useState(false)
   const [total, setTotal] = useState(0)

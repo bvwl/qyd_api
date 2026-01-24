@@ -31,12 +31,12 @@ def getLogger(name: str = 'root') -> Logger:
         # 日志文件路径
         log_file = os.path.join(log_dir, f"{name}.log")
 
-        # 文件处理器：每2小时滚动一次，保留30天，共360个文件，支持多进程写入
+        # 文件处理器：每2小时滚动一次，保留90天（3个月），共1080个文件，支持多进程写入
         file_handler = TimedRotatingFileHandler(
             filename=log_file,
             when='H',
             interval=2,             # 每2小时切一次
-            backupCount=360,        # 保留30天 = 30 * 24 / 2 = 360个文件
+            backupCount=1080,       # 保留90天 = 90 * 24 / 2 = 1080个文件
             encoding='utf-8',
             delay=False,
             utc=False  # 你也可以改成 True 表示按 UTC 时间切
@@ -61,25 +61,67 @@ def getLogger(name: str = 'root') -> Logger:
         logger.addHandler(file_handler)
 
         # 添加压缩功能和清理旧日志（在第一次创建 logger 时执行一次）
-        _compress_old_logs(log_dir, name)
-        delete_old_compressed_logs(log_dir, days=30)
+        _compress_and_organize_logs(log_dir, name)
+        delete_old_compressed_logs(log_dir, days=90)  # 改为90天（3个月）
 
     return logger
 
 
-def _compress_old_logs(log_dir: str, name: str):
+def _compress_and_organize_logs(log_dir: str, name: str):
     """
-    将旧日志压缩成 .gz 格式
+    将旧日志压缩并按照 日志名称/年/月/日 的目录结构组织
+    例如: logs/api/2026/01/25/api.log.2026-01-25_14.gz
     """
     pattern = os.path.join(log_dir, f"{name}.log.*")
     for filepath in glob.glob(pattern):
         if filepath.endswith('.gz'):
             continue
+        
         try:
-            with open(filepath, 'rb') as f_in:
-                with gzip.open(filepath + '.gz', 'wb') as f_out:
-                    shutil.copyfileobj(f_in, f_out)
-            os.remove(filepath)
+            # 从文件名中提取日期时间信息
+            # 格式: api.log.2026-01-25_14
+            filename = os.path.basename(filepath)
+            parts = filename.split('.')
+            
+            if len(parts) >= 3:
+                # 提取日期时间部分（最后一部分）
+                datetime_str = parts[-1]
+                
+                # 解析日期
+                if '_' in datetime_str:
+                    date_part = datetime_str.split('_')[0]  # 2026-01-25
+                    year = date_part[:4]  # 2026
+                    month = date_part[5:7]  # 01
+                    day = date_part[8:10]  # 25
+                else:
+                    # 如果格式不对，使用文件修改时间
+                    file_mtime = datetime.fromtimestamp(os.path.getmtime(filepath))
+                    year = file_mtime.strftime('%Y')
+                    month = file_mtime.strftime('%m')
+                    day = file_mtime.strftime('%d')
+                
+                # 创建目标目录结构: logs/日志名称/年/月/日
+                target_dir = os.path.join(log_dir, name, year, month, day)
+                os.makedirs(target_dir, exist_ok=True)
+                
+                # 压缩文件
+                gz_filename = filename + '.gz'
+                target_path = os.path.join(target_dir, gz_filename)
+                
+                with open(filepath, 'rb') as f_in:
+                    with gzip.open(target_path, 'wb') as f_out:
+                        shutil.copyfileobj(f_in, f_out)
+                
+                # 删除原文件
+                os.remove(filepath)
+                print(f"日志已压缩并移动: {filepath} -> {target_path}")
+            else:
+                # 如果文件名格式不对，直接压缩到当前目录
+                with open(filepath, 'rb') as f_in:
+                    with gzip.open(filepath + '.gz', 'wb') as f_out:
+                        shutil.copyfileobj(f_in, f_out)
+                os.remove(filepath)
+                
         except Exception as e:
             print(f"日志压缩失败: {filepath}, 原因: {e}")
 
@@ -95,12 +137,12 @@ def compress_old_logs(log_dir: str = None, name: str = "root"):
     if log_dir is None:
         log_dir = "logs"
     
-    _compress_old_logs(log_dir, name)
+    _compress_and_organize_logs(log_dir, name)
 
 
 def compress_all_logs(log_dir: str = None):
     """
-    压缩所有日志模块的旧日志文件
+    压缩所有日志模块的旧日志文件，并按目录结构组织
     
     Args:
         log_dir: 日志目录，如果不指定则使用默认目录
@@ -126,20 +168,58 @@ def compress_all_logs(log_dir: str = None):
         for filepath in glob.glob(pattern):
             if filepath.endswith('.gz'):
                 continue
+            
             try:
-                with open(filepath, 'rb') as f_in:
-                    with gzip.open(filepath + '.gz', 'wb') as f_out:
-                        shutil.copyfileobj(f_in, f_out)
-                os.remove(filepath)
-                compressed_count += 1
+                # 从文件名中提取日期时间信息
+                filename = os.path.basename(filepath)
+                parts = filename.split('.')
+                
+                if len(parts) >= 3:
+                    # 提取日期时间部分
+                    datetime_str = parts[-1]
+                    
+                    # 解析日期
+                    if '_' in datetime_str:
+                        date_part = datetime_str.split('_')[0]
+                        year = date_part[:4]
+                        month = date_part[5:7]
+                        day = date_part[8:10]
+                    else:
+                        file_mtime = datetime.fromtimestamp(os.path.getmtime(filepath))
+                        year = file_mtime.strftime('%Y')
+                        month = file_mtime.strftime('%m')
+                        day = file_mtime.strftime('%d')
+                    
+                    # 创建目标目录
+                    target_dir = os.path.join(log_dir, logger_name, year, month, day)
+                    os.makedirs(target_dir, exist_ok=True)
+                    
+                    # 压缩文件
+                    gz_filename = filename + '.gz'
+                    target_path = os.path.join(target_dir, gz_filename)
+                    
+                    with open(filepath, 'rb') as f_in:
+                        with gzip.open(target_path, 'wb') as f_out:
+                            shutil.copyfileobj(f_in, f_out)
+                    
+                    os.remove(filepath)
+                    compressed_count += 1
+                else:
+                    # 格式不对，直接压缩
+                    with open(filepath, 'rb') as f_in:
+                        with gzip.open(filepath + '.gz', 'wb') as f_out:
+                            shutil.copyfileobj(f_in, f_out)
+                    os.remove(filepath)
+                    compressed_count += 1
+                    
             except Exception as e:
                 print(f"日志压缩失败: {filepath}, 原因: {e}")
     
     if compressed_count > 0:
-        print(f"成功压缩 {compressed_count} 个日志文件")
+        print(f"成功压缩并组织 {compressed_count} 个日志文件")
     
-    # 同时清理超过30天的压缩日志
-    delete_old_compressed_logs(log_dir, days=30)
+    # 同时清理超过90天的压缩日志
+    delete_old_compressed_logs(log_dir, days=90)
 
 
 def log_api_call(logger: Logger, user_id: str = None, endpoint: str = None, method: str = None, params: dict = None, response_status: int = None, client_ip: str = None):
@@ -188,13 +268,13 @@ def log_api_call(logger: Logger, user_id: str = None, endpoint: str = None, meth
         logger.error(f"记录API调用日志失败: {e}")
 
 
-def delete_old_compressed_logs(log_dir: str = None, days: int = 30):
+def delete_old_compressed_logs(log_dir: str = None, days: int = 90):
     """
-    删除超过指定天数的压缩日志文件
+    删除超过指定天数的压缩日志文件（递归删除子目录）
     
     Args:
         log_dir: 日志目录，如果不指定则使用默认目录
-        days: 保留天数，默认30天
+        days: 保留天数，默认90天（3个月）
     """
     try:
         if log_dir is None:
@@ -207,26 +287,103 @@ def delete_old_compressed_logs(log_dir: str = None, days: int = 30):
         # 计算截止时间
         cutoff_time = datetime.now() - timedelta(days=days)
         
-        # 获取所有压缩日志文件
-        gz_files = [f for f in log_path.iterdir() 
-                   if f.is_file() and f.name.endswith('.log.gz')]
-        
         deleted_count = 0
-        for gz_file in gz_files:
-            # 获取文件修改时间
-            file_mtime = datetime.fromtimestamp(gz_file.stat().st_mtime)
-            
-            # 如果文件超过保留期限，删除它
-            if file_mtime < cutoff_time:
-                gz_file.unlink()
-                print(f"删除旧压缩日志文件: {gz_file}")
-                deleted_count += 1
+        
+        # 递归遍历所有子目录
+        for gz_file in log_path.rglob('*.log.gz'):
+            if gz_file.is_file():
+                # 获取文件修改时间
+                file_mtime = datetime.fromtimestamp(gz_file.stat().st_mtime)
+                
+                # 如果文件超过保留期限，删除它
+                if file_mtime < cutoff_time:
+                    gz_file.unlink()
+                    print(f"删除旧压缩日志文件: {gz_file}")
+                    deleted_count += 1
+        
+        # 删除空目录
+        _remove_empty_dirs(log_path)
         
         if deleted_count > 0:
-            print(f"总共删除了 {deleted_count} 个旧压缩日志文件")
+            print(f"总共删除了 {deleted_count} 个旧压缩日志文件（超过{days}天）")
         
     except Exception as e:
         print(f"删除旧压缩日志文件失败: {e}")
+
+
+def _remove_empty_dirs(path: Path):
+    """
+    递归删除空目录
+    """
+    try:
+        for item in path.iterdir():
+            if item.is_dir():
+                _remove_empty_dirs(item)
+                # 如果目录为空，删除它
+                try:
+                    if not any(item.iterdir()):
+                        item.rmdir()
+                        print(f"删除空目录: {item}")
+                except OSError:
+                    pass
+    except Exception as e:
+        print(f"删除空目录失败: {e}")
+
+
+def get_log_statistics(log_dir: str = None):
+    """
+    获取日志统计信息
+    
+    Args:
+        log_dir: 日志目录
+        
+    Returns:
+        dict: 统计信息
+    """
+    if log_dir is None:
+        log_dir = "logs"
+    
+    log_path = Path(log_dir)
+    if not log_path.exists():
+        return {
+            'total_files': 0,
+            'total_size': 0,
+            'compressed_files': 0,
+            'compressed_size': 0,
+            'by_logger': {}
+        }
+    
+    stats = {
+        'total_files': 0,
+        'total_size': 0,
+        'compressed_files': 0,
+        'compressed_size': 0,
+        'by_logger': {}
+    }
+    
+    # 统计所有日志文件
+    for log_file in log_path.rglob('*.log*'):
+        if log_file.is_file():
+            file_size = log_file.stat().st_size
+            stats['total_files'] += 1
+            stats['total_size'] += file_size
+            
+            if log_file.name.endswith('.gz'):
+                stats['compressed_files'] += 1
+                stats['compressed_size'] += file_size
+            
+            # 按日志器统计
+            logger_name = log_file.name.split('.')[0]
+            if logger_name not in stats['by_logger']:
+                stats['by_logger'][logger_name] = {
+                    'files': 0,
+                    'size': 0
+                }
+            stats['by_logger'][logger_name]['files'] += 1
+            stats['by_logger'][logger_name]['size'] += file_size
+    
+    return stats
+
 
 if __name__ == '__main__':
     logger = getLogger('WebAPI')
@@ -261,3 +418,11 @@ if __name__ == '__main__':
     # 单例验证
     logger2 = getLogger('WebAPI')
     print(f"Logger单例验证: {id(logger) == id(logger2)}")
+    
+    # 显示日志统计
+    stats = get_log_statistics()
+    print(f"\n日志统计信息:")
+    print(f"总文件数: {stats['total_files']}")
+    print(f"总大小: {stats['total_size'] / 1024 / 1024:.2f} MB")
+    print(f"压缩文件数: {stats['compressed_files']}")
+    print(f"压缩文件大小: {stats['compressed_size'] / 1024 / 1024:.2f} MB")

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Modal, Form, Input, message, Space, Popconfirm, Switch, InputNumber, Tag, Select, DatePicker } from 'antd'
+import { Table, Button, Modal, Form, Input, App, Space, Popconfirm, Switch, InputNumber, Tag, Select, DatePicker } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined } from '@ant-design/icons'
 import type { Route } from '@/types'
 import { getRouteList, createRoute, updateRoute, deleteRoute } from '@/api/user'
@@ -9,6 +9,7 @@ import dayjs, { Dayjs } from 'dayjs'
 const { RangePicker } = DatePicker
 
 const RouteList = () => {
+  const { message } = App.useApp()
   const [data, setData] = useState<Route[]>([])
   const [loading, setLoading] = useState(false)
   const [total, setTotal] = useState(0)

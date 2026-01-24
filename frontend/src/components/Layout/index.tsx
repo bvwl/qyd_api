@@ -76,7 +76,8 @@ const DEFAULT_MENU_ITEMS: MenuProps['items'] = [
     label: '邮箱管理',
     children: [
       { key: '/mail/list', label: '邮箱列表' },
-      { key: '/mail/viewer', label: '邮件查看器' },
+      { key: '/mail/viewer', label: '邮件查看' },
+      { key: '/mail/send', label: '发送邮件' },
     ],
   },
   {

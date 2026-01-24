@@ -9,6 +9,7 @@ import TokenList from '@/views/User/TokenList'
 import LogList from '@/views/User/LogList'
 import MailList from '@/views/Mail/MailList'
 import MailViewer from '@/views/Mail/MailViewer'
+import MailSend from '@/views/Mail/MailSend'
 import ProjectList from '@/views/Project/ProjectList'
 import ProjectAccount from '@/views/Project/ProjectAccount'
 import ProjectWallet from '@/views/Project/ProjectWallet'
@@ -91,6 +92,10 @@ const router = createBrowserRouter([
       {
         path: 'mail/list',
         element: <MailList />,
+      },
+      {
+        path: 'mail/send',
+        element: <MailSend />,
       },
       {
         path: 'mail/viewer',

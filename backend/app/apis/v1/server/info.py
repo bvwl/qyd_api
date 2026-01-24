@@ -21,7 +21,9 @@ async def post(
     创建服务器信息记录
     """
     try:
-        return await server_info_crud.create(item)
+        user_id = current_user.get('user_id') or current_user.get('id')
+        result = await server_info_crud.create(item, current_user_id=UUID(user_id))
+        return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException as e:
@@ -40,7 +42,12 @@ async def get(
     获取服务器信息记录
     """
     try:
-        obj = await server_info_crud.get(id)
+        # 检查是否是管理员
+        user_roles = current_user.get('roles', [])
+        is_admin = 'ADMIN' in user_roles
+        user_id = current_user.get('user_id') or current_user.get('id')
+        
+        obj = await server_info_crud.get(id, is_admin=is_admin, current_user_id=UUID(user_id))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
@@ -87,6 +94,9 @@ async def gets(
         if not has_resource_access(scope['roles'], 'server'):
             raise HTTPException(status_code=403, detail='没有权限访问服务器资源')
         
+        # 检查是否是管理员
+        is_admin = 'ADMIN' in scope['roles']
+        
         return await server_info_crud.get_multi(
             host=host,
             domain=domain,
@@ -97,7 +107,9 @@ async def gets(
             update_time_start=parse_time(update_time_start),
             update_time_end=parse_time(update_time_end, True),
             page=page,
-            limit=limit
+            limit=limit,
+            is_admin=is_admin,
+            current_user_id=UUID(user_id)
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -117,7 +129,13 @@ async def put(id: UUID = Path(..., description='主键ID'),
     部分更新服务器信息，只更新传入的非空字段
     """
     try:
-        return await server_info_crud.update(id, item)
+        # 检查是否是管理员
+        user_roles = current_user.get('roles', [])
+        is_admin = 'ADMIN' in user_roles
+        user_id = current_user.get('user_id') or current_user.get('id')
+        
+        result = await server_info_crud.update(id, item, is_admin=is_admin, current_user_id=UUID(user_id))
+        return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
@@ -160,7 +178,9 @@ async def post_or_put(
         filter_kwargs = {
             "host": item.host
         }
-        return await server_info_crud.upsert(filter_kwargs, item)
+        user_id = current_user.get('user_id') or current_user.get('id')
+        result = await server_info_crud.upsert(filter_kwargs, item, current_user_id=UUID(user_id))
+        return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:

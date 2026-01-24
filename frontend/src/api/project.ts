@@ -93,3 +93,42 @@ export const deleteProjectWallet = (id: string) => {
 export const upsertProjectWallet = (data: Partial<ProjectWallet>) => {
   return api.post<any, ProjectWallet>('/v1/project/wallet/upsert', data)
 }
+
+// 项目账号统计
+export const getProjectAccountStats = (params: {
+  project_id: string
+  account?: string
+  status?: number
+  account_type?: number
+  create_time_start?: string
+  create_time_end?: string
+  update_time_start?: string
+  update_time_end?: string
+}) => {
+  return api.get<any, {
+    code: number
+    message: string
+    data: {
+      total_count: number
+      balance: {
+        max: number
+        min: number
+        avg: number
+        sum: number
+      }
+      variable: {
+        max: number
+        min: number
+        avg: number
+        sum: number
+      }
+    }
+  }>('/v1/project/account/stats', { params })
+}
+
+// 导出所有项目统计数据
+export const exportAllProjectStats = () => {
+  return api.get('/v1/project/account/export-all-stats', {
+    responseType: 'blob'
+  })
+}

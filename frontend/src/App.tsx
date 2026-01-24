@@ -17,6 +17,7 @@ import ServerList from './views/Server/ServerList'
 import ServerAccount from './views/Server/ServerAccount'
 import MailList from './views/Mail/MailList'
 import MailViewer from './views/Mail/MailViewer'
+import MailSend from './views/Mail/MailSend'
 import Dashboard from './views/Dashboard/index'
 import Diagnostic from './views/Diagnostic'
 import UserApi from './views/ApiDocs/UserApi'
@@ -69,6 +70,7 @@ function App() {
               <Route path="server/account" element={<ServerAccount />} />
               <Route path="mail/list" element={<MailList />} />
               <Route path="mail/viewer" element={<MailViewer />} />
+              <Route path="mail/send" element={<MailSend />} />
               <Route path="api-docs/user" element={<UserApi />} />
               <Route path="api-docs/user-create" element={<UserCreate />} />
               <Route path="api-docs/role" element={<RoleApi />} />

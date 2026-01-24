@@ -1,10 +1,14 @@
 from uuid import UUID
 from fastapi import HTTPException
+import secrets
+import string
 
 from app.models.server import ServerAccount
+from app.models.user import UserInfo
 from app.schemas.server.account import Create, Update, Out, OutList
 from app.schemas.base import BaseOut
 from app.utils.time_tool import parse_time
+from app.core.tools import aes_encrypt, aes_decrypt
 
 
 class CRUD:
@@ -33,9 +37,34 @@ class CRUD:
         await res.fetch_related('user')
         return Out.model_validate(res)
 
+    # 获取账号并解密密码
+    async def get_with_password(self, id: UUID) -> Out:
+        """
+        获取服务器账号并解密密码
+        - 仅用于需要查看密码的场景
+        - 直接在 password 字段返回解密后的明文
+        """
+        res = await ServerAccount.get_or_none(id=id)
+        if not res:
+            raise HTTPException(status_code=404, detail='账号不存在')
+        await res.fetch_related('user')
+        
+        result = Out.model_validate(res)
+        
+        # 解密密码并直接替换 password 字段
+        if res.user_id:
+            try:
+                decrypted_password = aes_decrypt(res.password, str(res.user_id))
+                result.password = decrypted_password  # 直接替换 password 字段
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f'密码解密失败: {str(e)}')
+        
+        return result
+
     # 条件查询
     async def get_multi(self,
                         username: str | None = None,
+                        user_id: UUID | None = None,
                         page: int = 1,
                         limit: int = 10,
                         res_count: bool = False,
@@ -43,11 +72,14 @@ class CRUD:
                         create_time_start: str | int | None = None,
                         create_time_end: str | int | None = None,
                         update_time_start: str | int | None = None,
-                        update_time_end: str | int | None = None
+                        update_time_end: str | int | None = None,
+                        is_admin: bool = False
                         ) -> OutList:
         query = ServerAccount.all()
         if username:
             query = query.filter(username__icontains=username)
+        if user_id:
+            query = query.filter(user_id=user_id)
         if create_time_start:
             query = query.filter(create_time__gte=parse_time(create_time_start))
         if create_time_end:
@@ -77,7 +109,20 @@ class CRUD:
             raise HTTPException(status_code=404, detail='未查询到数据')
         
         num = len(res)
-        items = [Out.model_validate(obj) for obj in res]
+        items = []
+        
+        # 如果是管理员，自动解密所有密码并替换 password 字段
+        for obj in res:
+            item = Out.model_validate(obj)
+            if is_admin and obj.user_id:
+                try:
+                    decrypted_password = aes_decrypt(obj.password, str(obj.user_id))
+                    item.password = decrypted_password  # 直接替换 password 字段
+                except Exception:
+                    # 解密失败，保持原密文
+                    pass
+            items.append(item)
+        
         return OutList(message='成功', count=count, num=num, items=items)
 
     # 更新
@@ -120,6 +165,73 @@ class CRUD:
             await record.save()
         await record.fetch_related('user')
         return Out.model_validate(record)
+
+    # 为用户生成服务器账号
+    async def generate_account(self, user_id: UUID) -> Out:
+        """
+        为用户生成服务器账号（SOCKS5代理账号）
+        - 如果用户已有账号，返回现有账号（包含解密后的密码）
+        - 如果没有，创建新账号
+        - 用户名格式：user_{user_id前8位}，如果重复则添加随机后缀
+        - 密码：随机生成12位强密码
+        - 加密方式：AES-CBC，key=MD5(user_id+"9527")，iv=MD5("9527"+user_id)前16位
+        """
+        # 检查用户是否存在
+        user = await UserInfo.get_or_none(id=user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail='用户不存在')
+        
+        # 检查用户是否已有服务器账号
+        existing_account = await ServerAccount.get_or_none(user_id=user_id)
+        if existing_account:
+            await existing_account.fetch_related('user')
+            result = Out.model_validate(existing_account)
+            # 解密密码并直接替换 password 字段
+            try:
+                decrypted_password = aes_decrypt(existing_account.password, str(user_id))
+                result.password = decrypted_password  # 直接替换 password 字段
+            except Exception:
+                # 解密失败，保持原密文
+                pass
+            return result
+        
+        # 生成用户名：user_{user_id前8位}
+        base_username = f"user_{str(user_id).replace('-', '')[:8]}"
+        username = base_username
+        
+        # 检查用户名是否重复，如果重复则添加随机后缀
+        attempt = 0
+        while await ServerAccount.get_or_none(username=username):
+            attempt += 1
+            # 添加4位随机字符作为后缀
+            random_suffix = ''.join(secrets.choice(string.ascii_lowercase + string.digits) for _ in range(4))
+            username = f"{base_username}_{random_suffix}"
+            
+            # 防止无限循环
+            if attempt > 10:
+                raise HTTPException(status_code=500, detail='生成用户名失败，请重试')
+        
+        # 生成随机密码：12位，包含大小写字母和数字
+        password_chars = string.ascii_letters + string.digits
+        raw_password = ''.join(secrets.choice(password_chars) for _ in range(12))
+        
+        # 使用AES加密密码（每个用户不同的密钥）
+        encrypted_password = aes_encrypt(raw_password, str(user_id))
+        
+        # 创建服务器账号
+        account = await ServerAccount.create(
+            username=username,
+            password=encrypted_password,
+            user_id=user_id
+        )
+        
+        await account.fetch_related('user')
+        
+        # 返回时直接在 password 字段返回明文密码
+        result = Out.model_validate(account)
+        result.password = raw_password  # 直接替换 password 字段为明文
+        
+        return result
 
 
 server_account_crud = CRUD()

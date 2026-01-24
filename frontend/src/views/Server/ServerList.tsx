@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Modal, Form, Input, message, Space, Popconfirm, Tag, Select, InputNumber, DatePicker } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined } from '@ant-design/icons'
+import { Table, Button, Modal, Form, Input, App, Space, Popconfirm, Tag, Select, InputNumber, DatePicker } from 'antd'
+import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, CopyOutlined } from '@ant-design/icons'
 import type { ServerInfo, ServerGroup } from '@/types'
 import { Status } from '@/types'
 import { getServerList, createServer, updateServer, deleteServer, getGroupList } from '@/api/server'
 import { useUserStore } from '@/store/useUserStore'
-import dayjs, { Dayjs } from 'dayjs'
+import { Dayjs } from 'dayjs'
 
 const { RangePicker } = DatePicker
 
 const ServerList = () => {
+  const { message } = App.useApp()
   const [data, setData] = useState<ServerInfo[]>([])
   const [loading, setLoading] = useState(false)
   const [total, setTotal] = useState(0)
@@ -106,7 +107,7 @@ const ServerList = () => {
     form.resetFields()
     form.setFieldsValue({
       status: Status.NORMAL,
-      is_sale: 0,
+      is_sale: 1,  // 默认为可以出售
       ssh_port: 22,
     })
     setModalVisible(true)
@@ -178,33 +179,51 @@ const ServerList = () => {
     }
   }
 
+  const handleCopyProxyUrl = (proxyUrl?: string) => {
+    if (!proxyUrl) {
+      message.warning('代理信息不可用')
+      return
+    }
+    
+    navigator.clipboard.writeText(proxyUrl).then(() => {
+      message.success('SOCKS5代理信息已复制到剪贴板')
+    }).catch(() => {
+      message.error('复制失败，请手动复制')
+    })
+  }
+
   const columns = [
     {
       title: '主机地址',
       dataIndex: 'host',
       key: 'host',
-    },
-    {
-      title: 'SSH端口',
-      dataIndex: 'ssh_port',
-      key: 'ssh_port',
+      width: 140,
     },
     {
       title: '域名',
       dataIndex: 'domain',
       key: 'domain',
+      width: 150,
       ellipsis: true,
+    },
+    {
+      title: '代理端口',
+      dataIndex: 'port',
+      key: 'port',
+      width: 90,
     },
     {
       title: '分组',
       dataIndex: 'group',
       key: 'group',
+      width: 100,
       render: (group: ServerGroup) => group?.name || '-',
     },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
+      width: 70,
       render: (status: Status) => (
         <Tag color={status === Status.NORMAL ? 'green' : 'red'}>
           {status === Status.NORMAL ? '正常' : '异常'}
@@ -212,12 +231,13 @@ const ServerList = () => {
       ),
     },
     {
-      title: '是否出售',
+      title: '是否可以出售',
       dataIndex: 'is_sale',
       key: 'is_sale',
+      width: 110,
       render: (is_sale: number) => (
-        <Tag color={is_sale === 1 ? 'orange' : 'default'}>
-          {is_sale === 1 ? '已出售' : '未出售'}
+        <Tag color={is_sale === 1 ? 'green' : 'default'}>
+          {is_sale === 1 ? '可以出售' : '不可以出售'}
         </Tag>
       ),
     },
@@ -225,12 +245,23 @@ const ServerList = () => {
       title: '创建时间',
       dataIndex: 'create_time',
       key: 'create_time',
+      width: 160,
     },
     {
       title: '操作',
       key: 'action',
+      width: 240,
+      fixed: 'right' as const,
       render: (_: any, record: ServerInfo) => (
-        <Space>
+        <Space size="small">
+          <Button
+            type="link"
+            icon={<CopyOutlined />}
+            onClick={() => handleCopyProxyUrl(record.proxy_url)}
+            title="复制SOCKS5代理信息"
+          >
+            复制代理
+          </Button>
           {isAdmin && (
             <>
               <Button
@@ -295,14 +326,14 @@ const ServerList = () => {
               <Select.Option value={Status.ABNORMAL}>异常</Select.Option>
             </Select>
             <Select
-              placeholder="是否出售"
+              placeholder="是否可以出售"
               value={searchIsSale}
               onChange={setSearchIsSale}
-              style={{ width: 120 }}
+              style={{ width: 140 }}
               allowClear
             >
-              <Select.Option value={0}>未出售</Select.Option>
-              <Select.Option value={1}>已出售</Select.Option>
+              <Select.Option value={1}>可以出售</Select.Option>
+              <Select.Option value={2}>不可以出售</Select.Option>
             </Select>
             <RangePicker
               placeholder={['创建开始日期', '创建结束日期']}
@@ -347,6 +378,7 @@ const ServerList = () => {
         dataSource={data}
         rowKey="id"
         loading={loading}
+        scroll={{ x: 1050 }}
         rowSelection={{
           selectedRowKeys,
           onChange: (selectedKeys) => setSelectedRowKeys(selectedKeys as string[]),
@@ -422,13 +454,13 @@ const ServerList = () => {
             </Select>
           </Form.Item>
           <Form.Item
-            label="是否出售"
+            label="是否可以出售"
             name="is_sale"
-            rules={[{ required: true, message: '请选择是否出售' }]}
+            rules={[{ required: true, message: '请选择是否可以出售' }]}
           >
-            <Select placeholder="请选择是否出售">
-              <Select.Option value={0}>未出售</Select.Option>
-              <Select.Option value={1}>已出售</Select.Option>
+            <Select placeholder="请选择是否可以出售">
+              <Select.Option value={1}>可以出售</Select.Option>
+              <Select.Option value={2}>不可以出售</Select.Option>
             </Select>
           </Form.Item>
         </Form>

@@ -58,6 +58,9 @@ class Out(Base):
     update_time: datetime = Field(..., description='更新时间')
     group_id: UUID = Field(..., description='分组ID')
     group: GroupBase = Field(..., description='分组信息')
+    
+    # proxy_url 将在 CRUD 层计算后设置
+    proxy_url: str = Field("", description='代理URL')
 
 
     @computed_field
@@ -71,18 +74,10 @@ class Out(Base):
             return "socks5"
         return "unknown"
 
-    @computed_field
-    @property
-    def proxy_url(self) -> str:
-        if self.port is None:
-            return ""
-        if self.domain:
-            return f"socks5://username:password@{self.domain}:{self.port}"
-        return f"socks5://username:password@{self.host}:{self.port}"
-
     @field_serializer('create_time', 'update_time')
     def format_datetime(self, dt: datetime) -> str:
         return dt.astimezone(CN_TZ).strftime('%Y-%m-%d %H:%M:%S')
+    
     class Config:
         from_attributes = True
 

@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react'
-import { Card, Row, Col, Statistic, Table, Tag, Spin, Alert, Button, message, Modal, Input, Space, Typography } from 'antd'
-import { UserOutlined, ProjectOutlined, TeamOutlined, DatabaseOutlined, CopyOutlined, ReloadOutlined, EyeOutlined, EyeInvisibleOutlined } from '@ant-design/icons'
+import { Card, Row, Col, Statistic, Table, Tag, Spin, Alert, Button, App, Modal, Input, Space, Typography } from 'antd'
+import { UserOutlined, ProjectOutlined, TeamOutlined, DatabaseOutlined, CopyOutlined, ReloadOutlined, EyeOutlined, EyeInvisibleOutlined, CloudServerOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { getUserList } from '@/api/user'
 import { getProjectList } from '@/api/project'
 import { getProjectAccountList } from '@/api/project'
 import { getTokenList, generateToken } from '@/api/user'
+import { getServerAccountList, generateServerAccount, getServerAccountPassword } from '@/api/server'
 import { useUserStore } from '@/store/useUserStore'
-import type { UserToken } from '@/types'
+import type { UserToken, ServerAccount } from '@/types'
 
 const { Text } = Typography
 
@@ -47,12 +48,17 @@ const ROLE_NAME_MAP: Record<string, string> = {
 }
 
 export default function Dashboard() {
+  const { message } = App.useApp()
   const [loading, setLoading] = useState(false)
   const [tokenLoading, setTokenLoading] = useState(false)
+  const [serverAccountLoading, setServerAccountLoading] = useState(false)
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [projects, setProjects] = useState<ProjectWithAccounts[]>([])
   const [userToken, setUserToken] = useState<UserToken | null>(null)
+  const [serverAccount, setServerAccount] = useState<ServerAccount | null>(null)
   const [tokenVisible, setTokenVisible] = useState(false)
+  const [passwordVisible, setPasswordVisible] = useState(false)
+  const [decryptedPassword, setDecryptedPassword] = useState<string>('')
   const userInfo = useUserStore((state) => state.userInfo)
 
   const fetchData = async () => {
@@ -168,6 +174,7 @@ export default function Dashboard() {
     fetchData()
     if (userInfo?.id) {
       fetchUserToken()
+      fetchServerAccount()
     }
   }, [userInfo])
 
@@ -188,6 +195,30 @@ export default function Dashboard() {
       }
     } catch (error) {
       setUserToken(null)
+    }
+  }
+
+  const fetchServerAccount = async () => {
+    if (!userInfo?.id) return
+    
+    try {
+      const res = await getServerAccountList({
+        page: 1,
+        limit: 1,
+      })
+      if (res.items && res.items.length > 0) {
+        setServerAccount(res.items[0])
+        // 如果是管理员，password 字段已经是解密后的密码
+        const userRoles = userInfo.roles?.map(r => r.code) || []
+        const isAdmin = userRoles.includes('ADMIN')
+        if (isAdmin) {
+          setDecryptedPassword(res.items[0].password)
+        }
+      } else {
+        setServerAccount(null)
+      }
+    } catch (error) {
+      setServerAccount(null)
     }
   }
 
@@ -217,6 +248,96 @@ export default function Dashboard() {
     
     navigator.clipboard.writeText(userToken.token).then(() => {
       message.success('Token已复制到剪贴板')
+    }).catch(() => {
+      message.error('复制失败，请手动复制')
+    })
+  }
+
+  const handleGenerateServerAccount = () => {
+    Modal.confirm({
+      title: '确认生成服务器账号',
+      content: serverAccount 
+        ? '您已有服务器账号，此操作将返回现有账号信息。'
+        : '将为您生成一个服务器账号，用户名和密码将自动生成。确定要继续吗？',
+      okText: '确定',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          setServerAccountLoading(true)
+          const account = await generateServerAccount()
+          
+          // 保存账号信息
+          const oldPassword = serverAccount?.password
+          setServerAccount(account)
+          
+          // 如果是新生成的账号（密码不同），显示提示弹窗
+          if (!oldPassword || oldPassword !== account.password) {
+            Modal.success({
+              title: '服务器账号生成成功',
+              content: (
+                <div>
+                  <p>用户名：{account.username}</p>
+                  <p>密码：{account.password}</p>
+                  <p style={{ color: 'red', marginTop: 16 }}>
+                    请立即保存密码，此密码仅显示一次！
+                  </p>
+                </div>
+              ),
+              width: 500,
+            })
+            // 设置解密密码用于后续显示
+            setDecryptedPassword(account.password)
+          } else {
+            // 已存在账号
+            message.success('服务器账号已存在')
+            // 如果是管理员，password 已经是解密后的
+            const userRoles = userInfo?.roles?.map(r => r.code) || []
+            const isAdmin = userRoles.includes('ADMIN')
+            if (isAdmin) {
+              setDecryptedPassword(account.password)
+            }
+          }
+        } catch (error) {
+          message.error('服务器账号生成失败')
+        } finally {
+          setServerAccountLoading(false)
+        }
+      },
+    })
+  }
+
+  const handleCopyUsername = () => {
+    if (!serverAccount?.username) return
+    
+    navigator.clipboard.writeText(serverAccount.username).then(() => {
+      message.success('用户名已复制到剪贴板')
+    }).catch(() => {
+      message.error('复制失败，请手动复制')
+    })
+  }
+
+  const handleViewPassword = async () => {
+    if (!serverAccount?.id) return
+    
+    try {
+      setServerAccountLoading(true)
+      const account = await getServerAccountPassword(serverAccount.id)
+      // password 字段已经是解密后的密码
+      setDecryptedPassword(account.password)
+      setPasswordVisible(true)
+      message.success('密码已解密')
+    } catch (error) {
+      message.error('获取密码失败')
+    } finally {
+      setServerAccountLoading(false)
+    }
+  }
+
+  const handleCopyPassword = () => {
+    if (!decryptedPassword) return
+    
+    navigator.clipboard.writeText(decryptedPassword).then(() => {
+      message.success('密码已复制到剪贴板')
     }).catch(() => {
       message.error('复制失败，请手动复制')
     })
@@ -290,77 +411,188 @@ export default function Dashboard() {
         </p>
       </Card>
 
-      {/* API Token 卡片 */}
-      <Card 
-        title="API Token" 
-        style={{ marginBottom: 24 }}
-        extra={
-          <Button
-            type="primary"
-            icon={<ReloadOutlined />}
-            onClick={handleGenerateToken}
-            loading={tokenLoading}
-          >
-            重新生成
-          </Button>
-        }
-      >
-        {userToken ? (
-          <Space direction="vertical" style={{ width: '100%' }}>
-            <div>
-              <Text type="secondary">Token:</Text>
-              <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Input
-                  value={userToken.token}
-                  readOnly
-                  type={tokenVisible ? 'text' : 'password'}
-                  style={{ flex: 1, fontFamily: 'monospace' }}
-                  suffix={
-                    <Space.Compact>
-                      <Button
-                        type="text"
-                        size="small"
-                        icon={tokenVisible ? <EyeInvisibleOutlined /> : <EyeOutlined />}
-                        onClick={() => setTokenVisible(!tokenVisible)}
-                      />
-                      <Button
-                        type="text"
-                        size="small"
-                        icon={<CopyOutlined />}
-                        onClick={handleCopyToken}
-                      />
-                    </Space.Compact>
-                  }
-                />
-              </div>
-            </div>
-            <div>
-              <Text type="secondary">创建时间: </Text>
-              <Text>{userToken.create_time}</Text>
-            </div>
-            <Alert
-              message="提示"
-              description="请妥善保管您的Token，不要泄露给他人。重新生成Token后，旧Token将立即失效。"
-              type="info"
-              showIcon
-            />
-          </Space>
-        ) : (
-          <div style={{ textAlign: 'center', padding: '20px 0' }}>
-            <Text type="secondary">您还没有Token</Text>
-            <div style={{ marginTop: 16 }}>
+      {/* API Token 和服务器账号 - 左右对称布局 */}
+      <Row gutter={16} style={{ marginBottom: 24 }}>
+        {/* API Token 卡片 - 左侧 */}
+        <Col xs={24} lg={12}>
+          <Card 
+            title="API Token" 
+            style={{ height: '100%' }}
+            extra={
               <Button
                 type="primary"
                 icon={<ReloadOutlined />}
                 onClick={handleGenerateToken}
                 loading={tokenLoading}
               >
-                生成Token
+                重新生成
               </Button>
-            </div>
-          </div>
-        )}
-      </Card>
+            }
+          >
+            {userToken ? (
+              <Space direction="vertical" style={{ width: '100%' }}>
+                <div>
+                  <Text type="secondary">Token:</Text>
+                  <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Input
+                      value={userToken.token}
+                      readOnly
+                      type={tokenVisible ? 'text' : 'password'}
+                      style={{ flex: 1, fontFamily: 'monospace' }}
+                      suffix={
+                        <Space.Compact>
+                          <Button
+                            type="text"
+                            size="small"
+                            icon={tokenVisible ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+                            onClick={() => setTokenVisible(!tokenVisible)}
+                          />
+                          <Button
+                            type="text"
+                            size="small"
+                            icon={<CopyOutlined />}
+                            onClick={handleCopyToken}
+                          />
+                        </Space.Compact>
+                      }
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Text type="secondary">创建时间: </Text>
+                  <Text>{userToken.create_time}</Text>
+                </div>
+                <Alert
+                  message="提示"
+                  description="请妥善保管您的Token，不要泄露给他人。重新生成Token后，旧Token将立即失效。"
+                  type="info"
+                  showIcon
+                />
+              </Space>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                <Text type="secondary">您还没有Token</Text>
+                <div style={{ marginTop: 16 }}>
+                  <Button
+                    type="primary"
+                    icon={<ReloadOutlined />}
+                    onClick={handleGenerateToken}
+                    loading={tokenLoading}
+                  >
+                    生成Token
+                  </Button>
+                </div>
+              </div>
+            )}
+          </Card>
+        </Col>
+
+        {/* 服务器账号卡片 - 右侧 */}
+        <Col xs={24} lg={12}>
+          <Card 
+            title={
+              <span>
+                <CloudServerOutlined style={{ marginRight: 8 }} />
+                服务器账号
+              </span>
+            }
+            style={{ height: '100%' }}
+            extra={
+              <Button
+                type="primary"
+                icon={<ReloadOutlined />}
+                onClick={handleGenerateServerAccount}
+                loading={serverAccountLoading}
+              >
+                {serverAccount ? '查看账号' : '生成账号'}
+              </Button>
+            }
+          >
+            {serverAccount ? (
+              <Space direction="vertical" style={{ width: '100%' }}>
+                <div>
+                  <Text type="secondary">用户名:</Text>
+                  <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Input
+                      value={serverAccount.username}
+                      readOnly
+                      style={{ flex: 1, fontFamily: 'monospace' }}
+                      suffix={
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={<CopyOutlined />}
+                          onClick={handleCopyUsername}
+                        />
+                      }
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Text type="secondary">密码:</Text>
+                  <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Input
+                      value={passwordVisible && decryptedPassword ? decryptedPassword : '••••••••••••••••'}
+                      readOnly
+                      type={passwordVisible ? 'text' : 'password'}
+                      style={{ flex: 1, fontFamily: 'monospace' }}
+                      suffix={
+                        <Space.Compact>
+                          <Button
+                            type="text"
+                            size="small"
+                            icon={passwordVisible ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+                            onClick={() => {
+                              if (!passwordVisible && !decryptedPassword) {
+                                handleViewPassword()
+                              } else {
+                                setPasswordVisible(!passwordVisible)
+                              }
+                            }}
+                            loading={serverAccountLoading}
+                          />
+                          {decryptedPassword && (
+                            <Button
+                              type="text"
+                              size="small"
+                              icon={<CopyOutlined />}
+                              onClick={handleCopyPassword}
+                            />
+                          )}
+                        </Space.Compact>
+                      }
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Text type="secondary">创建时间: </Text>
+                  <Text>{serverAccount.create_time}</Text>
+                </div>
+                <Alert
+                  message="提示"
+                  description="服务器账号用于访问SOCKS5代理服务器。点击眼睛图标可查看密码。每个用户只能拥有一个服务器账号。"
+                  type="info"
+                  showIcon
+                />
+              </Space>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                <Text type="secondary">您还没有服务器账号</Text>
+                <div style={{ marginTop: 16 }}>
+                  <Button
+                    type="primary"
+                    icon={<CloudServerOutlined />}
+                    onClick={handleGenerateServerAccount}
+                    loading={serverAccountLoading}
+                  >
+                    生成服务器账号
+                  </Button>
+                </div>
+              </div>
+            )}
+          </Card>
+        </Col>
+      </Row>
 
       {/* 统计卡片 */}
       <Row gutter={16} style={{ marginBottom: 24 }}>

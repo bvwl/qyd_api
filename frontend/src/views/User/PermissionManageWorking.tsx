@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Card, Row, Col, List, Tree, Button, message, Spin, Empty } from 'antd'
+import { Card, Row, Col, List, Tree, Button, App, Spin, Empty } from 'antd'
 import { TeamOutlined, SaveOutlined } from '@ant-design/icons'
 import type { DataNode } from 'antd/es/tree'
 
@@ -20,6 +20,7 @@ interface Route {
 }
 
 export default function PermissionManageWorking() {
+  const { message } = App.useApp()
   const [roles, setRoles] = useState<Role[]>([])
   const [selectedRole, setSelectedRole] = useState<Role | null>(null)
   const [routeTree, setRouteTree] = useState<DataNode[]>([])
