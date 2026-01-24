@@ -1,34 +1,21 @@
 import { useState, useMemo } from 'react'
-import { Button, Table, Modal, Input, Space, Tag, message, Spin, Empty, Tooltip } from 'antd'
+import { Button, Table, Modal, Input, Space, Tag, Empty, App, InputNumber } from 'antd'
 import { ReloadOutlined, SearchOutlined, EyeOutlined, MailOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
-import { getInboxMessages, getMessageDetail } from '@/api/mail'
-import { formatDateTime } from '@/utils/format'
+import { getInboxMessages } from '@/api/mail'
 import DOMPurify from 'dompurify'
 
 interface EmailMessage {
-  id: string
-  subject: string
-  from: string
-  from_name: string
-  received_time: string
-  body_preview: string
-  has_attachments: boolean
-  is_read: boolean
+  from_email: string
+  title: string
+  content: string
+  _key?: string  // 添加内部使用的唯一键
 }
 
 interface EmailDetail {
-  id: string
   subject: string
   from: string
-  from_name: string
-  to: string[]
-  cc: string[]
-  received_time: string
-  body_type: string
-  body_content: string
-  has_attachments: boolean
-  is_read: boolean
+  content: string
 }
 
 interface CacheData {
@@ -41,14 +28,15 @@ const CACHE_KEY = 'email_inbox_cache'
 const CACHE_DURATION = 10 * 60 * 1000 // 10分钟
 
 export default function MailViewer() {
+  const { message } = App.useApp()
   const [loading, setLoading] = useState(false)
   const [messages, setMessages] = useState<EmailMessage[]>([])
   const [currentEmail, setCurrentEmail] = useState<string>('')
+  const [topCount, setTopCount] = useState<number>(10)  // 添加查询数量状态
   const [searchText, setSearchText] = useState('')
   const [searchType, setSearchType] = useState<'text' | 'regex'>('text')
   const [detailModalVisible, setDetailModalVisible] = useState(false)
   const [currentDetail, setCurrentDetail] = useState<EmailDetail | null>(null)
-  const [detailLoading, setDetailLoading] = useState(false)
   const [cacheInfo, setCacheInfo] = useState<string>('')
 
   // 从localStorage加载缓存
@@ -121,12 +109,17 @@ export default function MailViewer() {
     setLoading(true)
     setCacheInfo('')
     try {
-      const res = await getInboxMessages({ email, top: 50 })
-      if (res.code === 1) {
-        setMessages(res.data)
+      const res = await getInboxMessages({ email, top: topCount })  // 使用 topCount 状态
+      if (res.code === 1 && res.data && Array.isArray(res.data)) {
+        // 为每条邮件添加唯一的 key
+        const messagesWithKey = res.data.map((msg, index) => ({
+          ...msg,
+          _key: `${msg.from_email}-${msg.title}-${index}-${Date.now()}`
+        }))
+        setMessages(messagesWithKey)
         setCurrentEmail(email)
-        saveToCache(email, res.data)
-        message.success(`成功获取 ${res.count} 封邮件`)
+        saveToCache(email, messagesWithKey)
+        message.success(`成功获取 ${res.data.length} 封邮件`)
       } else {
         message.error(res.message || '获取邮件失败')
         setMessages([])
@@ -150,25 +143,13 @@ export default function MailViewer() {
   }
 
   // 查看邮件详情
-  const handleViewDetail = async (messageId: string) => {
-    if (!currentEmail) return
-
+  const handleViewDetail = (message: EmailMessage) => {
     setDetailModalVisible(true)
-    setDetailLoading(true)
-    setCurrentDetail(null)
-
-    try {
-      const res = await getMessageDetail(messageId, currentEmail)
-      if (res.code === 1) {
-        setCurrentDetail(res.data)
-      } else {
-        message.error(res.message || '获取邮件详情失败')
-      }
-    } catch (error: any) {
-      message.error(error.response?.data?.detail || '获取邮件详情失败')
-    } finally {
-      setDetailLoading(false)
-    }
+    setCurrentDetail({
+      subject: message.title || '(无主题)',
+      from: message.from_email || '',
+      content: message.content || '',
+    })
   }
 
   // 搜索过滤
@@ -181,20 +162,18 @@ export default function MailViewer() {
         const regex = new RegExp(searchText, 'i')
         return messages.filter(
           (msg) =>
-            regex.test(msg.subject) ||
-            regex.test(msg.from) ||
-            regex.test(msg.from_name) ||
-            regex.test(msg.body_preview)
+            regex.test(msg.title || '') ||
+            regex.test(msg.from_email || '') ||
+            regex.test(msg.content || '')
         )
       } else {
         // 文本搜索
         const lowerSearch = searchText.toLowerCase()
         return messages.filter(
           (msg) =>
-            msg.subject.toLowerCase().includes(lowerSearch) ||
-            msg.from.toLowerCase().includes(lowerSearch) ||
-            msg.from_name.toLowerCase().includes(lowerSearch) ||
-            msg.body_preview.toLowerCase().includes(lowerSearch)
+            (msg.title || '').toLowerCase().includes(lowerSearch) ||
+            (msg.from_email || '').toLowerCase().includes(lowerSearch) ||
+            (msg.content || '').toLowerCase().includes(lowerSearch)
         )
       }
     } catch (error) {
@@ -205,69 +184,51 @@ export default function MailViewer() {
 
   const columns: ColumnsType<EmailMessage> = [
     {
-      title: '状态',
-      dataIndex: 'is_read',
-      key: 'is_read',
-      width: 80,
-      render: (isRead: boolean) => (
-        <Tag color={isRead ? 'default' : 'blue'}>{isRead ? '已读' : '未读'}</Tag>
-      ),
-    },
-    {
       title: '主题',
-      dataIndex: 'subject',
-      key: 'subject',
+      dataIndex: 'title',
+      key: 'title',
+      width: 300,
       ellipsis: true,
       render: (text: string) => text || '(无主题)',
     },
     {
       title: '发件人',
-      dataIndex: 'from_name',
-      key: 'from_name',
-      width: 200,
-      render: (name: string, record: EmailMessage) => (
-        <Tooltip title={record.from}>
-          <span>{name || record.from}</span>
-        </Tooltip>
-      ),
-    },
-    {
-      title: '预览',
-      dataIndex: 'body_preview',
-      key: 'body_preview',
+      dataIndex: 'from_email',
+      key: 'from_email',
+      width: 250,
       ellipsis: true,
-      render: (text: string) => (
-        <span style={{ color: '#999' }}>{text || '(无内容)'}</span>
-      ),
     },
     {
-      title: '附件',
-      dataIndex: 'has_attachments',
-      key: 'has_attachments',
-      width: 80,
-      render: (hasAttachments: boolean) =>
-        hasAttachments ? <Tag color="orange">有</Tag> : <Tag>无</Tag>,
-    },
-    {
-      title: '接收时间',
-      dataIndex: 'received_time',
-      key: 'received_time',
-      width: 180,
-      render: (time: string) => formatDateTime(time),
+      title: '内容预览',
+      dataIndex: 'content',
+      key: 'content',
+      ellipsis: true,
+      render: (text: string) => {
+        // 移除 HTML 标签，只显示纯文本预览
+        const plainText = text?.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim() || ''
+        const preview = plainText.substring(0, 80)
+        const displayText = preview || '(无内容)'
+        const suffix = plainText.length > 80 ? '...' : ''
+        return (
+          <span style={{ color: '#999' }}>
+            {displayText}{suffix}
+          </span>
+        )
+      },
     },
     {
       title: '操作',
       key: 'action',
-      width: 100,
+      width: 120,
       fixed: 'right',
       render: (_: any, record: EmailMessage) => (
         <Button
           type="link"
           size="small"
           icon={<EyeOutlined />}
-          onClick={() => handleViewDetail(record.id)}
+          onClick={() => handleViewDetail(record)}
         >
-          查看
+          查看详情
         </Button>
       ),
     },
@@ -286,6 +247,17 @@ export default function MailViewer() {
               onPressEnter={() => fetchMessages(currentEmail)}
               style={{ width: 300 }}
             />
+            <Space.Compact>
+              <Button disabled style={{ cursor: 'default' }}>查询</Button>
+              <InputNumber
+                min={1}
+                max={100}
+                value={topCount}
+                onChange={(value) => setTopCount(value || 10)}
+                style={{ width: 60 }}
+              />
+              <Button disabled style={{ cursor: 'default' }}>条</Button>
+            </Space.Compact>
             <Button
               type="primary"
               icon={<SearchOutlined />}
@@ -328,12 +300,13 @@ export default function MailViewer() {
       <Table
         columns={columns}
         dataSource={filteredMessages}
-        rowKey="id"
+        rowKey="_key"
         loading={loading}
-        scroll={{ x: 1200 }}
+        scroll={{ x: 1000 }}
         pagination={{
-          pageSize: 20,
+          pageSize: 10,
           showSizeChanger: true,
+          pageSizeOptions: ['10', '20', '50'],
           showTotal: (total) => `共 ${total} 封邮件`,
         }}
         locale={{
@@ -355,72 +328,47 @@ export default function MailViewer() {
             关闭
           </Button>,
         ]}
-        width={900}
+        width={1000}
         style={{ top: 20 }}
       >
-        {detailLoading ? (
-          <div style={{ textAlign: 'center', padding: '40px' }}>
-            <Spin size="large" />
-          </div>
-        ) : currentDetail ? (
+        {currentDetail ? (
           <div>
-            <div style={{ marginBottom: 16 }}>
-              <p>
+            <div style={{ marginBottom: 16, padding: '12px', backgroundColor: '#f5f5f5', borderRadius: '4px' }}>
+              <p style={{ marginBottom: 8 }}>
                 <strong>主题：</strong>
-                {currentDetail.subject || '(无主题)'}
+                <span style={{ marginLeft: 8 }}>{currentDetail.subject}</span>
               </p>
-              <p>
+              <p style={{ marginBottom: 0 }}>
                 <strong>发件人：</strong>
-                {currentDetail.from_name} &lt;{currentDetail.from}&gt;
-              </p>
-              <p>
-                <strong>收件人：</strong>
-                {currentDetail.to.join(', ')}
-              </p>
-              {currentDetail.cc.length > 0 && (
-                <p>
-                  <strong>抄送：</strong>
-                  {currentDetail.cc.join(', ')}
-                </p>
-              )}
-              <p>
-                <strong>时间：</strong>
-                {formatDateTime(currentDetail.received_time)}
-              </p>
-              <p>
-                <strong>附件：</strong>
-                {currentDetail.has_attachments ? (
-                  <Tag color="orange">有附件</Tag>
-                ) : (
-                  <Tag>无附件</Tag>
-                )}
+                <span style={{ marginLeft: 8 }}>{currentDetail.from}</span>
               </p>
             </div>
             <div
               style={{
                 border: '1px solid #d9d9d9',
                 borderRadius: 4,
-                padding: 16,
-                maxHeight: 500,
+                padding: 20,
+                maxHeight: 600,
                 overflow: 'auto',
-                backgroundColor: '#fafafa',
+                backgroundColor: '#fff',
               }}
             >
-              {currentDetail.body_type === 'HTML' ? (
-                <div
-                  dangerouslySetInnerHTML={{
-                    __html: DOMPurify.sanitize(currentDetail.body_content),
-                  }}
-                />
-              ) : (
-                <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
-                  {currentDetail.body_content}
-                </pre>
-              )}
+              <div
+                dangerouslySetInnerHTML={{
+                  __html: DOMPurify.sanitize(currentDetail.content, {
+                    ADD_TAGS: ['style'],
+                    ADD_ATTR: ['target', 'style'],
+                  }),
+                }}
+                style={{
+                  wordBreak: 'break-word',
+                  lineHeight: '1.6',
+                }}
+              />
             </div>
           </div>
         ) : (
-          <Empty description="加载失败" />
+          <Empty description="无数据" />
         )}
       </Modal>
     </div>

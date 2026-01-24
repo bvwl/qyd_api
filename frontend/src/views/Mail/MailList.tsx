@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Space, Tag, Input, Select, message, Modal, Form, DatePicker } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, SyncOutlined } from '@ant-design/icons'
+import { Table, Button, Space, Tag, Input, Select, Modal, Form, DatePicker, App } from 'antd'
+import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, SyncOutlined, CopyOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { getEmailList, createEmail, updateEmail, deleteEmail, batchUpdateEmailStatus } from '@/api/mail'
 import { getServerList } from '@/api/server'
@@ -9,10 +9,12 @@ import { Status, EmailType } from '@/types'
 import { STATUS_MAP, EMAIL_TYPE_MAP } from '@/utils/constants'
 import { formatDateTime, maskPassword } from '@/utils/format'
 import { Dayjs } from 'dayjs'
+import { useUserStore } from '@/store/useUserStore'
 
 const { RangePicker } = DatePicker
 
 export default function MailList() {
+  const { message } = App.useApp()
   const [loading, setLoading] = useState(false)
   const [dataSource, setDataSource] = useState<EmailInfo[]>([])
   const [total, setTotal] = useState(0)
@@ -30,6 +32,19 @@ export default function MailList() {
   const [servers, setServers] = useState<ServerInfo[]>([])
   const [form] = Form.useForm()
   const [batchForm] = Form.useForm()
+  
+  // 获取用户信息，判断是否为管理员
+  const { userInfo } = useUserStore()
+  const isAdmin = userInfo?.roles?.some(role => role.code === 'ADMIN') || false
+
+  // 复制邮箱地址
+  const handleCopyEmail = (email: string) => {
+    navigator.clipboard.writeText(email).then(() => {
+      message.success('邮箱地址已复制')
+    }).catch(() => {
+      message.error('复制失败')
+    })
+  }
 
   const fetchData = async () => {
     try {
@@ -133,8 +148,17 @@ export default function MailList() {
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields()
+      
+      // 如果是编辑模式，移除空的密码字段（不修改密码）
       if (editingEmail) {
-        await updateEmail(editingEmail.id, values)
+        const updateData: any = { ...values }
+        if (!updateData.password) {
+          delete updateData.password
+        }
+        if (!updateData.auxiliary_email_password) {
+          delete updateData.auxiliary_email_password
+        }
+        await updateEmail(editingEmail.id, updateData)
         message.success('更新成功')
       } else {
         await createEmail(values)
@@ -169,19 +193,26 @@ export default function MailList() {
       title: '邮箱',
       dataIndex: 'email',
       key: 'email',
-      width: 200,
-    },
-    {
-      title: '密码',
-      dataIndex: 'password',
-      key: 'password',
-      render: (text: string) => maskPassword(text),
+      width: 280,
+      render: (text: string) => (
+        <Space size={4}>
+          <span>{text}</span>
+          <Button
+            type="link"
+            size="small"
+            icon={<CopyOutlined />}
+            onClick={() => handleCopyEmail(text)}
+            style={{ padding: '0 4px', minWidth: 'auto' }}
+            title="复制邮箱"
+          />
+        </Space>
+      ),
     },
     {
       title: '辅助邮箱',
       dataIndex: 'auxiliary_email',
       key: 'auxiliary_email',
-      width: 180,
+      width: 220,
     },
     {
       title: '状态',
@@ -191,18 +222,6 @@ export default function MailList() {
         const config = STATUS_MAP[status]
         return <Tag color={config.color}>{config.text}</Tag>
       },
-    },
-    {
-      title: '代理服务器',
-      dataIndex: 'server_info',
-      key: 'server_info',
-      render: (server: ServerInfo) => server?.host || '-',
-    },
-    {
-      title: '代理端口',
-      dataIndex: 'server_info',
-      key: 'port',
-      render: (server: ServerInfo) => server?.port || '-',
     },
     {
       title: 'Token状态',
@@ -227,23 +246,28 @@ export default function MailList() {
       width: 150,
       render: (_, record) => (
         <Space>
-          <Button
-            type="link"
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => handleEdit(record)}
-          >
-            编辑
-          </Button>
-          <Button
-            type="link"
-            size="small"
-            danger
-            icon={<DeleteOutlined />}
-            onClick={() => handleDelete(record)}
-          >
-            删除
-          </Button>
+          {isAdmin && (
+            <>
+              <Button
+                type="link"
+                size="small"
+                icon={<EditOutlined />}
+                onClick={() => handleEdit(record)}
+              >
+                编辑
+              </Button>
+              <Button
+                type="link"
+                size="small"
+                danger
+                icon={<DeleteOutlined />}
+                onClick={() => handleDelete(record)}
+              >
+                删除
+              </Button>
+            </>
+          )}
+          {!isAdmin && <span style={{ color: '#999' }}>-</span>}
         </Space>
       ),
     },
@@ -311,7 +335,7 @@ export default function MailList() {
           </Button>
         </Space>
         <Space>
-          {selectedRowKeys.length > 0 && (
+          {selectedRowKeys.length > 0 && isAdmin && (
             <Button 
               danger 
               icon={<DeleteOutlined />} 
@@ -320,9 +344,11 @@ export default function MailList() {
               批量删除 ({selectedRowKeys.length})
             </Button>
           )}
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
-            新增邮箱
-          </Button>
+          {isAdmin && (
+            <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+              新增邮箱
+            </Button>
+          )}
         </Space>
       </div>
 
@@ -332,11 +358,11 @@ export default function MailList() {
         columns={columns}
         rowKey="id"
         scroll={{ x: 1200 }}
-        rowSelection={{
+        rowSelection={isAdmin ? {
           selectedRowKeys,
           onChange: (selectedKeys) => setSelectedRowKeys(selectedKeys as string[]),
           preserveSelectedRowKeys: true,
-        }}
+        } : undefined}
         pagination={{
           current: page,
           pageSize,
@@ -371,9 +397,9 @@ export default function MailList() {
           <Form.Item
             name="password"
             label="密码"
-            rules={[{ required: true, message: '请输入密码' }]}
+            rules={[{ required: !editingEmail, message: '请输入密码' }]}
           >
-            <Input.Password placeholder="请输入密码" />
+            <Input.Password placeholder={editingEmail ? '留空则不修改密码' : '请输入密码'} />
           </Form.Item>
           <Form.Item
             name="auxiliary_email"
@@ -385,9 +411,9 @@ export default function MailList() {
           <Form.Item
             name="auxiliary_email_password"
             label="辅助邮箱密码"
-            rules={[{ required: true, message: '请输入辅助邮箱密码' }]}
+            rules={[{ required: !editingEmail, message: '请输入辅助邮箱密码' }]}
           >
-            <Input.Password placeholder="请输入辅助邮箱密码" />
+            <Input.Password placeholder={editingEmail ? '留空则不修改密码' : '请输入辅助邮箱密码'} />
           </Form.Item>
           <Form.Item
             name="status"

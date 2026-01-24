@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Modal, Form, Input, message, Space, Popconfirm, Tag, Select, DatePicker, Transfer, Tooltip } from 'antd'
+import { Table, Button, Modal, Form, Input, App, Space, Popconfirm, Tag, Select, DatePicker, Transfer, Tooltip } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, TeamOutlined, CopyOutlined } from '@ant-design/icons'
 import type { Project, User } from '@/types'
 import { ProjectStatus } from '@/types'
@@ -20,6 +20,7 @@ interface TransferItem {
 }
 
 const ProjectList = () => {
+  const { message } = App.useApp()
   const [data, setData] = useState<Project[]>([])
   const [loading, setLoading] = useState(false)
   const [total, setTotal] = useState(0)

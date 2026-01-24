@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Space, Tag, Input, Select, message, Modal, Form, DatePicker, Tooltip } from 'antd'
+import { Table, Button, Space, Tag, Input, Select, Modal, Form, DatePicker, Tooltip, App } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, CopyOutlined } from '@ant-design/icons'
 import type { ColumnsType, TableProps } from 'antd/es/table'
 import { getUserList, createUser, updateUser, deleteUser } from '@/api/user'
@@ -16,6 +16,7 @@ const { RangePicker } = DatePicker
 type SortOrder = 'ascend' | 'descend' | null
 
 export default function UserList() {
+  const { message } = App.useApp()
   const [loading, setLoading] = useState(false)
   const [dataSource, setDataSource] = useState<User[]>([])
   const [total, setTotal] = useState(0)

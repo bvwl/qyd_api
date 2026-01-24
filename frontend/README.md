@@ -170,6 +170,15 @@ import MailViewer from '@/views/Mail/MailViewer'
 - **附件支持**: 显示附件列表和下载链接
 - **响应式**: 适配不同屏幕尺寸
 
+### 7. 数据加密显示
+
+项目账号的敏感字段（`private_key`、`mnemonic`）会根据用户权限自动显示：
+
+- **有权限用户**（ADMIN、项目所属人）：显示明文
+- **无权限用户**：显示密文（加密数据）
+
+前端无需特殊处理，后端API会根据用户权限自动返回相应的数据。
+
 ## 页面说明
 
 ### 仪表盘 (`/dashboard`)
@@ -197,7 +206,8 @@ import MailViewer from '@/views/Mail/MailViewer'
 
 ### 邮箱管理 (`/mail/*`)
 - **邮箱列表** (`/mail/list`): 邮箱CRUD、状态监控
-- **邮件查看器** (`/mail/viewer/:id`): 查看邮件内容、搜索、附件
+- **邮件查看** (`/mail/viewer/:id`): 查看邮件内容、搜索、附件
+- **发送邮件** (`/mail/send`): 发送邮件功能
 
 ### API文档 (`/api-docs/*`)
 - 内置API测试工具

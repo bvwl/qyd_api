@@ -114,3 +114,11 @@ export const updateServerAccount = (id: string, data: Partial<ServerAccount>) =>
 export const deleteServerAccount = (id: string) => {
   return api.delete(`/v1/server/account/${id}`)
 }
+
+export const generateServerAccount = () => {
+  return api.post<any, ServerAccount>('/v1/server/account/generate')
+}
+
+export const getServerAccountPassword = (id: string) => {
+  return api.get<any, ServerAccount>(`/v1/server/account/${id}/password`)
+}

@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Modal, Form, Input, InputNumber, message, Space, Popconfirm, Tag, Select, DatePicker, Tooltip, Descriptions } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, HistoryOutlined, CopyOutlined } from '@ant-design/icons'
+import { Table, Button, Modal, Form, Input, InputNumber, App, Space, Popconfirm, Tag, Select, DatePicker, Tooltip, Descriptions, Card, Statistic, Row, Col } from 'antd'
+import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, HistoryOutlined, CopyOutlined, BarChartOutlined, DownloadOutlined } from '@ant-design/icons'
 import type { ProjectAccount, Project } from '@/types'
 import { AccountType, Status } from '@/types'
-import { getProjectAccountList, createProjectAccount, updateProjectAccount, deleteProjectAccount, getProjectList } from '@/api/project'
+import { getProjectAccountList, createProjectAccount, updateProjectAccount, deleteProjectAccount, getProjectList, getProjectAccountStats, exportAllProjectStats } from '@/api/project'
 import { useUserStore } from '@/store/useUserStore'
 import { Dayjs } from 'dayjs'
 import type { TableProps } from 'antd'
@@ -13,6 +13,7 @@ const { RangePicker } = DatePicker
 type SortOrder = 'ascend' | 'descend' | null
 
 const ProjectAccountList = () => {
+  const { message } = App.useApp()
   const [data, setData] = useState<ProjectAccount[]>([])
   const [loading, setLoading] = useState(false)
   const [total, setTotal] = useState(0)
@@ -20,6 +21,7 @@ const ProjectAccountList = () => {
   const [pageSize, setPageSize] = useState(10)
   const [modalVisible, setModalVisible] = useState(false)
   const [historyModalVisible, setHistoryModalVisible] = useState(false)
+  const [statsModalVisible, setStatsModalVisible] = useState(false)
   const [currentHistoryAccount, setCurrentHistoryAccount] = useState<ProjectAccount | null>(null)
   const [editingAccount, setEditingAccount] = useState<ProjectAccount | null>(null)
   const [projectList, setProjectList] = useState<Project[]>([])
@@ -241,6 +243,80 @@ const ProjectAccountList = () => {
     })
   }
 
+  // 获取统计数据（用于弹窗显示）
+  const [statsData, setStatsData] = useState<any>(null)
+  
+  // 计算统计数据 - 调用后端API
+  const handleShowStats = async () => {
+    if (!searchProjectId) {
+      message.warning('请先选择项目')
+      return
+    }
+    
+    try {
+      setLoading(true)
+      const res = await getProjectAccountStats({
+        project_id: searchProjectId,
+        account: searchAccount || undefined,
+        status: searchStatus,
+        account_type: searchAccountType,
+        create_time_start: createTimeRange?.[0]?.format('YYYY-MM-DD'),
+        create_time_end: createTimeRange?.[1]?.format('YYYY-MM-DD'),
+        update_time_start: updateTimeRange?.[0]?.format('YYYY-MM-DD'),
+        update_time_end: updateTimeRange?.[1]?.format('YYYY-MM-DD'),
+      })
+      
+      if (res.code === 1 && res.data) {
+        if (res.data.total_count === 0) {
+          message.warning('当前筛选条件下没有数据')
+          return
+        }
+        // 保存统计数据并打开弹窗
+        setStatsData(res.data)
+        setStatsModalVisible(true)
+      } else {
+        message.error(res.message || '获取统计数据失败')
+      }
+    } catch (error: any) {
+      message.error(error.response?.data?.detail || '获取统计数据失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 导出所有项目统计数据
+  const handleExportAllStats = async () => {
+    try {
+      setLoading(true)
+      const blob = await exportAllProjectStats()
+      
+      // 创建下载链接
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      
+      // 生成中文文件名
+      const now = new Date()
+      const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '')
+      const timeStr = now.toTimeString().slice(0, 8).replace(/:/g, '')
+      link.download = `项目统计汇总_${dateStr}_${timeStr}.xlsx`
+      
+      // 触发下载
+      document.body.appendChild(link)
+      link.click()
+      
+      // 清理
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      
+      message.success('导出成功')
+    } catch (error: any) {
+      message.error(error.response?.data?.detail || '导出失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const columns = [
     {
       title: '账号',
@@ -427,6 +503,22 @@ const ProjectAccountList = () => {
               搜索
             </Button>
             <Button onClick={handleReset}>重置</Button>
+            <Button 
+              icon={<BarChartOutlined />} 
+              onClick={handleShowStats}
+              disabled={!searchProjectId}
+            >
+              统计分析
+            </Button>
+            {(isAdmin || isGM) && (
+              <Button 
+                type="default"
+                icon={<DownloadOutlined />} 
+                onClick={handleExportAllStats}
+              >
+                导出所有项目统计
+              </Button>
+            )}
           </Space>
           <Space>
             {selectedRowKeys.length > 0 && (
@@ -564,6 +656,130 @@ const ProjectAccountList = () => {
             />
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* 统计分析弹窗 */}
+      <Modal
+        title={`统计分析 - ${projectList.find(p => p.id === searchProjectId)?.name || '未知项目'}`}
+        open={statsModalVisible}
+        onCancel={() => setStatsModalVisible(false)}
+        footer={[
+          <Button key="close" onClick={() => setStatsModalVisible(false)}>
+            关闭
+          </Button>
+        ]}
+        width={800}
+      >
+        {statsData ? (
+          <div>
+            <Card style={{ marginBottom: 16 }}>
+              <Statistic 
+                title="统计账号数量" 
+                value={statsData.total_count} 
+                suffix="个"
+              />
+            </Card>
+
+            <Row gutter={16} style={{ marginBottom: 16 }}>
+              <Col span={24}>
+                <Card title="当前余额统计" bordered>
+                  <Row gutter={16}>
+                    <Col span={6}>
+                      <Statistic
+                        title="最高分"
+                        value={statsData.balance.max.toFixed(2)}
+                        valueStyle={{ color: '#3f8600' }}
+                      />
+                    </Col>
+                    <Col span={6}>
+                      <Statistic
+                        title="最低分"
+                        value={statsData.balance.min.toFixed(2)}
+                        valueStyle={{ color: '#cf1322' }}
+                      />
+                    </Col>
+                    <Col span={6}>
+                      <Statistic
+                        title="平均分"
+                        value={statsData.balance.avg.toFixed(2)}
+                        valueStyle={{ color: '#1890ff' }}
+                      />
+                    </Col>
+                    <Col span={6}>
+                      <Statistic
+                        title="总分"
+                        value={statsData.balance.sum.toFixed(2)}
+                        valueStyle={{ color: '#722ed1' }}
+                      />
+                    </Col>
+                  </Row>
+                </Card>
+              </Col>
+            </Row>
+
+            <Row gutter={16}>
+              <Col span={24}>
+                <Card title="变动统计" bordered>
+                  <Row gutter={16}>
+                    <Col span={6}>
+                      <Statistic
+                        title="变动最高分"
+                        value={statsData.variable.max.toFixed(2)}
+                        valueStyle={{ color: '#3f8600' }}
+                        prefix={statsData.variable.max > 0 ? '+' : ''}
+                      />
+                    </Col>
+                    <Col span={6}>
+                      <Statistic
+                        title="变动最低分"
+                        value={statsData.variable.min.toFixed(2)}
+                        valueStyle={{ color: '#cf1322' }}
+                        prefix={statsData.variable.min > 0 ? '+' : ''}
+                      />
+                    </Col>
+                    <Col span={6}>
+                      <Statistic
+                        title="变动平均分"
+                        value={statsData.variable.avg.toFixed(2)}
+                        valueStyle={{ color: '#1890ff' }}
+                        prefix={statsData.variable.avg > 0 ? '+' : ''}
+                      />
+                    </Col>
+                    <Col span={6}>
+                      <Statistic
+                        title="变动总分"
+                        value={statsData.variable.sum.toFixed(2)}
+                        valueStyle={{ 
+                          color: statsData.variable.sum > 0 ? '#3f8600' : 
+                                 statsData.variable.sum < 0 ? '#cf1322' : '#666'
+                        }}
+                        prefix={statsData.variable.sum > 0 ? '+' : ''}
+                      />
+                    </Col>
+                  </Row>
+                </Card>
+              </Col>
+            </Row>
+
+            <div style={{ marginTop: 16, padding: 12, background: '#f5f5f5', borderRadius: 4 }}>
+              <p style={{ margin: 0, color: '#666', fontSize: 12 }}>
+                <strong>说明：</strong>
+                <br />
+                • 当前余额：账号的当前余额分数
+                <br />
+                • 变动：相比前一天的余额变化（正数表示增加，负数表示减少）
+                <br />
+                • 总分：所有账号的余额/变动总和
+                <br />
+                • 统计基于当前筛选条件下的所有账号数据（不受分页限制）
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', padding: '40px' }}>
+            <p>加载中...</p>
+          </div>
+        )}
       </Modal>
 
       <Modal

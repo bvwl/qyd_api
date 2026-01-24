@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Modal, Form, Input, message, Space, Popconfirm, Select, DatePicker } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined } from '@ant-design/icons'
+import { Table, Button, Modal, Form, Input, App, Space, Popconfirm, Select, DatePicker } from 'antd'
+import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, EyeOutlined, EyeInvisibleOutlined } from '@ant-design/icons'
 import type { ServerAccount, User } from '@/types'
 import { getServerAccountList, createServerAccount, updateServerAccount, deleteServerAccount } from '@/api/server'
 import { getUserList } from '@/api/user'
@@ -10,6 +10,7 @@ import dayjs, { Dayjs } from 'dayjs'
 const { RangePicker } = DatePicker
 
 const ServerAccountList = () => {
+  const { message } = App.useApp()
   const [data, setData] = useState<ServerAccount[]>([])
   const [loading, setLoading] = useState(false)
   const [total, setTotal] = useState(0)
@@ -21,6 +22,7 @@ const ServerAccountList = () => {
   const [searchUserId, setSearchUserId] = useState<string>()
   const [createTimeRange, setCreateTimeRange] = useState<[Dayjs, Dayjs] | null>(null)
   const [updateTimeRange, setUpdateTimeRange] = useState<[Dayjs, Dayjs] | null>(null)
+  const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({})
   const [form] = Form.useForm()
   const { hasPermission } = useUserStore()
 
@@ -86,7 +88,7 @@ const ServerAccountList = () => {
     setEditingAccount(record)
     form.setFieldsValue({
       username: record.username,
-      password: record.password,
+      password: record.password,  // 直接使用 password 字段（管理员已解密）
       user_id: record.user_id,
     })
     setModalVisible(true)
@@ -124,6 +126,32 @@ const ServerAccountList = () => {
       title: '用户名',
       dataIndex: 'username',
       key: 'username',
+    },
+    {
+      title: '密码',
+      dataIndex: 'password',
+      key: 'password',
+      render: (password: string, record: ServerAccount) => {
+        const isVisible = visiblePasswords[record.id] || false
+        return (
+          <Space>
+            <span style={{ fontFamily: 'monospace' }}>
+              {isVisible ? password : '••••••••••••'}
+            </span>
+            <Button
+              type="text"
+              size="small"
+              icon={isVisible ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+              onClick={() => {
+                setVisiblePasswords(prev => ({
+                  ...prev,
+                  [record.id]: !prev[record.id]
+                }))
+              }}
+            />
+          </Space>
+        )
+      },
     },
     {
       title: '关联用户',

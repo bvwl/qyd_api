@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Modal, Form, Input, message, Space, Popconfirm, Tag, Select, DatePicker } from 'antd'
+import { Table, Button, Modal, Form, Input, App, Space, Popconfirm, Tag, Select, DatePicker } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined } from '@ant-design/icons'
 import type { ServerCountry } from '@/types'
 import { Status } from '@/types'
@@ -10,6 +10,7 @@ import dayjs, { Dayjs } from 'dayjs'
 const { RangePicker } = DatePicker
 
 const CountryList = () => {
+  const { message } = App.useApp()
   const [data, setData] = useState<ServerCountry[]>([])
   const [loading, setLoading] = useState(false)
   const [total, setTotal] = useState(0)

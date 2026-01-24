@@ -5,27 +5,87 @@ from app.models.server import ServerInfo
 from app.schemas.server.info import Create, Update, Out, OutList
 from app.schemas.base import BaseOut
 from app.utils.time_tool import parse_time
+from app.core.tools import aes_encrypt, aes_decrypt
 
 
 class CRUD:
+    async def _generate_proxy_url(self, server: ServerInfo, current_user_id: UUID | None = None) -> str:
+        """
+        生成代理URL，使用当前用户的服务器账号
+        """
+        if server.port is None:
+            return ""
+        
+        # 获取当前用户的服务器账号
+        username = "username"
+        password = "password"
+        
+        if current_user_id:
+            from app.models.server import ServerAccount
+            
+            try:
+                account = await ServerAccount.get_or_none(user_id=current_user_id)
+                if account:
+                    username = account.username
+                    # 解密密码
+                    try:
+                        password = aes_decrypt(account.password, str(current_user_id))
+                    except Exception:
+                        password = "password"
+            except Exception:
+                pass
+        
+        # 生成代理URL
+        if server.domain:
+            return f"socks5://{username}:{password}@{server.domain}:{server.port}"
+        return f"socks5://{username}:{password}@{server.host}:{server.port}"
+    
     # 创建
-    async def create(self, item: Create) -> Out:
+    async def create(self, item: Create, current_user_id: UUID | None = None) -> Out:
         is_exist = await ServerInfo.get_or_none(host=item.host)
         if is_exist:
             raise HTTPException(status_code=400, detail='服务器地址已存在')
-        res = await ServerInfo.create(**item.model_dump())
+        
+        # 处理密码加密
+        data = item.model_dump()
+        if data.get('password'):
+            # 使用 AES 加密密码，key=MD5(host+"9527"), iv=MD5("9527"+host)前16位
+            data['password'] = aes_encrypt(data['password'], item.host)
+        
+        res = await ServerInfo.create(**data)
         if not res:
             raise HTTPException(status_code=500, detail='创建失败')
         await res.fetch_related('group', 'group__country')
-        return Out.model_validate(res)
+        
+        result = Out.model_validate(res)
+        
+        # 生成 proxy_url
+        result.proxy_url = await self._generate_proxy_url(res, current_user_id)
+        
+        return result
 
     # 查询
-    async def get(self, id: UUID) -> Out:
+    async def get(self, id: UUID, is_admin: bool = False, current_user_id: UUID | None = None) -> Out:
         res = await ServerInfo.get_or_none(id=id)
         if not res:
             raise HTTPException(status_code=404, detail='数据不存在')
         await res.fetch_related('group', 'group__country')
-        return Out.model_validate(res)
+        
+        item = Out.model_validate(res)
+        
+        # 如果是管理员，解密密码
+        if is_admin and res.password and res.host:
+            try:
+                decrypted_password = aes_decrypt(res.password, res.host)
+                item.password = decrypted_password
+            except Exception:
+                # 解密失败，保持原密文
+                pass
+        
+        # 生成 proxy_url
+        item.proxy_url = await self._generate_proxy_url(res, current_user_id)
+        
+        return item
 
     # 条件查询
     async def get_multi(self,
@@ -38,7 +98,9 @@ class CRUD:
                         create_time_start: str | int | None = None,
                         create_time_end: str | int | None = None,
                         update_time_start: str | int | None = None,
-                        update_time_end: str | int | None = None
+                        update_time_end: str | int | None = None,
+                        is_admin: bool = False,
+                        current_user_id: UUID | None = None
                         ) -> OutList:
         query = ServerInfo.all()
         if host:
@@ -74,11 +136,28 @@ class CRUD:
             raise HTTPException(status_code=404, detail='未查询到数据')
         
         num = len(res)
-        items = [Out.model_validate(obj) for obj in res]
+        items = []
+        
+        # 如果是管理员，解密所有密码
+        for obj in res:
+            item = Out.model_validate(obj)
+            if is_admin and obj.password and obj.host:
+                try:
+                    decrypted_password = aes_decrypt(obj.password, obj.host)
+                    item.password = decrypted_password
+                except Exception:
+                    # 解密失败，保持原密文
+                    pass
+            
+            # 生成 proxy_url
+            item.proxy_url = await self._generate_proxy_url(obj, current_user_id)
+            
+            items.append(item)
+        
         return OutList(message='成功', count=count, num=num, items=items)
 
     # 更新
-    async def update(self, id: UUID, item: Update) -> Out:
+    async def update(self, id: UUID, item: Update, is_admin: bool = False, current_user_id: UUID | None = None) -> Out:
         res = await ServerInfo.get_or_none(id=id)
         if not res:
             raise HTTPException(status_code=404, detail='数据不存在')
@@ -90,11 +169,32 @@ class CRUD:
             is_exist = await ServerInfo.get_or_none(host=new_host)
             if is_exist and is_exist.id != id:
                 raise HTTPException(status_code=400, detail=f'服务器地址 {new_host} 已被占用')
+        
+        # 如果更新了密码，需要加密
+        if 'password' in update_data and update_data['password']:
+            # 使用新的 host（如果有）或原来的 host
+            host_for_encrypt = update_data.get('host', res.host)
+            update_data['password'] = aes_encrypt(update_data['password'], host_for_encrypt)
 
         await res.update_from_dict(update_data)
         await res.save()
         await res.fetch_related('group', 'group__country')
-        return Out.model_validate(res)
+        
+        result = Out.model_validate(res)
+        
+        # 如果是管理员，解密密码
+        if is_admin and res.password and res.host:
+            try:
+                decrypted_password = aes_decrypt(res.password, res.host)
+                result.password = decrypted_password
+            except Exception:
+                # 解密失败，保持原密文
+                pass
+        
+        # 生成 proxy_url
+        result.proxy_url = await self._generate_proxy_url(res, current_user_id)
+        
+        return result
 
     # 删除
     async def delete(self, id: UUID) -> BaseOut:
@@ -105,7 +205,7 @@ class CRUD:
         return BaseOut(message='成功', count=1)
 
     # 创建或更新
-    async def upsert(self, item: Create) -> Out:
+    async def upsert(self, item: Create, current_user_id: UUID | None = None) -> Out:
         record, created = await ServerInfo.get_or_create(
             defaults=item.model_dump(),
             host=item.host
@@ -114,7 +214,13 @@ class CRUD:
             await record.update_from_dict(item.model_dump(exclude_unset=True))
             await record.save()
         await record.fetch_related('group', 'group__country')
-        return Out.model_validate(record)
+        
+        result = Out.model_validate(record)
+        
+        # 生成 proxy_url
+        result.proxy_url = await self._generate_proxy_url(record, current_user_id)
+        
+        return result
 
 
 server_info_crud = CRUD()

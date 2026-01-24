@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { Form, Input, Button, Card, message } from 'antd'
+import { Form, Input, Button, Card, App } from 'antd'
 import { UserOutlined, LockOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useUserStore } from '@/store/useUserStore'
 import './index.less'
 
 export default function Login() {
+  const { message } = App.useApp()
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
   const login = useUserStore((state) => state.login)

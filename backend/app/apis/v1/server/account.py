@@ -40,6 +40,7 @@ async def get(
 @app.get("", response_model=OutList, description="获取代理账号", summary="获取代理账号")
 async def gets(
     username: str | None = Query(None, description="用户名"),
+    user_id: UUID | None = Query(None, description="用户ID（管理员可用）"),
     order_by: str | None = Query(
         "-create_time",
         description="排序字段",
@@ -66,9 +67,25 @@ async def gets(
     limit: int = Query(10, ge=1, le=1000, description="每页数量"),
     current_user: dict = Depends(get_current_user)
 ):
+    """
+    获取服务器账号列表
+    - 管理员：可以查看所有用户的服务器账号（自动解密密码）
+    - 普通用户：只能查看自己的服务器账号
+    """
     try:
+        # 检查是否是管理员
+        user_roles = current_user.get('roles', [])
+        is_admin = 'ADMIN' in user_roles
+        
+        # 非管理员只能查看自己的账号
+        if not is_admin:
+            user_id = UUID(current_user.get('user_id') or current_user.get('id'))
+        # 管理员如果没有指定 user_id，则查看所有账号
+        # 如果指定了 user_id，则只查看该用户的账号
+        
         return await server_account_crud.get_multi(
             username=username,
+            user_id=user_id if user_id or not is_admin else None,
             page=page,
             limit=limit,
             res_count=res_count,
@@ -77,6 +94,7 @@ async def gets(
             create_time_end=create_time_end,
             update_time_start=update_time_start,
             update_time_end=update_time_end,
+            is_admin=is_admin
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -122,6 +140,60 @@ async def post_or_put(
 ):
     try:
         return await server_account_crud.upsert(item)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/generate", response_model=Out, description="生成服务器账号", summary="生成服务器账号")
+async def generate(
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    为当前用户生成服务器账号（SOCKS5代理账号）
+    - 如果用户已有账号，返回现有账号（包含解密后的密码）
+    - 如果没有，创建新账号（用户名：user_{user_id前8位}，密码：随机16位）
+    - 一个用户只能有一个服务器账号
+    - 密码使用AES加密存储，每个用户使用不同的密钥
+    """
+    try:
+        user_id = UUID(current_user.get('user_id') or current_user.get('id'))
+        return await server_account_crud.generate_account(user_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/{id}/password", response_model=Out, description="获取解密后的密码", summary="获取解密后的密码")
+async def get_password(
+    id: UUID = Path(..., description="账号ID"),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    获取服务器账号的解密密码
+    - 管理员：可以查看所有用户的账号密码
+    - 普通用户：只能查看自己的账号密码
+    """
+    try:
+        # 先获取账号信息
+        account = await server_account_crud.get(id)
+        
+        # 权限检查：非管理员只能查看自己的账号
+        user_roles = current_user.get('roles', [])
+        is_admin = 'ADMIN' in user_roles
+        current_user_id = UUID(current_user.get('user_id') or current_user.get('id'))
+        
+        if not is_admin and str(account.user_id) != str(current_user_id):
+            raise HTTPException(status_code=403, detail='无权查看此账号密码')
+        
+        # 获取解密后的密码
+        return await server_account_crud.get_with_password(id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
