@@ -11,6 +11,7 @@ import LogList from './views/User/LogList'
 import ProjectList from './views/Project/ProjectList'
 import ProjectAccount from './views/Project/ProjectAccount'
 import ProjectWallet from './views/Project/ProjectWallet'
+import WalletBatchCreate from './views/Project/WalletBatchCreate'
 import CountryList from './views/Server/CountryList'
 import GroupList from './views/Server/GroupList'
 import ServerList from './views/Server/ServerList'
@@ -18,6 +19,12 @@ import ServerAccount from './views/Server/ServerAccount'
 import MailList from './views/Mail/MailList'
 import MailViewer from './views/Mail/MailViewer'
 import MailSend from './views/Mail/MailSend'
+import XuiServerList from './views/Xui/XuiServerList'
+import XuiInboundList from './views/Xui/XuiInboundList'
+import XuiAccountManage from './views/Xui/XuiAccountManage'
+import XuiAccountList from './views/Xui/XuiAccountList'
+import XuiOperationLog from './views/Xui/XuiOperationLog'
+import TestXui from './views/Xui/TestXui'
 import Dashboard from './views/Dashboard/index'
 import Diagnostic from './views/Diagnostic'
 import UserApi from './views/ApiDocs/UserApi'
@@ -63,6 +70,7 @@ function App() {
               <Route path="user/log" element={<LogList />} />
               <Route path="project/list" element={<ProjectList />} />
               <Route path="project/account" element={<ProjectAccount />} />
+              <Route path="project/wallet/batch-create" element={<WalletBatchCreate />} />
               <Route path="project/wallet" element={<ProjectWallet />} />
               <Route path="server/country" element={<CountryList />} />
               <Route path="server/group" element={<GroupList />} />
@@ -71,6 +79,11 @@ function App() {
               <Route path="mail/list" element={<MailList />} />
               <Route path="mail/viewer" element={<MailViewer />} />
               <Route path="mail/send" element={<MailSend />} />
+              <Route path="xui/test" element={<TestXui />} />
+              <Route path="xui/server" element={<XuiServerList />} />
+              <Route path="xui/inbound" element={<XuiInboundList />} />
+              <Route path="xui/account" element={<XuiAccountList />} />
+              <Route path="xui/log" element={<XuiOperationLog />} />
               <Route path="api-docs/user" element={<UserApi />} />
               <Route path="api-docs/user-create" element={<UserCreate />} />
               <Route path="api-docs/role" element={<RoleApi />} />

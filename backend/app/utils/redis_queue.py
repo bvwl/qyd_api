@@ -30,7 +30,9 @@ class RedisQueueHandler:
         model_class,
         unique_fields: List[str],
         batch_size: int = 200,
-        num_workers: int = 4
+        num_workers: int = 4,
+        queue_db: int = 0,  # 队列使用的Redis数据库编号
+        cache_db: int = 1   # 缓存使用的Redis数据库编号
     ):
         """
         初始化Redis队列处理器
@@ -41,9 +43,11 @@ class RedisQueueHandler:
             unique_fields: 唯一标识字段列表（用于生成key和查询）
             batch_size: 每批处理的数量
             num_workers: 工作线程数量
+            queue_db: 队列使用的Redis数据库编号（默认0）
+            cache_db: 缓存使用的Redis数据库编号（默认1）
         """
-        self._redis = None  # 队列 Redis (DB 0)
-        self._redis_cache = None  # 缓存 Redis (DB 1)
+        self._redis = None  # 队列 Redis
+        self._redis_cache = None  # 缓存 Redis
         self._pool = None
         self._cache_pool = None
         
@@ -51,6 +55,8 @@ class RedisQueueHandler:
         self.queue_name = queue_name
         self.model_class = model_class
         self.unique_fields = unique_fields
+        self.queue_db = queue_db  # 队列数据库编号
+        self.cache_db = cache_db  # 缓存数据库编号
         
         # Redis key配置
         self.task_key_prefix = f"{REDIS_KEY_PREFIX}{queue_name}_item_"
@@ -79,17 +85,17 @@ class RedisQueueHandler:
         self._running = False
     
     async def init_redis(self):
-        """初始化Redis连接（队列DB 0 和 缓存DB 1）"""
+        """初始化Redis连接（使用自定义的队列DB和缓存DB）"""
         if not REDIS_ENABLED:
             logger.warning("Redis未启用，队列功能将不可用")
             return
         
-        # 初始化队列连接池 (DB 0)
+        # 初始化队列连接池
         if not self._pool:
             try:
-                redis_url = f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
+                redis_url = f"redis://{REDIS_HOST}:{REDIS_PORT}/{self.queue_db}"
                 if REDIS_PASSWORD:
-                    redis_url = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/0"
+                    redis_url = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/{self.queue_db}"
                 
                 self._pool = ConnectionPool.from_url(
                     redis_url,
@@ -100,17 +106,17 @@ class RedisQueueHandler:
                     decode_responses=True,
                     retry_on_timeout=True
                 )
-                logger.info(f"Redis队列连接池初始化成功 (DB 0) [{self.queue_name}]")
+                logger.info(f"Redis队列连接池初始化成功 (DB {self.queue_db}) [{self.queue_name}]")
             except Exception as e:
                 logger.error(f"Redis队列连接池初始化失败 [{self.queue_name}]: {e}")
                 raise
         
-        # 初始化缓存连接池 (DB 1)
+        # 初始化缓存连接池
         if not self._cache_pool:
             try:
-                cache_url = f"redis://{REDIS_HOST}:{REDIS_PORT}/1"
+                cache_url = f"redis://{REDIS_HOST}:{REDIS_PORT}/{self.cache_db}"
                 if REDIS_PASSWORD:
-                    cache_url = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/1"
+                    cache_url = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/{self.cache_db}"
                 
                 self._cache_pool = ConnectionPool.from_url(
                     cache_url,
@@ -121,7 +127,7 @@ class RedisQueueHandler:
                     decode_responses=True,
                     retry_on_timeout=True
                 )
-                logger.info(f"Redis缓存连接池初始化成功 (DB 1) [{self.queue_name}]")
+                logger.info(f"Redis缓存连接池初始化成功 (DB {self.cache_db}) [{self.queue_name}]")
             except Exception as e:
                 logger.error(f"Redis缓存连接池初始化失败 [{self.queue_name}]: {e}")
                 raise
@@ -130,13 +136,13 @@ class RedisQueueHandler:
         self._redis_cache = Redis(connection_pool=self._cache_pool)
     
     async def get_redis(self) -> Redis:
-        """获取队列Redis连接 (DB 0)"""
+        """获取队列Redis连接"""
         if not self._redis:
             await self.init_redis()
         return self._redis
     
     async def get_redis_cache(self) -> Redis:
-        """获取缓存Redis连接 (DB 1)"""
+        """获取缓存Redis连接"""
         if not self._redis_cache:
             await self.init_redis()
         return self._redis_cache
@@ -417,7 +423,7 @@ class RedisQueueHandler:
                     f"更新 {len(updates)}，创建 {len(creates)}"
                 )
                 
-                # 5. 在Redis DB 1中批量添加缓存（独立于数据库事务）
+                # 5. 在Redis缓存DB中批量添加缓存（独立于数据库事务）
                 try:
                     redis_cache = await self.get_redis_cache()
                     
@@ -425,18 +431,18 @@ class RedisQueueHandler:
                         for key, operation in cache_items:
                             key_parts = [str(k) for k in key]
                             cache_key = self.cache_key_prefix + '_'.join(key_parts)
-                            # 设置缓存到 DB 1，值为操作类型，过期时间1小时
+                            # 设置缓存，值为操作类型，过期时间1小时
                             cache_pipe.setex(cache_key, self.cache_expire_seconds, operation)
                         await cache_pipe.execute()
                     
                     logger.debug(
-                        f"[Worker-{worker_id}] 缓存添加成功 (DB 1) [{self.queue_name}]，"
+                        f"[Worker-{worker_id}] 缓存添加成功 (DB {self.cache_db}) [{self.queue_name}]，"
                         f"缓存 {len(cache_items)} 条记录，过期时间 {self.cache_expire_seconds}秒"
                     )
                 except Exception as cache_error:
                     # 缓存操作失败不影响主流程，只记录警告
                     logger.warning(
-                        f"[Worker-{worker_id}] 缓存添加失败 (DB 1) [{self.queue_name}]: {cache_error}，"
+                        f"[Worker-{worker_id}] 缓存添加失败 (DB {self.cache_db}) [{self.queue_name}]: {cache_error}，"
                         f"数据库操作已成功，将继续处理"
                     )
                 

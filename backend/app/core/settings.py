@@ -1,5 +1,7 @@
 import os
 import random
+import time
+from typing import Dict, Optional
 
 
 # ==========================================
@@ -143,7 +145,9 @@ def get_tortoise_config():
                     "app.models.server",
                     "app.models.user",
                     "app.models.project",
+                    "app.models.stats",  # 新增统计模型
                     "app.models.rbac_v2",  # 新增 RBAC v2 模型
+                    "app.models.xui",  # 新增 XUI 模型
                     "aerich.models",
                 ],
                 "default_connection": "default",
@@ -160,13 +164,89 @@ TORTOISE_ORM = get_tortoise_config()
 # ==========================================
 # 读写分离工具函数
 # ==========================================
+
+# 轮询索引（全局变量）
+_read_db_index = 0
+
+# 从库健康状态缓存
+_slave_health_cache: Dict[str, Dict] = {}
+_health_check_interval = 30  # 健康检查间隔（秒）
+
+
+def check_slave_health(slave_name: str) -> bool:
+    """
+    检查从库健康状态（带缓存）
+    
+    :param slave_name: 从库名称
+    :return: True表示健康，False表示不健康
+    """
+    global _slave_health_cache
+    
+    current_time = time.time()
+    
+    # 检查缓存
+    if slave_name in _slave_health_cache:
+        cache_entry = _slave_health_cache[slave_name]
+        # 如果缓存未过期，直接返回缓存结果
+        if current_time - cache_entry['check_time'] < _health_check_interval:
+            return cache_entry['is_healthy']
+    
+    # 执行健康检查
+    is_healthy = True
+    try:
+        from tortoise import Tortoise
+        
+        # 尝试获取连接
+        conn = Tortoise.get_connection(slave_name)
+        if conn:
+            # 简单检查：连接是否存在
+            is_healthy = True
+        else:
+            is_healthy = False
+    except Exception as e:
+        # 健康检查失败，标记为不健康
+        is_healthy = False
+        print(f"⚠️  从库 {slave_name} 健康检查失败: {e}")
+    
+    # 更新缓存
+    _slave_health_cache[slave_name] = {
+        'is_healthy': is_healthy,
+        'check_time': current_time
+    }
+    
+    return is_healthy
+
+
 def get_read_db():
-    """获取读数据库连接名称（负载均衡）"""
+    """
+    获取读数据库连接名称（轮询负载均衡 + 健康检查）
+    
+    策略：
+    1. 使用轮询（Round Robin）在多个从库之间分配请求
+    2. 健康检查带缓存（每30秒检查一次），避免性能影响
+    3. 如果所有从库都不健康，降级到主库
+    """
+    global _read_db_index
+    
     if not DB_READ_WRITE_SPLIT:
         return "default"
     
-    # 随机选择一个从库，实现简单的负载均衡
-    return random.choice(["slave1", "slave2"])
+    # 可用的从库列表
+    slaves = ["slave1", "slave2"]
+    
+    # 尝试最多2次（遍历所有从库）
+    for _ in range(len(slaves)):
+        # 轮询选择从库
+        slave = slaves[_read_db_index % len(slaves)]
+        _read_db_index += 1
+        
+        # 健康检查（带缓存）
+        if check_slave_health(slave):
+            return slave
+    
+    # 所有从库都不健康，降级到主库
+    print("⚠️  所有从库都不健康，降级到主库读取")
+    return "default"
 
 
 def get_write_db():

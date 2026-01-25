@@ -1,9 +1,15 @@
-from fastapi import HTTPException, Depends, Header
+from fastapi import HTTPException, Depends, Header, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional
 from uuid import UUID
 from app.utils.jwt_tool import JwtToken
 from app.models.user import UserToken, UserInfo
+from app.utils.security_log import (
+    log_unauthorized_access,
+    log_permission_denied,
+    log_data_access_violation,
+    LogAction
+)
 
 
 class Verify:
@@ -11,12 +17,14 @@ class Verify:
         pass
 
     # 检测是否为管理员
-    def is_admin(self, roles, raise_exception=True):
+    async def is_admin(self, roles, raise_exception=True, user_id: UUID = None, request: Request = None):
         """检测是否为管理员
         
         Args:
             roles: 角色列表或单个角色字符串
             raise_exception: 是否抛出异常，默认True
+            user_id: 用户ID（用于日志记录）
+            request: Request对象（用于日志记录）
         """
         # 兼容旧版本的单个角色字符串
         if isinstance(roles, str):
@@ -24,27 +32,49 @@ class Verify:
 
         if "ADMIN" not in roles:
             if raise_exception:
+                # 记录越权操作日志
+                if user_id and request:
+                    await log_unauthorized_access(
+                        resource="管理员功能",
+                        operation="访问",
+                        user_id=user_id,
+                        request=request,
+                        required_role="ADMIN",
+                        user_roles=roles
+                    )
                 raise HTTPException(status_code=403, detail="权限不足")
             else:
                 return False
         return True
 
     # 检测是否操作自己的数据
-    def is_owner(self, pk: UUID, user_id: UUID, raise_exception=True):
+    async def is_owner(self, pk: UUID, user_id: UUID, raise_exception=True, request: Request = None, resource_type: str = "数据"):
         if pk != user_id:
             if raise_exception:
+                # 记录数据访问违规日志
+                if request:
+                    await log_data_access_violation(
+                        resource_type=resource_type,
+                        resource_id=str(pk),
+                        operation="访问",
+                        user_id=user_id,
+                        owner_id=pk,
+                        request=request
+                    )
                 raise HTTPException(status_code=403, detail="无法操作他人数据")
             else:
                 return False
         return True
 
     # 检测是否为GM
-    def is_gm(self, roles, raise_exception=True):
+    async def is_gm(self, roles, raise_exception=True, user_id: UUID = None, request: Request = None):
         """检测是否为GM
         
         Args:
             roles: 角色列表或单个角色字符串
             raise_exception: 是否抛出异常，默认True
+            user_id: 用户ID（用于日志记录）
+            request: Request对象（用于日志记录）
         """
         # 兼容旧版本的单个角色字符串
         if isinstance(roles, str):
@@ -52,19 +82,31 @@ class Verify:
 
         if "GM" not in roles:
             if raise_exception:
+                # 记录越权操作日志
+                if user_id and request:
+                    await log_unauthorized_access(
+                        resource="GM功能",
+                        operation="访问",
+                        user_id=user_id,
+                        request=request,
+                        required_role="GM",
+                        user_roles=roles
+                    )
                 raise HTTPException(status_code=403, detail="权限不足")
             else:
                 return False
         return True
 
     # 检测是否为GM或自己
-    def is_gm_or_owner(self, roles, pk: UUID, user_id: UUID, raise_exception=True):
+    async def is_gm_or_owner(self, roles, pk: UUID, user_id: UUID, raise_exception=True, request: Request = None, resource_type: str = "数据"):
         """检测是否为GM或自己
         
         Args:
             roles: 角色列表或单个角色字符串
             pk: 目标资源ID
             user_id: 当前用户ID
+            request: Request对象（用于日志记录）
+            resource_type: 资源类型（用于日志记录）
         """
         # 兼容旧版本的单个角色字符串
         if isinstance(roles, str):
@@ -72,18 +114,30 @@ class Verify:
 
         if "GM" not in roles and pk != user_id:
             if raise_exception:
+                # 记录越权操作日志
+                if request:
+                    await log_data_access_violation(
+                        resource_type=resource_type,
+                        resource_id=str(pk),
+                        operation="访问",
+                        user_id=user_id,
+                        owner_id=pk,
+                        request=request
+                    )
                 raise HTTPException(status_code=403, detail="权限不足")
             else:
                 return False
         return True
 
     # 检测是否为管理员或GM
-    def is_admin_or_gm(self, roles, raise_exception=True):
+    async def is_admin_or_gm(self, roles, raise_exception=True, user_id: UUID = None, request: Request = None):
         """检测是否为管理员或GM
 
         Args:
             roles: 角色列表或单个角色字符串
             raise_exception: 是否抛出异常，默认True
+            user_id: 用户ID（用于日志记录）
+            request: Request对象（用于日志记录）
         """
         # 兼容旧版本的单个角色字符串
         if isinstance(roles, str):
@@ -91,6 +145,16 @@ class Verify:
 
         if not any(role in roles for role in ['ADMIN', 'GM']):
             if raise_exception:
+                # 记录越权操作日志
+                if user_id and request:
+                    await log_unauthorized_access(
+                        resource="管理功能",
+                        operation="访问",
+                        user_id=user_id,
+                        request=request,
+                        required_role="ADMIN或GM",
+                        user_roles=roles
+                    )
                 raise HTTPException(status_code=403, detail="权限不足")
             else:
                 return False
@@ -153,7 +217,8 @@ security = HTTPBearer(
 
 async def get_current_user_or_token(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    api_token: Optional[str] = Header(None, alias="API-TOKEN")
+    api_token: Optional[str] = Header(None, alias="API-TOKEN"),
+    request: Request = None
 ):
     """
     支持两种认证方式：
@@ -208,13 +273,13 @@ async def get_current_user_or_token(
 
 
 # 基础认证：验证JWT token或API Token
-async def get_current_user(user_info: dict = Depends(get_current_user_or_token)):
+async def get_current_user(user_info: dict = Depends(get_current_user_or_token), request: Request = None):
     """获取当前登录用户信息（支持 JWT 和 API Token）"""
     return user_info
 
 
 # 管理员权限验证
-async def get_admin_user(user_info: dict = Depends(get_current_user_or_token)):
+async def get_admin_user(user_info: dict = Depends(get_current_user_or_token), request: Request = None):
     """验证管理员权限"""
     # 获取用户完整信息以检查角色
     try:
@@ -227,6 +292,17 @@ async def get_admin_user(user_info: dict = Depends(get_current_user_or_token)):
         # 检查是否有 ADMIN 角色
         has_admin = any(role.code == "ADMIN" for role in user.roles)
         if not has_admin:
+            # 记录越权操作
+            if request:
+                from app.utils.security_log import log_unauthorized_access
+                await log_unauthorized_access(
+                    resource="管理员功能",
+                    operation="访问",
+                    user_id=user_id,
+                    request=request,
+                    required_role="ADMIN",
+                    user_roles=[role.code for role in user.roles]
+                )
             raise HTTPException(status_code=403, detail="Admin permission required")
         
         return user_info
@@ -237,7 +313,7 @@ async def get_admin_user(user_info: dict = Depends(get_current_user_or_token)):
 
 
 # GM权限验证
-async def get_gm_user(user_info: dict = Depends(get_current_user_or_token)):
+async def get_gm_user(user_info: dict = Depends(get_current_user_or_token), request: Request = None):
     """验证GM权限"""
     try:
         user_id = UUID(user_info["user_id"])
@@ -249,6 +325,17 @@ async def get_gm_user(user_info: dict = Depends(get_current_user_or_token)):
         # 检查是否有 ADMIN 或 GM 角色
         has_permission = any(role.code in ["ADMIN", "GM"] for role in user.roles)
         if not has_permission:
+            # 记录越权操作
+            if request:
+                from app.utils.security_log import log_unauthorized_access
+                await log_unauthorized_access(
+                    resource="GM功能",
+                    operation="访问",
+                    user_id=user_id,
+                    request=request,
+                    required_role="ADMIN或GM",
+                    user_roles=[role.code for role in user.roles]
+                )
             raise HTTPException(status_code=403, detail="GM permission required")
         
         return user_info

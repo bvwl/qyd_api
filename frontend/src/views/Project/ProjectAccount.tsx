@@ -3,7 +3,7 @@ import { Table, Button, Modal, Form, Input, InputNumber, App, Space, Popconfirm,
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, HistoryOutlined, CopyOutlined, BarChartOutlined, DownloadOutlined } from '@ant-design/icons'
 import type { ProjectAccount, Project } from '@/types'
 import { AccountType, Status } from '@/types'
-import { getProjectAccountList, createProjectAccount, updateProjectAccount, deleteProjectAccount, getProjectList, getProjectAccountStats, exportAllProjectStats } from '@/api/project'
+import { getProjectAccountList, createProjectAccount, updateProjectAccount, deleteProjectAccount, getProjectList, getProjectAccountStats, exportAllProjectStats, exportTodayProjectStats } from '@/api/project'
 import { useUserStore } from '@/store/useUserStore'
 import { Dayjs } from 'dayjs'
 import type { TableProps } from 'antd'
@@ -193,11 +193,24 @@ const ProjectAccountList = () => {
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields()
+      
+      // 过滤掉空字符串，将其转换为 undefined
+      // 这样后端的 exclude_unset=True 才能正确工作
+      const filteredValues = Object.entries(values).reduce((acc, [key, value]) => {
+        // 如果值是空字符串，不包含该字段（相当于 undefined）
+        if (value === '') {
+          return acc
+        }
+        // 其他值正常包含
+        acc[key] = value
+        return acc
+      }, {} as any)
+      
       if (editingAccount) {
-        await updateProjectAccount(editingAccount.id, values)
+        await updateProjectAccount(editingAccount.id, filteredValues)
         message.success('更新成功')
       } else {
-        await createProjectAccount(values)
+        await createProjectAccount(filteredValues)
         message.success('创建成功')
       }
       setModalVisible(false)
@@ -300,6 +313,39 @@ const ProjectAccountList = () => {
       const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '')
       const timeStr = now.toTimeString().slice(0, 8).replace(/:/g, '')
       link.download = `项目统计汇总_${dateStr}_${timeStr}.xlsx`
+      
+      // 触发下载
+      document.body.appendChild(link)
+      link.click()
+      
+      // 清理
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      
+      message.success('导出成功')
+    } catch (error: any) {
+      message.error(error.response?.data?.detail || '导出失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 导出当天所有项目统计数据
+  const handleExportTodayStats = async () => {
+    try {
+      setLoading(true)
+      const blob = await exportTodayProjectStats()
+      
+      // 创建下载链接
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      
+      // 生成中文文件名
+      const now = new Date()
+      const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '')
+      const timeStr = now.toTimeString().slice(0, 8).replace(/:/g, '')
+      link.download = `当天项目统计_${dateStr}_${timeStr}.xlsx`
       
       // 触发下载
       document.body.appendChild(link)
@@ -511,13 +557,22 @@ const ProjectAccountList = () => {
               统计分析
             </Button>
             {(isAdmin || isGM) && (
-              <Button 
-                type="default"
-                icon={<DownloadOutlined />} 
-                onClick={handleExportAllStats}
-              >
-                导出所有项目统计
-              </Button>
+              <>
+                <Button 
+                  type="default"
+                  icon={<DownloadOutlined />} 
+                  onClick={handleExportAllStats}
+                >
+                  导出所有项目统计
+                </Button>
+                <Button 
+                  type="default"
+                  icon={<DownloadOutlined />} 
+                  onClick={handleExportTodayStats}
+                >
+                  导出当天项目统计
+                </Button>
+              </>
             )}
           </Space>
           <Space>

@@ -1,7 +1,13 @@
 """
 项目账号敏感数据加密/解密工具
 
-用于处理项目账号 data 字段中的敏感信息（private_key 和 mnemonic）
+用于处理项目账号的敏感信息：
+- password 字段（与 data 同级）
+- data 字段中所有层级的 private_key 和 mnemonic
+
+加密方式：
+- key: MD5(账号 + "9527")
+- iv: MD5("9527" + 账号)
 """
 
 import copy
@@ -9,12 +15,12 @@ from typing import Any
 from app.core.tools import aes_encrypt_project, aes_decrypt_project
 
 
-def encrypt_sensitive_fields(data: dict | list | Any, project_name: str) -> dict | list | Any:
+def encrypt_sensitive_fields(data: dict | list | Any, account: str) -> dict | list | Any:
     """
     递归加密 JSON 数据中所有层级的 private_key 和 mnemonic 字段
     
     :param data: 原始数据（dict、list 或其他类型）
-    :param project_name: 项目名称（用于生成加密密钥）
+    :param account: 项目账号（用于生成加密密钥）
     :return: 加密后的数据
     """
     if data is None:
@@ -28,26 +34,26 @@ def encrypt_sensitive_fields(data: dict | list | Any, project_name: str) -> dict
             # 如果是敏感字段且值为字符串，进行加密
             if key in ['private_key', 'mnemonic'] and isinstance(value, str) and value:
                 try:
-                    data[key] = aes_encrypt_project(value, project_name)
+                    data[key] = aes_encrypt_project(value, account)
                 except Exception as e:
                     # 加密失败，记录错误但不中断流程
                     print(f"加密字段 {key} 失败: {e}")
             # 递归处理嵌套的 dict 或 list
             elif isinstance(value, (dict, list)):
-                data[key] = encrypt_sensitive_fields(value, project_name)
+                data[key] = encrypt_sensitive_fields(value, account)
     
     elif isinstance(data, list):
-        data = [encrypt_sensitive_fields(item, project_name) for item in data]
+        data = [encrypt_sensitive_fields(item, account) for item in data]
     
     return data
 
 
-def decrypt_sensitive_fields(data: dict | list | Any, project_name: str) -> dict | list | Any:
+def decrypt_sensitive_fields(data: dict | list | Any, account: str) -> dict | list | Any:
     """
     递归解密 JSON 数据中所有层级的 private_key 和 mnemonic 字段
     
     :param data: 加密的数据（dict、list 或其他类型）
-    :param project_name: 项目名称（用于生成解密密钥）
+    :param account: 项目账号（用于生成解密密钥）
     :return: 解密后的数据
     """
     if data is None:
@@ -61,18 +67,54 @@ def decrypt_sensitive_fields(data: dict | list | Any, project_name: str) -> dict
             # 如果是敏感字段且值为字符串，进行解密
             if key in ['private_key', 'mnemonic'] and isinstance(value, str) and value:
                 try:
-                    data[key] = aes_decrypt_project(value, project_name)
+                    data[key] = aes_decrypt_project(value, account)
                 except Exception as e:
                     # 解密失败，保持原值（可能已经是明文或加密失败）
                     print(f"解密字段 {key} 失败: {e}")
             # 递归处理嵌套的 dict 或 list
             elif isinstance(value, (dict, list)):
-                data[key] = decrypt_sensitive_fields(value, project_name)
+                data[key] = decrypt_sensitive_fields(value, account)
     
     elif isinstance(data, list):
-        data = [decrypt_sensitive_fields(item, project_name) for item in data]
+        data = [decrypt_sensitive_fields(item, account) for item in data]
     
     return data
+
+
+def encrypt_password(password: str, account: str) -> str:
+    """
+    加密项目账号的 password 字段
+    
+    :param password: 原始密码
+    :param account: 项目账号（用于生成加密密钥）
+    :return: 加密后的密码
+    """
+    if not password:
+        return password
+    
+    try:
+        return aes_encrypt_project(password, account)
+    except Exception as e:
+        print(f"加密 password 失败: {e}")
+        return password
+
+
+def decrypt_password(encrypted_password: str, account: str) -> str:
+    """
+    解密项目账号的 password 字段
+    
+    :param encrypted_password: 加密的密码
+    :param account: 项目账号（用于生成解密密钥）
+    :return: 解密后的密码
+    """
+    if not encrypted_password:
+        return encrypted_password
+    
+    try:
+        return aes_decrypt_project(encrypted_password, account)
+    except Exception as e:
+        print(f"解密 password 失败: {e}")
+        return encrypted_password
 
 
 def check_user_can_decrypt(user_id: str, user_roles: list[str], project_user_ids: list[str]) -> bool:
@@ -116,22 +158,34 @@ if __name__ == '__main__':
         ]
     }
     
-    project_name = "测试项目"
+    account = "test_account@example.com"
+    password = "test_password_123"
     
     print("原始数据:")
     print(test_data)
+    print(f"原始密码: {password}")
     print()
     
-    # 加密
-    encrypted_data = encrypt_sensitive_fields(test_data, project_name)
-    print("加密后:")
+    # 加密 data 字段
+    encrypted_data = encrypt_sensitive_fields(test_data, account)
+    print("加密后的 data:")
     print(encrypted_data)
     print()
     
-    # 解密
-    decrypted_data = decrypt_sensitive_fields(encrypted_data, project_name)
-    print("解密后:")
+    # 加密 password 字段
+    encrypted_password = encrypt_password(password, account)
+    print(f"加密后的 password: {encrypted_password}")
+    print()
+    
+    # 解密 data 字段
+    decrypted_data = decrypt_sensitive_fields(encrypted_data, account)
+    print("解密后的 data:")
     print(decrypted_data)
+    print()
+    
+    # 解密 password 字段
+    decrypted_password = decrypt_password(encrypted_password, account)
+    print(f"解密后的 password: {decrypted_password}")
     print()
     
     # 验证
@@ -140,3 +194,4 @@ if __name__ == '__main__':
     print(f"mnemonic: {test_data['mnemonic'] == decrypted_data['mnemonic']}")
     print(f"nested.private_key: {test_data['nested']['private_key'] == decrypted_data['nested']['private_key']}")
     print(f"list[0].private_key: {test_data['list_data'][0]['private_key'] == decrypted_data['list_data'][0]['private_key']}")
+    print(f"password: {password == decrypted_password}")

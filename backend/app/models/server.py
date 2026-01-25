@@ -115,6 +115,11 @@ class ServerAccount(BaseModel):
     """
     username = fields.CharField(max_length=36, index=True, description='用户名')
     password = fields.TextField(description='密码（加密存储）')
+    is_all_inbound_added = fields.BooleanField(
+        default=False, 
+        index=True, 
+        description='是否已添加到所有入站(用于XUI管理)'
+    )
 
     # 外键关联用户信息类（一对一，可选）
     user = fields.OneToOneField(
@@ -130,6 +135,7 @@ class ServerAccount(BaseModel):
         ordering = ["-create_time"]
         indexes = [
             ("user_id", "create_time"),  # 按用户和时间查询
+            ("is_all_inbound_added",),  # 按是否添加到入站查询
             # username 已有 index=True，无需重复声明
         ]
 

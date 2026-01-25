@@ -55,8 +55,8 @@ class Out(Base):
     
     project_id: UUID | None = Field(None, description="所属项目ID")
     
-    # 关联的项目信息
-    project: ProjectInfoBase | None = Field(None, description="项目信息")
+    # 关联的项目信息（可选，批量创建时不包含）
+    project: ProjectInfoBase | None = Field(default=None, description="项目信息")
 
     @field_serializer("create_time", "update_time")
     def format_datetime(self, dt: datetime) -> str:
@@ -64,6 +64,8 @@ class Out(Base):
 
     class Config:
         from_attributes = True
+        # 允许任意类型，避免关联字段验证问题
+        arbitrary_types_allowed = True
 
 
 class OutList(BaseModel):
@@ -74,3 +76,22 @@ class OutList(BaseModel):
     count: int = Field(0, description="总数")
     num: int = Field(0, description="当前数量")
     items: List[Out] = Field([], description="列表数据")
+
+
+class BatchCreate(BaseModel):
+    """
+    批量创建钱包请求模型
+    """
+    project_name: str = Field(..., description="项目名称（用于加密）")
+    chain: str = Field(..., description="链类型（ETH/SOL，大小写不敏感）")
+    count: int = Field(..., ge=1, le=100, description="创建数量（1-100）")
+    remark: str | None = Field(None, description="备注")
+
+
+class BatchCreateOut(BaseModel):
+    """
+    批量创建钱包输出模型
+    """
+    message: str = Field("成功", description="提示信息")
+    count: int = Field(0, description="创建数量")
+    items: List[Out] = Field([], description="创建的钱包列表")

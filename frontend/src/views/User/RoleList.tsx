@@ -5,6 +5,7 @@ import type { Role } from '@/types'
 import { getRoleList, createRole, updateRole, deleteRole } from '@/api/user'
 import { useUserStore } from '@/store/useUserStore'
 import { Dayjs } from 'dayjs'
+import { filterEmptyStrings } from '@/utils/form'
 
 const { RangePicker } = DatePicker
 
@@ -100,11 +101,12 @@ const RoleList = () => {
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields()
+      const filteredValues = filterEmptyStrings(values)
       if (editingRole) {
-        await updateRole(editingRole.id, values)
+        await updateRole(editingRole.id, filteredValues)
         message.success('更新成功')
       } else {
-        await createRole(values)
+        await createRole(filteredValues)
         message.success('创建成功')
       }
       setModalVisible(false)

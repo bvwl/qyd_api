@@ -113,6 +113,13 @@ ROUTES_DATA = [
                 "component": "ProjectWallet",
                 "sort": 3,
             },
+            {
+                "name": "project-wallet-batch-create",
+                "path": "/project/wallet/batch-create",
+                "title": "批量创建钱包",
+                "component": "WalletBatchCreate",
+                "sort": 4,
+            },
         ],
     },
     {

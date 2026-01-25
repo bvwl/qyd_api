@@ -190,7 +190,8 @@ export interface ServerInfo {
   domain?: string
   is_sale: number
   port?: number
-  proxy_url?: string  // SOCKS5代理URL
+  proxy_url?: string  // 代理URL
+  proxy_type?: string  // 代理类型 (http/socks5)
   group_id?: string
   group?: ServerGroup
   create_time: string
@@ -203,6 +204,7 @@ export interface ServerAccount {
   password: string
   user_id: string
   user?: User
+  is_all_inbound_added: boolean
   create_time: string
   update_time: string
 }

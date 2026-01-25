@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Modal, Form, Input, App, Space, Popconfirm, Tag, Select, DatePicker, Transfer, Tooltip } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, TeamOutlined, CopyOutlined } from '@ant-design/icons'
+import { Table, Button, Modal, Form, Input, App, Space, Popconfirm, Tag, Select, DatePicker, Transfer, Tooltip, Upload, List } from 'antd'
+import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, TeamOutlined, CopyOutlined, UploadOutlined, DownloadOutlined, FileOutlined } from '@ant-design/icons'
 import type { Project, User } from '@/types'
 import { ProjectStatus } from '@/types'
-import { getProjectList, createProject, updateProject, deleteProject } from '@/api/project'
+import { getProjectList, createProject, updateProject, deleteProject, uploadProjectFile, getProjectFiles, downloadProjectFile, deleteProjectFile } from '@/api/project'
 import { getUserList } from '@/api/user'
 import { useUserStore } from '@/store/useUserStore'
 import dayjs, { Dayjs } from 'dayjs'
 import type { TableProps } from 'antd'
+import { filterEmptyStrings } from '@/utils/form'
+import type { UploadFile } from 'antd/es/upload/interface'
 
 const { RangePicker } = DatePicker
 
@@ -47,6 +49,13 @@ const ProjectList = () => {
   
   // 用户筛选列表
   const [filterUsers, setFilterUsers] = useState<User[]>([])
+
+  // 文件管理相关状态
+  const [fileModalVisible, setFileModalVisible] = useState(false)
+  const [managingFileProject, setManagingFileProject] = useState<Project | null>(null)
+  const [projectFiles, setProjectFiles] = useState<Array<{ name: string; size: number; modified_time: number }>>([])
+  const [fileLoading, setFileLoading] = useState(false)
+  const [uploadingFile, setUploadingFile] = useState(false)
 
   const isAdmin = hasPermission('ADMIN')
   const isGM = hasPermission('GM')
@@ -190,11 +199,12 @@ const ProjectList = () => {
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields()
+      const filteredValues = filterEmptyStrings(values)
       if (editingProject) {
-        await updateProject(editingProject.id, values)
+        await updateProject(editingProject.id, filteredValues)
         message.success('更新成功')
       } else {
-        await createProject(values)
+        await createProject(filteredValues)
         message.success('创建成功')
       }
       setModalVisible(false)
@@ -269,6 +279,114 @@ const ProjectList = () => {
     }).catch(() => {
       message.error('复制失败')
     })
+  }
+
+  // 打开文件管理弹窗
+  const handleManageFiles = async (record: Project) => {
+    setManagingFileProject(record)
+    setFileModalVisible(true)
+    await loadProjectFiles(record.id)
+  }
+
+  // 加载项目文件列表
+  const loadProjectFiles = async (projectId: string) => {
+    setFileLoading(true)
+    try {
+      const res = await getProjectFiles(projectId)
+      setProjectFiles(res.files || [])
+    } catch (error) {
+      message.error('获取文件列表失败')
+      setProjectFiles([])
+    } finally {
+      setFileLoading(false)
+    }
+  }
+
+  // 上传文件
+  const handleUpload = async (file: File) => {
+    if (!managingFileProject) return false
+
+    // 检查文件类型
+    const allowedTypes = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt']
+    const fileExt = file.name.substring(file.name.lastIndexOf('.')).toLowerCase()
+    if (!allowedTypes.includes(fileExt)) {
+      message.error(`不支持的文件格式。允许的格式：${allowedTypes.join(', ')}`)
+      return false
+    }
+
+    // 检查文件大小（50MB）
+    if (file.size > 50 * 1024 * 1024) {
+      message.error('文件大小不能超过 50MB')
+      return false
+    }
+
+    setUploadingFile(true)
+    try {
+      await uploadProjectFile(managingFileProject.id, file)
+      message.success('文件上传成功')
+      await loadProjectFiles(managingFileProject.id)
+    } catch (error: any) {
+      message.error(error.response?.data?.detail || '文件上传失败')
+    } finally {
+      setUploadingFile(false)
+    }
+
+    return false // 阻止默认上传行为
+  }
+
+  // 下载文件
+  const handleDownload = async (filename: string) => {
+    if (!managingFileProject) return
+
+    try {
+      const blob = await downloadProjectFile(managingFileProject.id, filename)
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      message.success('文件下载成功')
+    } catch (error) {
+      message.error('文件下载失败')
+    }
+  }
+
+  // 删除文件
+  const handleDeleteFile = async (filename: string) => {
+    if (!managingFileProject) return
+
+    Modal.confirm({
+      title: '确认删除',
+      content: `确定要删除文件 "${filename}" 吗？`,
+      okText: '确定',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          await deleteProjectFile(managingFileProject.id, filename)
+          message.success('文件删除成功')
+          await loadProjectFiles(managingFileProject.id)
+        } catch (error) {
+          message.error('文件删除失败')
+        }
+      }
+    })
+  }
+
+  // 格式化文件大小
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 B'
+    const k = 1024
+    const sizes = ['B', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
+  }
+
+  // 格式化时间
+  const formatTime = (timestamp: number) => {
+    return dayjs(timestamp * 1000).format('YYYY-MM-DD HH:mm:ss')
   }
 
   const columns = [
@@ -351,8 +469,16 @@ const ProjectList = () => {
     {
       title: '操作',
       key: 'action',
+      width: 280,
       render: (_: any, record: Project) => (
-        <Space>
+        <Space size="small" wrap>
+          <Button
+            type="link"
+            icon={<FileOutlined />}
+            onClick={() => handleManageFiles(record)}
+          >
+            文件管理
+          </Button>
           {(isAdmin || isGM) && (
             <>
               <Button
@@ -579,6 +705,74 @@ const ProjectList = () => {
             searchPlaceholder: '搜索人员',
             notFoundContent: '无数据',
           }}
+        />
+      </Modal>
+
+      {/* 文件管理弹窗 */}
+      <Modal
+        title={`文件管理 - ${managingFileProject?.name || ''}`}
+        open={fileModalVisible}
+        onCancel={() => setFileModalVisible(false)}
+        footer={null}
+        width={700}
+      >
+        <div style={{ marginBottom: 16 }}>
+          {(isAdmin || isGM) && (
+            <Upload
+              beforeUpload={handleUpload}
+              showUploadList={false}
+              disabled={uploadingFile}
+            >
+              <Button icon={<UploadOutlined />} loading={uploadingFile}>
+                上传文件
+              </Button>
+            </Upload>
+          )}
+          <p style={{ color: '#666', marginTop: 8, fontSize: 12 }}>
+            支持格式：PDF, Word, Excel, PowerPoint, TXT（最大 50MB）
+          </p>
+        </div>
+
+        <List
+          loading={fileLoading}
+          dataSource={projectFiles}
+          locale={{ emptyText: '暂无文件' }}
+          renderItem={(file) => (
+            <List.Item
+              actions={[
+                <Button
+                  type="link"
+                  icon={<DownloadOutlined />}
+                  onClick={() => handleDownload(file.name)}
+                >
+                  下载
+                </Button>,
+                (isAdmin || isGM) && (
+                  <Popconfirm
+                    title="确定删除该文件吗？"
+                    onConfirm={() => handleDeleteFile(file.name)}
+                    okText="确定"
+                    cancelText="取消"
+                  >
+                    <Button type="link" danger icon={<DeleteOutlined />}>
+                      删除
+                    </Button>
+                  </Popconfirm>
+                ),
+              ].filter(Boolean)}
+            >
+              <List.Item.Meta
+                avatar={<FileOutlined style={{ fontSize: 24, color: '#1890ff' }} />}
+                title={file.name}
+                description={
+                  <Space split="|">
+                    <span>{formatFileSize(file.size)}</span>
+                    <span>{formatTime(file.modified_time)}</span>
+                  </Space>
+                }
+              />
+            </List.Item>
+          )}
         />
       </Modal>
     </div>

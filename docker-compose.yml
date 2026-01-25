@@ -1,0 +1,137 @@
+version: '3.8'
+
+services:
+  # 后端 API 服务
+  backend-api:
+    build:
+      context: ./backend
+      target: backend-api
+    container_name: qyd-backend-api
+    restart: unless-stopped
+    ports:
+      - "6080:6080"
+    environment:
+      # 数据库配置（连接到外部 MySQL）
+      - DB_HOST=${DB_HOST:-host.docker.internal}
+      - DB_PORT=${DB_PORT:-3306}
+      - DB_USER=${DB_USER:-qyd}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME:-qyd}
+      - DB_MINSIZE=${DB_MINSIZE:-5}
+      - DB_MAXSIZE=${DB_MAXSIZE:-20}
+      
+      # Redis 配置（连接到外部 Redis）
+      - REDIS_ENABLED=${REDIS_ENABLED:-1}
+      - REDIS_HOST=${REDIS_HOST:-host.docker.internal}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_DB=${REDIS_DB:-0}
+      - REDIS_MAX_CONNECTIONS=${REDIS_MAX_CONNECTIONS:-50}
+      
+      # Redis 队列配置
+      - REDIS_QUEUE_BATCH_SIZE=${REDIS_QUEUE_BATCH_SIZE:-200}
+      - REDIS_QUEUE_NUM_WORKERS=${REDIS_QUEUE_NUM_WORKERS:-4}
+      - REDIS_QUEUE_CACHE_EXPIRE=${REDIS_QUEUE_CACHE_EXPIRE:-3600}
+      
+      # JWT 配置
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      - JWT_EXPIRE_TIME=${JWT_EXPIRE_TIME:-86400}
+      
+      # 服务配置
+      - HOST=0.0.0.0
+      - PORT=6080
+      - DEBUG=${DEBUG:-0}
+      - WORKERS=${WORKERS:-1}
+      
+      # CORS 配置
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost:80}
+      
+      # 日志配置
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_RETENTION_DAYS=${LOG_RETENTION_DAYS:-90}
+    volumes:
+      - ./backend/logs:/app/logs
+      - ./backend/status:/app/status
+    networks:
+      - qyd-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:6080/docs', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      - queue-worker
+
+  # 队列 Worker 服务
+  queue-worker:
+    build:
+      context: ./backend
+      target: queue-worker
+    container_name: qyd-queue-worker
+    restart: unless-stopped
+    environment:
+      # 数据库配置（连接到外部 MySQL）
+      - DB_HOST=${DB_HOST:-host.docker.internal}
+      - DB_PORT=${DB_PORT:-3306}
+      - DB_USER=${DB_USER:-qyd}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME:-qyd}
+      - DB_MINSIZE=${DB_MINSIZE:-5}
+      - DB_MAXSIZE=${DB_MAXSIZE:-20}
+      
+      # Redis 配置（连接到外部 Redis）
+      - REDIS_ENABLED=${REDIS_ENABLED:-1}
+      - REDIS_HOST=${REDIS_HOST:-host.docker.internal}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_DB=${REDIS_DB:-0}
+      - REDIS_MAX_CONNECTIONS=${REDIS_MAX_CONNECTIONS:-50}
+      
+      # Redis 队列配置
+      - REDIS_QUEUE_BATCH_SIZE=${REDIS_QUEUE_BATCH_SIZE:-200}
+      - REDIS_QUEUE_NUM_WORKERS=${REDIS_QUEUE_NUM_WORKERS:-4}
+      - REDIS_QUEUE_CACHE_EXPIRE=${REDIS_QUEUE_CACHE_EXPIRE:-3600}
+      
+      # JWT 配置
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      
+      # 日志配置
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_RETENTION_DAYS=${LOG_RETENTION_DAYS:-90}
+    volumes:
+      - ./backend/logs:/app/logs
+      - ./backend/status:/app/status
+    networks:
+      - qyd-network
+
+  # 前端服务
+  frontend:
+    build:
+      context: ./frontend
+    container_name: qyd-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    environment:
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:6080}
+    networks:
+      - qyd-network
+    depends_on:
+      - backend-api
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+networks:
+  qyd-network:
+    driver: bridge
+
+volumes:
+  backend-logs:
+  backend-status:

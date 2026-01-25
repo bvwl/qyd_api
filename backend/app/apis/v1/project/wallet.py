@@ -2,11 +2,13 @@ from uuid import UUID
 
 from fastapi import APIRouter, Query, Body, HTTPException, Path, Depends
 
-from app.schemas.project.wallet import Create, Update, Out, OutList
+from app.schemas.project.wallet import Create, Update, Out, OutList, BatchCreate, BatchCreateOut
 from app.crud.project.wallet import project_wallet_crud
 from app.utils.time_tool import parse_time
 from app.schemas.base import BaseOut
 from app.apis.deps import get_current_user, get_admin_user
+from app.core.tools import aes_decrypt_wallet
+from app.models.project import ProjectInfo
 
 
 app = APIRouter()
@@ -37,18 +39,43 @@ async def get(
 ):
     """
     获取单个项目钱包记录
+    
+    注意：
+    - 只有ADMIN角色可以查看解密后的私钥和助记词
+    - 其他角色只能看到加密后的数据
     """
     try:
         obj = await project_wallet_crud.get(id)
+        
+        # 检查是否是管理员
+        user_roles = current_user.get('roles', [])
+        is_admin = 'ADMIN' in user_roles
+        
+        # 如果是管理员，自动解密私钥和助记词
+        if is_admin and obj.project:
+            try:
+                # 获取项目名称用于解密
+                project = await ProjectInfo.get_or_none(id=obj.project.id)
+                if project:
+                    # 解密私钥
+                    decrypted_private_key = aes_decrypt_wallet(obj.private_key, project.name)
+                    obj.private_key = decrypted_private_key
+                    
+                    # 解密助记词（如果存在）
+                    if obj.mnemonic:
+                        decrypted_mnemonic = aes_decrypt_wallet(obj.mnemonic, project.name)
+                        obj.mnemonic = decrypted_mnemonic
+            except Exception as e:
+                # 解密失败，返回加密数据
+                print(f"解密失败: {str(e)}")
+        
+        return obj
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    if not obj:
-        raise HTTPException(status_code=404, detail="数据不存在")
-    return obj
 
 
 @app.get("", response_model=OutList, description="获取项目钱包列表", summary="获取项目钱包列表")
@@ -84,14 +111,17 @@ async def gets(
     """
     分页查询项目钱包列表
     根据用户角色返回不同的数据：
-    - ADMIN/GM: 返回所有项目的钱包
-    - IT/MANUAL: 只返回分配给该用户的项目的钱包
+    - ADMIN: 返回所有项目的钱包，并自动解密私钥和助记词
+    - GM: 返回所有项目的钱包（加密状态）
+    - IT/MANUAL: 只返回分配给该用户的项目的钱包（加密状态）
     """
     try:
         from app.utils.data_permission import filter_by_user_projects
         
-        # 获取用户ID
+        # 获取用户ID和角色
         user_id = current_user.get('user_id') or current_user.get('id')
+        user_roles = current_user.get('roles', [])
+        is_admin = 'ADMIN' in user_roles
         
         # 根据用户权限过滤项目
         user_project_ids = await filter_by_user_projects(user_id)
@@ -102,19 +132,43 @@ async def gets(
                 # 用户没有权限访问该项目
                 return OutList(message='成功', count=0, num=0, items=[])
         
-        return await project_wallet_crud.get_multi(
+        result = await project_wallet_crud.get_multi(
             project_id=project_id,
             chain=chain,
             order_by=order_by or "-create_time",
             res_count=res_count,
-            create_time_start=parse_time(create_time_start),
-            create_time_end=parse_time(create_time_end, True),
-            update_time_start=parse_time(update_time_start),
-            update_time_end=parse_time(update_time_end, True),
+            create_time_start=create_time_start,
+            create_time_end=create_time_end,
+            update_time_start=update_time_start,
+            update_time_end=update_time_end,
             page=page,
             limit=limit,
             user_project_ids=user_project_ids,
         )
+        
+        # 如果是管理员，自动解密所有钱包的私钥和助记词
+        if is_admin:
+            # 获取所有相关项目的名称（用于解密）
+            project_ids = [item.project_id for item in result.items if item.project_id]
+            if project_ids:
+                projects = await ProjectInfo.filter(id__in=project_ids).all()
+                project_name_map = {str(p.id): p.name for p in projects}
+                
+                # 解密每个钱包
+                for item in result.items:
+                    if item.project_id and str(item.project_id) in project_name_map:
+                        try:
+                            project_name = project_name_map[str(item.project_id)]
+                            # 解密私钥
+                            item.private_key = aes_decrypt_wallet(item.private_key, project_name)
+                            # 解密助记词（如果存在）
+                            if item.mnemonic:
+                                item.mnemonic = aes_decrypt_wallet(item.mnemonic, project_name)
+                        except Exception as e:
+                            # 解密失败，保持加密状态
+                            print(f"解密钱包 {item.id} 失败: {str(e)}")
+        
+        return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
@@ -174,6 +228,43 @@ async def post_or_put(
     """
     try:
         return await project_wallet_crud.upsert(item)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/batch", response_model=BatchCreateOut, description="批量创建钱包", summary="批量创建钱包")
+async def batch_create(
+    item: BatchCreate = Body(..., description="批量创建参数"),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    批量创建钱包（所有用户可用）
+    
+    功能说明：
+    - 根据项目名称和链类型批量创建钱包
+    - 私钥和助记词使用AES加密存储
+    - 加密密钥：MD5(项目名称 + "9527")
+    - 加密IV：MD5("9527" + 项目名称) 取前16位
+    - 支持的链类型：ETH（以太坊）、SOL（Solana）
+    - 创建数量限制：1-100个
+    
+    参数说明：
+    - project_name: 项目名称（用于加密，不关联项目表）
+    - chain: 链类型（ETH/SOL，大小写不敏感）
+    - count: 创建数量（1-100）
+    - remark: 备注信息（可选）
+    
+    返回说明：
+    - 返回创建成功的钱包列表
+    - 私钥和助记词已加密存储
+    - 管理员查询时会自动解密
+    """
+    try:
+        return await project_wallet_crud.batch_create(item)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:

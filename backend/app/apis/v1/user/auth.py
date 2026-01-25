@@ -1,13 +1,19 @@
 from typing import Optional
 import time
 
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 
 from app.crud.user.user import user_crud
 from app.schemas.user.info import Out as UserOut
 from app.utils.jwt_tool import JwtToken
 from app.core.tools import hashing, gen_api_token
+from app.utils.security_log import (
+    log_authentication_failure,
+    log_security_event,
+    LogAction,
+    SecurityLogLevel
+)
 
 
 app = APIRouter()
@@ -122,7 +128,7 @@ async def register(item: RegisterRequest = Body(..., description="注册信息")
 
 
 @app.post("/login", response_model=AuthResponse, description="用户登录", summary="用户登录")
-async def login(item: LoginRequest = Body(..., description="登录信息")):
+async def login(item: LoginRequest = Body(..., description="登录信息"), request: Request = None):
     """
     用户登录
     - 使用bcrypt验证密码
@@ -132,6 +138,13 @@ async def login(item: LoginRequest = Body(..., description="登录信息")):
         from app.models.user import UserInfo
         user = await UserInfo.get_or_none(email=item.email).prefetch_related('roles')
         if not user:
+            # 记录登录失败（只记录到日志文件）
+            if request:
+                await log_authentication_failure(
+                    email=item.email,
+                    reason="用户不存在",
+                    request=request
+                )
             raise HTTPException(status_code=400, detail="邮箱或密码错误")
         
         # 使用bcrypt验证密码
@@ -139,9 +152,22 @@ async def login(item: LoginRequest = Body(..., description="登录信息")):
             password_valid = hashing.verify(item.password, user.password)
         except Exception:
             # 捕获所有密码验证异常，统一返回错误信息
+            if request:
+                await log_authentication_failure(
+                    email=item.email,
+                    reason="密码验证异常",
+                    request=request
+                )
             raise HTTPException(status_code=400, detail="邮箱或密码错误")
         
         if not password_valid:
+            # 记录密码错误（只记录到日志文件）
+            if request:
+                await log_authentication_failure(
+                    email=item.email,
+                    reason="密码错误",
+                    request=request
+                )
             raise HTTPException(status_code=400, detail="邮箱或密码错误")
         
         # 生成JWT token

@@ -64,8 +64,9 @@ async def get(
 async def gets(
         host: str | None = Query(None, description='服务器地址'),
         domain: str | None = Query(None, description='域名'),
+        port: int | None = Query(None, description='代理端口'),
         order_by: str | None = Query('-create_time', description='排序字段',
-                                     pattern='^(?:-)?(?:id|host|domain|create_time|update_time)$'),
+                                     pattern='^(?:-)?(?:id|host|domain|port|create_time|update_time)$'),
         res_count: bool = Query(False, description='是否返回总数'),
         create_time_start: str | int | None = Query(
             None, description='创建时间开始 (支持 YYYY-MM-DD / YYYY-MM-DD HH:mm:ss / 13位时间戳)'),
@@ -100,12 +101,13 @@ async def gets(
         return await server_info_crud.get_multi(
             host=host,
             domain=domain,
+            port=port,
             order_by=order_by,
             res_count=res_count,
-            create_time_start=parse_time(create_time_start),
-            create_time_end=parse_time(create_time_end, True),
-            update_time_start=parse_time(update_time_start),
-            update_time_end=parse_time(update_time_end, True),
+            create_time_start=create_time_start,
+            create_time_end=create_time_end,
+            update_time_start=update_time_start,
+            update_time_end=update_time_end,
             page=page,
             limit=limit,
             is_admin=is_admin,

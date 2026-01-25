@@ -30,6 +30,7 @@ class CRUD:
     # 条件查询
     async def get_multi(self,
                         name: str | None = None,
+                        country_id: UUID | None = None,
                         status: int | None = None,
                         page: int = 1,
                         limit: int = 10,
@@ -43,6 +44,8 @@ class CRUD:
         query = ServerGroup.all()
         if name:
             query = query.filter(name__icontains=name)
+        if country_id:
+            query = query.filter(country_id=country_id)
         if status is not None:
             query = query.filter(status=status)
         if create_time_start:

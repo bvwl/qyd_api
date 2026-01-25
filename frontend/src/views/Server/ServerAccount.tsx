@@ -6,6 +6,7 @@ import { getServerAccountList, createServerAccount, updateServerAccount, deleteS
 import { getUserList } from '@/api/user'
 import { useUserStore } from '@/store/useUserStore'
 import dayjs, { Dayjs } from 'dayjs'
+import { filterEmptyStrings } from '@/utils/form'
 
 const { RangePicker } = DatePicker
 
@@ -107,11 +108,12 @@ const ServerAccountList = () => {
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields()
+      const filteredValues = filterEmptyStrings(values)
       if (editingAccount) {
-        await updateServerAccount(editingAccount.id, values)
+        await updateServerAccount(editingAccount.id, filteredValues)
         message.success('更新成功')
       } else {
-        await createServerAccount(values)
+        await createServerAccount(filteredValues)
         message.success('创建成功')
       }
       setModalVisible(false)

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Modal, Form, Input, App, Space, Popconfirm, Tag, Select, DatePicker } from 'antd'
+import { Table, Button, Modal, Form, Input, App, Space, Popconfirm, Tag, Select, DatePicker, Alert } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, CopyOutlined, SearchOutlined } from '@ant-design/icons'
 import type { UserToken, User } from '@/types'
 import { getTokenList, createToken, updateToken, deleteToken, getUserList } from '@/api/user'
@@ -22,6 +22,7 @@ const TokenList = () => {
   const [searchStatus, setSearchStatus] = useState<number>()
   const [createTimeRange, setCreateTimeRange] = useState<[Dayjs, Dayjs] | null>(null)
   const [updateTimeRange, setUpdateTimeRange] = useState<[Dayjs, Dayjs] | null>(null)
+  const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([])
   const [form] = Form.useForm()
   const { hasPermission } = useUserStore()
 
@@ -140,6 +141,99 @@ const TokenList = () => {
   const handleCopy = (token: string) => {
     navigator.clipboard.writeText(token)
     message.success('Token已复制到剪贴板')
+  }
+
+  // 批量删除
+  const handleBatchDelete = async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要删除的Token')
+      return
+    }
+
+    Modal.confirm({
+      title: '批量删除确认',
+      content: `确定要删除选中的 ${selectedRowKeys.length} 个Token吗？`,
+      okText: '确定',
+      cancelText: '取消',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          let successCount = 0
+          let failCount = 0
+
+          for (const id of selectedRowKeys) {
+            try {
+              await deleteToken(id)
+              successCount++
+            } catch (error) {
+              failCount++
+            }
+          }
+
+          if (successCount > 0) {
+            message.success(`成功删除 ${successCount} 个Token${failCount > 0 ? `，失败 ${failCount} 个` : ''}`)
+            setSelectedRowKeys([])
+            fetchData()
+          } else {
+            message.error('批量删除失败')
+          }
+        } catch (error) {
+          message.error('批量删除失败')
+        }
+      },
+    })
+  }
+
+  // 批量更新状态
+  const handleBatchUpdateStatus = async (status: number) => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要更新的Token')
+      return
+    }
+
+    const statusText = status === 1 ? '正常' : '异常'
+    Modal.confirm({
+      title: '批量更新状态确认',
+      content: `确定要将选中的 ${selectedRowKeys.length} 个Token状态设置为"${statusText}"吗？`,
+      okText: '确定',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          let successCount = 0
+          let failCount = 0
+
+          for (const id of selectedRowKeys) {
+            try {
+              await updateToken(id, { status })
+              successCount++
+            } catch (error) {
+              failCount++
+            }
+          }
+
+          if (successCount > 0) {
+            message.success(`成功更新 ${successCount} 个Token${failCount > 0 ? `，失败 ${failCount} 个` : ''}`)
+            setSelectedRowKeys([])
+            fetchData()
+          } else {
+            message.error('批量更新失败')
+          }
+        } catch (error) {
+          message.error('批量更新失败')
+        }
+      },
+    })
+  }
+
+  // 行选择配置
+  const rowSelection = {
+    selectedRowKeys,
+    onChange: (selectedKeys: React.Key[]) => {
+      setSelectedRowKeys(selectedKeys as string[])
+    },
+    getCheckboxProps: (record: UserToken) => ({
+      disabled: !isAdmin, // 非管理员禁用选择
+    }),
   }
 
   const columns = [
@@ -274,11 +368,56 @@ const TokenList = () => {
         </div>
       </div>
 
+      {/* 批量操作提示和按钮 */}
+      {isAdmin && selectedRowKeys.length > 0 && (
+        <Alert
+          message={
+            <Space>
+              <span>已选择 {selectedRowKeys.length} 项</span>
+              <Button
+                type="link"
+                size="small"
+                onClick={() => setSelectedRowKeys([])}
+              >
+                取消选择
+              </Button>
+            </Space>
+          }
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          action={
+            <Space>
+              <Button
+                size="small"
+                onClick={() => handleBatchUpdateStatus(1)}
+              >
+                批量设为正常
+              </Button>
+              <Button
+                size="small"
+                onClick={() => handleBatchUpdateStatus(2)}
+              >
+                批量设为异常
+              </Button>
+              <Button
+                size="small"
+                danger
+                onClick={handleBatchDelete}
+              >
+                批量删除
+              </Button>
+            </Space>
+          }
+        />
+      )}
+
       <Table
         columns={columns}
         dataSource={data}
         rowKey="id"
         loading={loading}
+        rowSelection={isAdmin ? rowSelection : undefined}
         pagination={{
           current: page,
           pageSize: pageSize,

@@ -7,26 +7,53 @@ from app.models.project import ProjectAccount, ProjectInfo
 from app.schemas.project.account import Create, Update, Out, OutList
 from app.schemas.base import BaseOut
 from app.utils.time_tool import parse_time
-from app.utils.project_crypto import encrypt_sensitive_fields, decrypt_sensitive_fields, check_user_can_decrypt
+from app.utils.project_crypto import (
+    encrypt_sensitive_fields, 
+    decrypt_sensitive_fields, 
+    encrypt_password,
+    decrypt_password,
+    check_user_can_decrypt
+)
 
 
 class CRUD:
     # 创建
     async def create(self, item: Create) -> Out:
-        # 过滤掉None值和需要自动计算的字段
+        # 如果提供了 host，查询对应的 server_id
+        if item.host:
+            from app.models.server import ServerInfo
+            server = await ServerInfo.get_or_none(host=item.host)
+            if server:
+                # 找到服务器，使用其 ID
+                item.server_id = server.id
+            else:
+                # 未找到服务器，可以选择：
+                # 1. 抛出错误（严格模式）
+                # 2. 忽略（宽松模式）
+                # 这里使用宽松模式，记录日志但不中断
+                print(f"⚠️  未找到 host={item.host} 的服务器，server_id 将为空")
+        
+        # 过滤掉None值和需要自动计算的字段，以及 host（不存储到数据库）
         filtered_item = {
             k: v for k, v in item.model_dump().items() 
-            if v is not None and k not in ['variable', 'balance_history']
+            if v is not None and k not in ['variable', 'balance_history', 'host']
         }
         
-        # 获取项目信息（用于加密）
+        # 检查项目是否存在
         project = await ProjectInfo.get_or_none(id=item.project_id)
         if not project:
             raise HTTPException(status_code=404, detail='项目不存在')
         
+        # 获取账号（用于加密）
+        account = item.account
+        
         # 如果有 data 字段，加密敏感字段
         if 'data' in filtered_item and filtered_item['data']:
-            filtered_item['data'] = encrypt_sensitive_fields(filtered_item['data'], project.name)
+            filtered_item['data'] = encrypt_sensitive_fields(filtered_item['data'], account)
+        
+        # 如果有 password 字段，加密密码
+        if 'password' in filtered_item and filtered_item['password']:
+            filtered_item['password'] = encrypt_password(filtered_item['password'], account)
         
         # 先创建记录
         res = await ProjectAccount.create(**filtered_item)
@@ -79,16 +106,26 @@ class CRUD:
         # 转换为 Pydantic 模型
         result = Out.model_validate(res)
         
-        # 如果有 data 字段且提供了用户信息，根据权限决定是否解密
-        if result.data and user_id and user_roles:
+        # 如果提供了用户信息，根据权限决定是否解密
+        if user_id and user_roles:
             can_decrypt = check_user_can_decrypt(user_id, user_roles, project_user_ids)
             if can_decrypt:
                 # 有权限，解密敏感字段
-                try:
-                    result.data = decrypt_sensitive_fields(result.data, project.name)
-                except Exception as e:
-                    # 解密失败，保持加密状态
-                    print(f"解密失败: {e}")
+                # 解密 data 字段
+                if result.data:
+                    try:
+                        result.data = decrypt_sensitive_fields(result.data, res.account)
+                    except Exception as e:
+                        # 解密失败，保持加密状态
+                        print(f"解密 data 失败: {e}")
+                
+                # 解密 password 字段
+                if result.password:
+                    try:
+                        result.password = decrypt_password(result.password, res.account)
+                    except Exception as e:
+                        # 解密失败，保持加密状态
+                        print(f"解密 password 失败: {e}")
             # 没有权限，保持加密状态（不做任何处理）
         
         return result
@@ -166,19 +203,29 @@ class CRUD:
         for obj in res:
             item = Out.model_validate(obj)
             
-            # 如果有 data 字段且提供了用户信息，根据权限决定是否解密
-            if item.data and user_id and user_roles:
+            # 如果提供了用户信息，根据权限决定是否解密
+            if user_id and user_roles:
                 # 获取项目所属用户ID列表
                 project_user_ids_list = [str(user.id) for user in obj.project.users]
                 
                 can_decrypt = check_user_can_decrypt(user_id, user_roles, project_user_ids_list)
                 if can_decrypt:
                     # 有权限，解密敏感字段
-                    try:
-                        item.data = decrypt_sensitive_fields(item.data, obj.project.name)
-                    except Exception as e:
-                        # 解密失败，保持加密状态
-                        print(f"解密失败: {e}")
+                    # 解密 data 字段
+                    if item.data:
+                        try:
+                            item.data = decrypt_sensitive_fields(item.data, obj.account)
+                        except Exception as e:
+                            # 解密失败，保持加密状态
+                            print(f"解密 data 失败: {e}")
+                    
+                    # 解密 password 字段
+                    if item.password:
+                        try:
+                            item.password = decrypt_password(item.password, obj.account)
+                        except Exception as e:
+                            # 解密失败，保持加密状态
+                            print(f"解密 password 失败: {e}")
                 # 没有权限，保持加密状态（不做任何处理）
             
             items.append(item)
@@ -191,15 +238,30 @@ class CRUD:
         if not res:
             raise HTTPException(status_code=404, detail='数据不存在')
         
-        # 获取项目信息（用于加密）
-        await res.fetch_related('project')
-        project = res.project
+        # 如果提供了 host，查询对应的 server_id
+        if item.host:
+            from app.models.server import ServerInfo
+            server = await ServerInfo.get_or_none(host=item.host)
+            if server:
+                # 找到服务器，使用其 ID
+                item.server_id = server.id
+            else:
+                # 未找到服务器
+                print(f"⚠️  未找到 host={item.host} 的服务器，server_id 将保持不变")
         
-        update_data = item.model_dump(exclude_unset=True, exclude={'balance', 'variable', 'balance_history'})
+        # 获取账号（用于加密）
+        account = res.account
+        
+        # 过滤掉 host 字段（不存储到数据库）
+        update_data = item.model_dump(exclude_unset=True, exclude={'balance', 'variable', 'balance_history', 'host'})
         
         # 如果更新了 data 字段，加密敏感字段
         if 'data' in update_data and update_data['data']:
-            update_data['data'] = encrypt_sensitive_fields(update_data['data'], project.name)
+            update_data['data'] = encrypt_sensitive_fields(update_data['data'], account)
+        
+        # 如果更新了 password 字段，加密密码
+        if 'password' in update_data and update_data['password']:
+            update_data['password'] = encrypt_password(update_data['password'], account)
         
         # 如果传入了余额，需要计算变动余额和更新历史
         if item.balance is not None:
@@ -255,10 +317,24 @@ class CRUD:
         - 如果记录存在，只更新传入的非空字段（类似PUT）
         - 如果记录不存在，创建新记录
         """
-        # 获取项目信息（用于加密）
+        # 如果提供了 host，查询对应的 server_id
+        if item.host:
+            from app.models.server import ServerInfo
+            server = await ServerInfo.get_or_none(host=item.host)
+            if server:
+                # 找到服务器，使用其 ID
+                item.server_id = server.id
+            else:
+                # 未找到服务器
+                print(f"⚠️  未找到 host={item.host} 的服务器，server_id 将为空")
+        
+        # 获取项目信息（验证项目是否存在）
         project = await ProjectInfo.get_or_none(id=item.project_id)
         if not project:
             raise HTTPException(status_code=404, detail='项目不存在')
+        
+        # 获取账号（用于加密）
+        account = item.account
         
         # 获取当前日期
         today = datetime.now().strftime('%Y-%m-%d')
@@ -273,15 +349,20 @@ class CRUD:
             # 如果记录存在，只更新非空字段
             # 使用 exclude_unset=True 排除未设置的字段
             # 使用 exclude_none=True 排除值为None的字段
+            # 排除 host 字段（不存储到数据库）
             update_data = item.model_dump(
                 exclude_unset=True,
                 exclude_none=True,
-                exclude={'balance', 'variable', 'balance_history', 'project_id', 'account'}
+                exclude={'balance', 'variable', 'balance_history', 'project_id', 'account', 'host'}
             )
             
             # 如果更新了 data 字段，加密敏感字段
             if 'data' in update_data and update_data['data']:
-                update_data['data'] = encrypt_sensitive_fields(update_data['data'], project.name)
+                update_data['data'] = encrypt_sensitive_fields(update_data['data'], account)
+            
+            # 如果更新了 password 字段，加密密码
+            if 'password' in update_data and update_data['password']:
+                update_data['password'] = encrypt_password(update_data['password'], account)
             
             # 如果传入了余额，需要计算变动余额和更新历史
             if item.balance is not None:

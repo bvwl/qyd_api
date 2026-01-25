@@ -103,14 +103,80 @@ def aes_decrypt(ciphertext: str, user_id: str) -> str:
     return plaintext.decode('utf-8')
 
 
-def aes_encrypt_project(plaintext: str, project_name: str) -> str:
+def aes_encrypt_project(plaintext: str, account: str) -> str:
     """
-    使用AES加密项目敏感数据（用于项目账号的 private_key 和 mnemonic）
+    使用AES加密项目敏感数据（用于项目账号的 password、private_key 和 mnemonic）
+    - 每个账号使用不同的密钥和IV
+    - key: MD5(账号 + "9527")
+    - iv: MD5("9527" + 账号) 取前16位
+    
+    :param plaintext: 原始数据
+    :param account: 项目账号
+    :return: Base64编码的加密密文
+    """
+    # 生成密钥：MD5(账号 + "9527")
+    key_string = f"{account}9527"
+    key = hashlib.md5(key_string.encode('utf-8')).digest()  # 16字节
+    
+    # 生成IV：MD5("9527" + 账号) 取前16位
+    iv_string = f"9527{account}"
+    iv = hashlib.md5(iv_string.encode('utf-8')).digest()[:16]  # 16字节
+    
+    # 创建AES加密器（CBC模式）
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    
+    # 填充明文到16字节的倍数
+    padded_plaintext = pad(plaintext.encode('utf-8'), AES.block_size)
+    
+    # 加密
+    ciphertext = cipher.encrypt(padded_plaintext)
+    
+    # Base64编码返回
+    return base64.b64encode(ciphertext).decode('utf-8')
+
+
+def aes_decrypt_project(ciphertext: str, account: str) -> str:
+    """
+    使用AES解密项目敏感数据（用于项目账号的 password、private_key 和 mnemonic）
+    - 每个账号使用不同的密钥和IV
+    - key: MD5(账号 + "9527")
+    - iv: MD5("9527" + 账号) 取前16位
+    
+    :param ciphertext: Base64编码的加密密文
+    :param account: 项目账号
+    :return: 原始数据
+    """
+    # 生成密钥：MD5(账号 + "9527")
+    key_string = f"{account}9527"
+    key = hashlib.md5(key_string.encode('utf-8')).digest()  # 16字节
+    
+    # 生成IV：MD5("9527" + 账号) 取前16位
+    iv_string = f"9527{account}"
+    iv = hashlib.md5(iv_string.encode('utf-8')).digest()[:16]  # 16字节
+    
+    # Base64解码
+    encrypted_data = base64.b64decode(ciphertext)
+    
+    # 创建AES解密器（CBC模式）
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    
+    # 解密
+    padded_plaintext = cipher.decrypt(encrypted_data)
+    
+    # 去除填充
+    plaintext = unpad(padded_plaintext, AES.block_size)
+    
+    return plaintext.decode('utf-8')
+
+
+def aes_encrypt_wallet(plaintext: str, project_name: str) -> str:
+    """
+    使用AES加密钱包敏感数据（用于项目钱包的 private_key 和 mnemonic）
     - 每个项目使用不同的密钥和IV
     - key: MD5(项目名称 + "9527")
     - iv: MD5("9527" + 项目名称) 取前16位
     
-    :param plaintext: 原始数据
+    :param plaintext: 原始数据（私钥或助记词）
     :param project_name: 项目名称
     :return: Base64编码的加密密文
     """
@@ -135,16 +201,16 @@ def aes_encrypt_project(plaintext: str, project_name: str) -> str:
     return base64.b64encode(ciphertext).decode('utf-8')
 
 
-def aes_decrypt_project(ciphertext: str, project_name: str) -> str:
+def aes_decrypt_wallet(ciphertext: str, project_name: str) -> str:
     """
-    使用AES解密项目敏感数据（用于项目账号的 private_key 和 mnemonic）
+    使用AES解密钱包敏感数据（用于项目钱包的 private_key 和 mnemonic）
     - 每个项目使用不同的密钥和IV
     - key: MD5(项目名称 + "9527")
     - iv: MD5("9527" + 项目名称) 取前16位
     
     :param ciphertext: Base64编码的加密密文
     :param project_name: 项目名称
-    :return: 原始数据
+    :return: 原始数据（私钥或助记词）
     """
     # 生成密钥：MD5(项目名称 + "9527")
     key_string = f"{project_name}9527"

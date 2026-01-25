@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 - 用户日志模型 - 描述 创建时间 更新时间 用户(关联)
 - token模型 - token 创建时间 更新时间 用户(关联)
 - 前端路由模型 - 路由名 描述 创建时间 更新时间 状态(1:正常 2:暂停 3:异常 4:封禁) 角色(关联)
+- XUI操作日志模型 - 操作类型 状态 入站ID 账号ID 错误信息 创建时间 更新时间
 """
 
 
@@ -149,7 +150,8 @@ class UserLog(BaseModel):
     user = fields.ForeignKeyField(
         "models.UserInfo",
         related_name="logs",
-        description="用户"
+        null=True,  # 允许为空,用于记录系统操作日志
+        description="用户(可为空,用于系统日志)"
     )
     action = fields.SmallIntField(description="操作类型(枚举)")
     description = fields.TextField(description="操作描述")
@@ -168,7 +170,8 @@ class UserLog(BaseModel):
         ]
 
     def __repr__(self):
-        return f"<UserLog(id={self.id}, user_id={self.user.id}, action={self.action})>"
+        user_id = self.user.id if self.user else "SYSTEM"
+        return f"<UserLog(id={self.id}, user_id={user_id}, action={self.action})>"
 
     __str__ = __repr__
 
@@ -269,5 +272,47 @@ class FrontendRoute(BaseModel):
 
     def __repr__(self):
         return f"<FrontendRoute(id={self.id}, name={self.name}, path={self.path})>"
+
+    __str__ = __repr__
+
+
+# =======================
+# XUI 操作日志模型(简化版)
+# =======================
+
+class XuiOperationLog(BaseModel):
+    """
+    XUI 添加账号失败日志
+    只记录添加账号失败的情况,方便重试
+    """
+    # 入站信息
+    inbound_id = fields.UUIDField(index=True, description="入站 ID")
+    inbound_info = fields.CharField(max_length=255, description="入站信息(host:port)")
+    
+    # 账号信息
+    account_id = fields.UUIDField(index=True, description="账号 ID")
+    account_username = fields.CharField(max_length=100, description="账号用户名")
+    
+    # 错误信息
+    error_message = fields.TextField(description="错误信息")
+    
+    # 重试信息
+    retry_count = fields.IntField(default=0, description="重试次数")
+    is_resolved = fields.BooleanField(default=False, index=True, description="是否已解决")
+
+    class Meta:
+        table = "xui_operation_logs"
+        table_description = "XUI 添加账号失败日志"
+        ordering = ["-create_time"]
+        indexes = [
+            ("is_resolved", "create_time"),  # 查找未解决的问题
+            ("inbound_id", "is_resolved"),  # 按入站查询
+            ("account_id", "is_resolved"),  # 按账号查询
+            ("create_time",),  # 时间范围查询
+        ]
+
+    def __repr__(self):
+        status = "已解决" if self.is_resolved else "未解决"
+        return f"<XuiOperationLog(id={self.id}, account={self.account_username}, status={status})>"
 
     __str__ = __repr__

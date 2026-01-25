@@ -47,7 +47,7 @@ class QueueWorkerManager:
     
     def __init__(self):
         self.running = False
-        self.queue_handler = None
+        self.queue_handlers = []
     
     async def start(self):
         """启动队列处理"""
@@ -71,15 +71,23 @@ class QueueWorkerManager:
         # 启动队列处理
         try:
             from app.utils.project_account_queue import project_account_queue
-            self.queue_handler = project_account_queue
+            from app.utils.project_withdrawal_queue import project_withdrawal_queue
             
-            await self.queue_handler.start()
-            logger.info("Redis队列处理已启动")
+            # 启动项目账号队列
+            await project_account_queue.start()
+            logger.info("项目账号队列处理已启动")
+            logger.info(f"  队列名称: {project_account_queue.queue_name}")
+            logger.info(f"  工作线程数: {project_account_queue.num_workers}")
+            logger.info(f"  批处理大小: {project_account_queue.batch_size}")
             
-            # 显示配置信息
-            logger.info(f"队列名称: {self.queue_handler.queue_name}")
-            logger.info(f"工作线程数: {self.queue_handler.num_workers}")
-            logger.info(f"批处理大小: {self.queue_handler.batch_size}")
+            # 启动项目提现队列
+            await project_withdrawal_queue.start()
+            logger.info("项目提现队列处理已启动")
+            logger.info(f"  队列名称: {project_withdrawal_queue.queue_name}")
+            logger.info(f"  工作线程数: {project_withdrawal_queue.num_workers}")
+            logger.info(f"  批处理大小: {project_withdrawal_queue.batch_size}")
+            
+            self.queue_handlers = [project_account_queue, project_withdrawal_queue]
             
             self.running = True
             
@@ -96,12 +104,12 @@ class QueueWorkerManager:
         logger.info("正在停止队列处理...")
         self.running = False
         
-        if self.queue_handler:
+        for queue_handler in self.queue_handlers:
             try:
-                await self.queue_handler.stop()
-                logger.info("队列处理已停止")
+                await queue_handler.stop()
+                logger.info(f"队列 {queue_handler.queue_name} 已停止")
             except Exception as e:
-                logger.error(f"停止队列处理失败: {e}", exc_info=True)
+                logger.error(f"停止队列 {queue_handler.queue_name} 失败: {e}", exc_info=True)
         
         # 关闭数据库连接
         try:
