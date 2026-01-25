@@ -85,10 +85,10 @@ async def get_stats(
             account=account,
             status=status,
             account_type=account_type,
-            create_time_start=parse_time(create_time_start),
-            create_time_end=parse_time(create_time_end, True),
-            update_time_start=parse_time(update_time_start),
-            update_time_end=parse_time(update_time_end, True),
+            create_time_start=create_time_start,
+            create_time_end=create_time_end,
+            update_time_start=update_time_start,
+            update_time_end=update_time_end,
         )
         
         # 转换Decimal为float，保留6位小数
@@ -284,6 +284,176 @@ async def export_all_stats(
         raise HTTPException(status_code=500, detail=f"导出失败: {str(e)}")
 
 
+@app.get("/export-today-stats", description="导出当天所有项目统计数据为Excel", summary="导出当天所有项目统计数据")
+async def export_today_stats(
+    current_user: dict = Depends(get_gm_user)
+):
+    """
+    导出当天所有项目的统计数据为Excel文件
+    只统计今天更新过的账号数据
+    
+    权限控制：
+    - 仅 ADMIN/GM 可以导出
+    
+    返回：
+    - Excel文件流
+    """
+    try:
+        from fastapi.responses import StreamingResponse
+        from io import BytesIO
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, Alignment, PatternFill
+        from app.models.project import ProjectInfo, ProjectStatus
+        from decimal import Decimal
+        import datetime
+        from app.utils.time_tool import parse_time
+        
+        # 获取今天的日期范围
+        today = datetime.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_end = today + datetime.timedelta(days=1)
+        
+        # 获取所有项目（预加载用户关联）
+        projects = await ProjectInfo.all().prefetch_related('users')
+        
+        if not projects:
+            raise HTTPException(status_code=404, detail="没有项目数据")
+        
+        # 创建Excel工作簿
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "当天项目统计"
+        
+        # 设置表头样式
+        header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+        header_font = Font(color="FFFFFF", bold=True, size=11)
+        header_alignment = Alignment(horizontal="center", vertical="center")
+        
+        # 项目状态映射
+        status_map = {
+            ProjectStatus.NORMAL: "正常",
+            ProjectStatus.NOT_WRITTEN: "未编写",
+            ProjectStatus.WRITING: "编写中",
+            ProjectStatus.ENDED: "项目结束",
+            ProjectStatus.RUNAWAY: "项目跑路",
+            ProjectStatus.MAINTENANCE: "项目维护",
+            ProjectStatus.UNASSIGNED: "未分配",
+            ProjectStatus.ACCOUNT_NOT_SUPPORT: "账号不支持",
+            ProjectStatus.IP_NOT_SUPPORT: "IP不支持",
+        }
+        
+        # 定义表头
+        headers = [
+            "项目名称", "项目状态", "项目ID", "所属用户", "当天更新账号数",
+            "余额最高分", "余额最低分", "余额平均分", "余额总分",
+            "变动最高分", "变动最低分", "变动平均分", "变动总分"
+        ]
+        
+        # 写入表头
+        for col_num, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_num, value=header)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = header_alignment
+        
+        # 设置列宽
+        column_widths = [20, 12, 38, 25, 15, 12, 12, 12, 12, 12, 12, 12, 12]
+        for col_num, width in enumerate(column_widths, 1):
+            ws.column_dimensions[chr(64 + col_num)].width = width
+        
+        # 转换Decimal为float
+        def decimal_to_float(value):
+            if value is None:
+                return 0.0
+            return float(Decimal(str(value)))
+        
+        # 遍历所有项目，获取当天的统计数据
+        row_num = 2
+        for project in projects:
+            try:
+                # 获取该项目当天更新的账号统计数据
+                stats = await project_account_crud.get_stats(
+                    project_id=project.id,
+                    account=None,
+                    status=None,
+                    account_type=None,
+                    create_time_start=None,
+                    create_time_end=None,
+                    update_time_start=today,  # 今天开始
+                    update_time_end=today_end,  # 今天结束
+                )
+                
+                # 如果当天没有更新的账号，跳过该项目
+                if stats.get("total_count", 0) == 0:
+                    continue
+                
+                # 获取项目关联的用户昵称（多个用户用逗号分隔）
+                user_nicknames = []
+                if project.users:
+                    for user in project.users:
+                        if user.nickname:
+                            user_nicknames.append(user.nickname)
+                        else:
+                            user_nicknames.append(user.email)
+                
+                users_str = ", ".join(user_nicknames) if user_nicknames else "未分配"
+                
+                # 获取项目状态文本
+                status_text = status_map.get(project.status, "未知")
+                
+                # 写入数据行
+                row_data = [
+                    project.name,
+                    status_text,
+                    str(project.id),
+                    users_str,
+                    stats.get("total_count", 0),
+                    round(decimal_to_float(stats.get("max_balance")), 2),
+                    round(decimal_to_float(stats.get("min_balance")), 2),
+                    round(decimal_to_float(stats.get("avg_balance")), 2),
+                    round(decimal_to_float(stats.get("sum_balance")), 2),
+                    round(decimal_to_float(stats.get("max_variable")), 2),
+                    round(decimal_to_float(stats.get("min_variable")), 2),
+                    round(decimal_to_float(stats.get("avg_variable")), 2),
+                    round(decimal_to_float(stats.get("sum_variable")), 2),
+                ]
+                
+                for col_num, value in enumerate(row_data, 1):
+                    cell = ws.cell(row=row_num, column=col_num, value=value)
+                    cell.alignment = Alignment(horizontal="left" if col_num <= 4 else "center", vertical="center")
+                
+                row_num += 1
+            except Exception as e:
+                print(f"项目 {project.name} 统计失败: {str(e)}")
+                continue
+        
+        # 如果没有数据
+        if row_num == 2:
+            raise HTTPException(status_code=404, detail="当天没有更新的账号数据")
+        
+        # 保存到内存
+        excel_file = BytesIO()
+        wb.save(excel_file)
+        excel_file.seek(0)
+        
+        # 生成文件名
+        now = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"project_today_stats_{now}.xlsx"
+        
+        # 返回文件流
+        return StreamingResponse(
+            excel_file,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}",
+                "Access-Control-Expose-Headers": "Content-Disposition"
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"导出失败: {str(e)}")
+
+
 @app.get("/{id}", response_model=Out, description="获取项目账号", summary="获取项目账号")
 async def get(
     id: UUID = Path(..., description="ID"),
@@ -376,10 +546,10 @@ async def gets(
             project_id=project_id,
             server_id=server_id,
             order_by=order_by or "-create_time",
-            create_time_start=parse_time(create_time_start),
-            create_time_end=parse_time(create_time_end, True),
-            update_time_start=parse_time(update_time_start),
-            update_time_end=parse_time(update_time_end, True),
+            create_time_start=create_time_start,
+            create_time_end=create_time_end,
+            update_time_start=update_time_start,
+            update_time_end=update_time_end,
             page=page,
             limit=limit,
             res_count=res_count,

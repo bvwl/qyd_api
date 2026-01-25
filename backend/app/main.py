@@ -163,6 +163,24 @@ async def lifespan(app: FastAPI):
         )
         scheduler_logger.info(f"已注册定时任务: 每 {email_check_interval} 小时检查邮箱状态")
 
+    # 可选：自动同步项目统计数据
+    enable_stats_sync = os.getenv("ENABLE_STATS_SYNC", "1").lower() in ("1", "true", "yes")
+    if enable_stats_sync:
+        from app.utils.stats_sync import scheduled_sync_stats
+        
+        stats_sync_interval = int(os.getenv("STATS_SYNC_INTERVAL_MINUTES", "60"))
+        scheduler.add_job(
+            scheduled_sync_stats,
+            IntervalTrigger(minutes=stats_sync_interval),
+            id="sync_project_stats",
+            name="同步项目统计数据",
+            coalesce=True,
+            misfire_grace_time=300,  # 5分钟容错
+        )
+        scheduler_logger.info(f"已注册定时任务: 每 {stats_sync_interval} 分钟同步项目统计数据")
+    else:
+        scheduler_logger.info("项目统计数据同步已禁用（ENABLE_STATS_SYNC=0）")
+
     scheduler.start()
     scheduler_logger.info("调度器已启动")
     

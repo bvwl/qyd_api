@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react'
-import { Card, Row, Col, Statistic, Table, Tag, Spin, Alert, Button, App, Modal, Input, Space, Typography } from 'antd'
-import { UserOutlined, ProjectOutlined, TeamOutlined, DatabaseOutlined, CopyOutlined, ReloadOutlined, EyeOutlined, EyeInvisibleOutlined, CloudServerOutlined } from '@ant-design/icons'
-import type { ColumnsType } from 'antd/es/table'
+import { Card, Row, Col, Statistic, Spin, Alert, Button, App, Modal, Input, Space, Typography, Tag } from 'antd'
+import { UserOutlined, ProjectOutlined, TeamOutlined, DatabaseOutlined, CopyOutlined, ReloadOutlined, EyeOutlined, EyeInvisibleOutlined, CloudServerOutlined, RiseOutlined } from '@ant-design/icons'
 import { getUserList } from '@/api/user'
 import { getProjectList } from '@/api/project'
 import { getProjectAccountList } from '@/api/project'
 import { getTokenList, generateToken } from '@/api/user'
 import { getServerAccountList, generateServerAccount, getServerAccountPassword } from '@/api/server'
+import { getProjectStatsForDashboard } from '@/api/project'
 import { useUserStore } from '@/store/useUserStore'
 import type { UserToken, ServerAccount } from '@/types'
+import ProjectStatsChart from './ProjectStatsChart'
 
 const { Text } = Typography
 
@@ -16,28 +17,10 @@ interface DashboardStats {
   user_count?: number
   project_count: number
   account_count: number
+  today_update_count: number
   role: string
   user_email: string
   user_nickname: string
-}
-
-interface ProjectWithAccounts {
-  id: string
-  name: string
-  account_count: number
-  status: number
-}
-
-const PROJECT_STATUS_MAP: Record<number, { text: string; color: string }> = {
-  1: { text: '正常', color: 'success' },
-  2: { text: '未编写', color: 'default' },
-  3: { text: '编写中', color: 'processing' },
-  4: { text: '项目结束', color: 'default' },
-  5: { text: '项目跑路', color: 'error' },
-  6: { text: '项目维护', color: 'warning' },
-  7: { text: '未分配', color: 'default' },
-  8: { text: '账号不支持', color: 'error' },
-  9: { text: 'IP不支持', color: 'error' },
 }
 
 const ROLE_NAME_MAP: Record<string, string> = {
@@ -53,7 +36,6 @@ export default function Dashboard() {
   const [tokenLoading, setTokenLoading] = useState(false)
   const [serverAccountLoading, setServerAccountLoading] = useState(false)
   const [stats, setStats] = useState<DashboardStats | null>(null)
-  const [projects, setProjects] = useState<ProjectWithAccounts[]>([])
   const [userToken, setUserToken] = useState<UserToken | null>(null)
   const [serverAccount, setServerAccount] = useState<ServerAccount | null>(null)
   const [tokenVisible, setTokenVisible] = useState(false)
@@ -80,91 +62,66 @@ export default function Dashboard() {
       let user_count: number | undefined
       let project_count = 0
       let account_count = 0
-      let projectList: any[] = []
+      let today_update_count = 0
 
       try {
         if (primary_role === 'ADMIN') {
-          // 管理员：获取所有数据
-          const [usersRes, projectsRes, accountsRes] = await Promise.all([
+          // 管理员：获取统计数据
+          const [usersRes, projectsRes, accountsRes, todayStatsRes] = await Promise.all([
             getUserList({ page: 1, limit: 1, res_count: true }).catch(() => ({ count: 0, items: [] })),
-            getProjectList({ page: 1, limit: 100, res_count: true }).catch(() => ({ count: 0, items: [] })),
+            getProjectList({ page: 1, limit: 1, res_count: true }).catch(() => ({ count: 0, items: [] })),
             getProjectAccountList({ page: 1, limit: 1, res_count: true }).catch(() => ({ count: 0, items: [] })),
+            getProjectStatsForDashboard({ days: 1 }).catch(() => ({ code: 0, data: [] })),
           ])
           user_count = usersRes.count || 0
           project_count = projectsRes.count || 0
           account_count = accountsRes.count || 0
-          projectList = projectsRes.items || []
+          // 获取今天的更新数量（总和）
+          if (todayStatsRes.code === 1 && todayStatsRes.data && todayStatsRes.data.length > 0) {
+            today_update_count = todayStatsRes.data[0].counts[0] || 0
+          }
         } else if (primary_role === 'GM') {
-          // GM：获取所有项目和账户
-          const [projectsRes, accountsRes] = await Promise.all([
-            getProjectList({ page: 1, limit: 100, res_count: true }).catch(() => ({ count: 0, items: [] })),
+          // GM：获取项目和账户统计
+          const [projectsRes, accountsRes, todayStatsRes] = await Promise.all([
+            getProjectList({ page: 1, limit: 1, res_count: true }).catch(() => ({ count: 0, items: [] })),
             getProjectAccountList({ page: 1, limit: 1, res_count: true }).catch(() => ({ count: 0, items: [] })),
+            getProjectStatsForDashboard({ days: 1 }).catch(() => ({ code: 0, data: [] })),
           ])
           project_count = projectsRes.count || 0
           account_count = accountsRes.count || 0
-          projectList = projectsRes.items || []
+          // 获取今天的更新数量（总和）
+          if (todayStatsRes.code === 1 && todayStatsRes.data && todayStatsRes.data.length > 0) {
+            today_update_count = todayStatsRes.data[0].counts[0] || 0
+          }
         } else {
-          // IT/MANUAL：只显示自己关联的项目
-          const projectsRes = await getProjectList({ page: 1, limit: 100, res_count: true }).catch(() => ({ count: 0, items: [] }))
-          projectList = projectsRes.items || []
-          project_count = projectList.length
-          
-          // 统计这些项目的账户数
-          if (projectList.length > 0) {
-            const accountsRes = await getProjectAccountList({ page: 1, limit: 1, res_count: true }).catch(() => ({ count: 0, items: [] }))
-            account_count = accountsRes.count || 0
+          // IT/MANUAL：获取自己的项目和账户统计
+          const [projectsRes, accountsRes, todayStatsRes] = await Promise.all([
+            getProjectList({ page: 1, limit: 1, res_count: true }).catch(() => ({ count: 0, items: [] })),
+            getProjectAccountList({ page: 1, limit: 1, res_count: true }).catch(() => ({ count: 0, items: [] })),
+            getProjectStatsForDashboard({ days: 1 }).catch(() => ({ code: 0, data: [] })),
+          ])
+          project_count = projectsRes.count || 0
+          account_count = accountsRes.count || 0
+          // 获取今天的更新数量（总和）
+          if (todayStatsRes.code === 1 && todayStatsRes.data && todayStatsRes.data.length > 0) {
+            today_update_count = todayStatsRes.data[0].counts[0] || 0
           }
         }
-
-        // 为每个项目获取账户数量
-        const projectsWithAccounts: ProjectWithAccounts[] = await Promise.all(
-          projectList.slice(0, 20).map(async (project) => {
-            try {
-              const accountsRes = await getProjectAccountList({
-                project_id: project.id,
-                page: 1,
-                limit: 1,
-                res_count: true,
-              })
-              return {
-                id: project.id,
-                name: project.name,
-                account_count: accountsRes.count || 0,
-                status: project.status,
-              }
-            } catch {
-              return {
-                id: project.id,
-                name: project.name,
-                account_count: 0,
-                status: project.status,
-              }
-            }
-          })
-        )
-
-        setStats({
-          user_count,
-          project_count,
-          account_count,
-          role: primary_role,
-          user_email: userInfo.email,
-          user_nickname: userInfo.nickname,
-        })
-        setProjects(projectsWithAccounts)
       } catch (error) {
-        // 设置默认值，避免页面崩溃
-        setStats({
-          user_count: undefined,
-          project_count: 0,
-          account_count: 0,
-          role: primary_role,
-          user_email: userInfo.email,
-          user_nickname: userInfo.nickname,
-        })
-        setProjects([])
+        console.error('获取统计数据失败:', error)
       }
+
+      setStats({
+        user_count,
+        project_count,
+        account_count,
+        today_update_count,
+        role: primary_role,
+        user_email: userInfo.email,
+        user_nickname: userInfo.nickname,
+      })
     } catch (error) {
+      console.error('加载仪表盘数据失败:', error)
     } finally {
       setLoading(false)
     }
@@ -342,31 +299,6 @@ export default function Dashboard() {
       message.error('复制失败，请手动复制')
     })
   }
-
-  const columns: ColumnsType<ProjectWithAccounts> = [
-    {
-      title: '项目名称',
-      dataIndex: 'name',
-      key: 'name',
-    },
-    {
-      title: '账户数量',
-      dataIndex: 'account_count',
-      key: 'account_count',
-      render: (count: number) => (
-        <span style={{ fontWeight: 'bold', color: '#1890ff' }}>{count}</span>
-      ),
-    },
-    {
-      title: '状态',
-      dataIndex: 'status',
-      key: 'status',
-      render: (status: number) => {
-        const config = PROJECT_STATUS_MAP[status] || { text: '未知', color: 'default' }
-        return <Tag color={config.color}>{config.text}</Tag>
-      },
-    },
-  ]
 
   if (loading) {
     return (
@@ -596,8 +528,8 @@ export default function Dashboard() {
 
       {/* 统计卡片 */}
       <Row gutter={16} style={{ marginBottom: 24 }}>
-        {stats.user_count !== null && stats.user_count !== undefined && (
-          <Col xs={24} sm={12} lg={6}>
+        {stats.user_count !== undefined && (
+          <Col xs={24} sm={12} lg={5}>
             <Card>
               <Statistic
                 title="用户总数"
@@ -609,7 +541,7 @@ export default function Dashboard() {
           </Col>
         )}
         
-        <Col xs={24} sm={12} lg={stats.user_count !== null ? 6 : 8}>
+        <Col xs={24} sm={12} lg={stats.user_count !== undefined ? 5 : 6}>
           <Card>
             <Statistic
               title={stats.role === 'ADMIN' || stats.role === 'GM' ? '项目总数' : '我的项目'}
@@ -620,7 +552,7 @@ export default function Dashboard() {
           </Card>
         </Col>
         
-        <Col xs={24} sm={12} lg={stats.user_count !== null ? 6 : 8}>
+        <Col xs={24} sm={12} lg={stats.user_count !== undefined ? 5 : 6}>
           <Card>
             <Statistic
               title={stats.role === 'ADMIN' || stats.role === 'GM' ? '账户总数' : '我的账户'}
@@ -631,8 +563,19 @@ export default function Dashboard() {
           </Card>
         </Col>
         
-        {stats.user_count !== null && (
-          <Col xs={24} sm={12} lg={6}>
+        <Col xs={24} sm={12} lg={stats.user_count !== undefined ? 5 : 6}>
+          <Card>
+            <Statistic
+              title="今日更新"
+              value={stats.today_update_count}
+              prefix={<RiseOutlined />}
+              valueStyle={{ color: '#fa8c16' }}
+            />
+          </Card>
+        </Col>
+        
+        {stats.user_count !== undefined && (
+          <Col xs={24} sm={12} lg={4}>
             <Card>
               <Statistic
                 title="在线用户"
@@ -646,29 +589,8 @@ export default function Dashboard() {
         )}
       </Row>
 
-      {/* 项目列表 */}
-      <Card
-        title={
-          <span>
-            <ProjectOutlined style={{ marginRight: 8 }} />
-            {stats.role === 'ADMIN' || stats.role === 'GM' ? '所有项目' : '我的项目'}
-          </span>
-        }
-      >
-        <Table
-          dataSource={projects}
-          columns={columns}
-          rowKey="id"
-          pagination={{
-            pageSize: 10,
-            showSizeChanger: true,
-            showTotal: (total) => `共 ${total} 个项目`,
-          }}
-          locale={{
-            emptyText: '暂无项目数据',
-          }}
-        />
-      </Card>
+      {/* 项目统计图表 */}
+      <ProjectStatsChart />
     </div>
   )
 }

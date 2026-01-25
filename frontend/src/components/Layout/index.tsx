@@ -57,6 +57,7 @@ const DEFAULT_MENU_ITEMS: MenuProps['items'] = [
       { key: '/project/list', label: '项目列表' },
       { key: '/project/account', label: '项目账号' },
       { key: '/project/wallet', label: '项目钱包' },
+      { key: '/project/wallet/batch-create', label: '批量创建钱包' },
     ],
   },
   {
@@ -68,6 +69,17 @@ const DEFAULT_MENU_ITEMS: MenuProps['items'] = [
       { key: '/server/group', label: '分组管理' },
       { key: '/server/list', label: '服务器列表' },
       { key: '/server/account', label: '服务器账号' },
+    ],
+  },
+  {
+    key: '/xui',
+    icon: <CloudServerOutlined />,
+    label: 'XUI管理',
+    children: [
+      { key: '/xui/server', label: '服务器列表' },
+      { key: '/xui/inbound', label: '入站列表' },
+      { key: '/xui/account', label: '账号管理' },
+      { key: '/xui/log', label: '操作日志' },
     ],
   },
   {

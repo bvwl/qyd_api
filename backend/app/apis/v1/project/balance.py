@@ -88,20 +88,20 @@ async def gets(
         if res_count:
             count = await project_balance_crud.get_count(
                 account_id=account_id,
-                create_time_start=parse_time(create_time_start),
-                create_time_end=parse_time(create_time_end, True),
-                update_time_start=parse_time(update_time_start),
-                update_time_end=parse_time(update_time_end, True),
+                create_time_start=create_time_start,
+                create_time_end=create_time_end,
+                update_time_start=update_time_start,
+                update_time_end=update_time_end,
             )
         else:
             count = -1
         return await project_balance_crud.get_multi(
             account_id=account_id,
             order_by=order_by or "-create_time",
-            create_time_start=parse_time(create_time_start),
-            create_time_end=parse_time(create_time_end, True),
-            update_time_start=parse_time(update_time_start),
-            update_time_end=parse_time(update_time_end, True),
+            create_time_start=create_time_start,
+            create_time_end=create_time_end,
+            update_time_start=update_time_start,
+            update_time_end=update_time_end,
             page=page,
             limit=limit,
             res_count=res_count,

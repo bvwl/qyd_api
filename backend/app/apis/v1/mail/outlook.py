@@ -126,10 +126,10 @@ async def check_and_update_emails_logic(
         status=status,
         limit=10000,
         email_type=email_type,
-        create_time_start=parse_time(create_time_start),
-        create_time_end=parse_time(create_time_end, True),
-        update_time_start=parse_time(update_time_start),
-        update_time_end=parse_time(update_time_end, True),
+        create_time_start=create_time_start,
+        create_time_end=create_time_end,
+        update_time_start=update_time_start,
+        update_time_end=update_time_end,
     )
     for email in emails:
         manager = AzureAuthManager(email.email)

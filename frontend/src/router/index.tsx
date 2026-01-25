@@ -13,10 +13,16 @@ import MailSend from '@/views/Mail/MailSend'
 import ProjectList from '@/views/Project/ProjectList'
 import ProjectAccount from '@/views/Project/ProjectAccount'
 import ProjectWallet from '@/views/Project/ProjectWallet'
+import WalletBatchCreate from '@/views/Project/WalletBatchCreate'
 import ServerList from '@/views/Server/ServerList'
 import CountryList from '@/views/Server/CountryList'
 import GroupList from '@/views/Server/GroupList'
 import ServerAccount from '@/views/Server/ServerAccount'
+import XuiServerList from '@/views/Xui/XuiServerList'
+import XuiInboundList from '@/views/Xui/XuiInboundList'
+import XuiAccountManage from '@/views/Xui/XuiAccountManage'
+import XuiAccountList from '@/views/Xui/XuiAccountList'
+import XuiOperationLog from '@/views/Xui/XuiOperationLog'
 import ProtectedRoute from '@/components/ProtectedRoute/index'
 import PermissionManageWorking from '@/views/User/PermissionManageWorking'
 
@@ -70,6 +76,10 @@ const router = createBrowserRouter([
         element: <ProjectAccount />,
       },
       {
+        path: 'project/wallet/batch-create',
+        element: <WalletBatchCreate />,
+      },
+      {
         path: 'project/wallet',
         element: <ProjectWallet />,
       },
@@ -100,6 +110,22 @@ const router = createBrowserRouter([
       {
         path: 'mail/viewer',
         element: <MailViewer />,
+      },
+      {
+        path: 'xui/server',
+        element: <XuiServerList />,
+      },
+      {
+        path: 'xui/inbound',
+        element: <XuiInboundList />,
+      },
+      {
+        path: 'xui/account',
+        element: <XuiAccountList />,
+      },
+      {
+        path: 'xui/log',
+        element: <XuiOperationLog />,
       },
     ],
   },

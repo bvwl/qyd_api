@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Modal, Form, Input, App, Space, Popconfirm, Tag, Select, InputNumber, DatePicker } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, CopyOutlined } from '@ant-design/icons'
+import { Table, Button, Modal, Form, Input, App, Space, Popconfirm, Tag, Select, InputNumber, DatePicker, Spin } from 'antd'
+import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, CopyOutlined, ApiOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons'
 import type { ServerInfo, ServerGroup } from '@/types'
 import { Status } from '@/types'
 import { getServerList, createServer, updateServer, deleteServer, getGroupList } from '@/api/server'
+import { checkProxyDirect } from '@/api/system'
 import { useUserStore } from '@/store/useUserStore'
 import { Dayjs } from 'dayjs'
+import { filterEmptyStrings } from '@/utils/form'
 
 const { RangePicker } = DatePicker
 
@@ -20,12 +22,16 @@ const ServerList = () => {
   const [editingServer, setEditingServer] = useState<ServerInfo | null>(null)
   const [groupList, setGroupList] = useState<ServerGroup[]>([])
   const [searchHost, setSearchHost] = useState('')
+  const [searchDomain, setSearchDomain] = useState('')
+  const [searchPort, setSearchPort] = useState<number>()
+  const [searchProxyType, setSearchProxyType] = useState<string>()
   const [searchGroupId, setSearchGroupId] = useState<string>()
   const [searchStatus, setSearchStatus] = useState<number>()
   const [searchIsSale, setSearchIsSale] = useState<number>()
   const [createTimeRange, setCreateTimeRange] = useState<[Dayjs, Dayjs] | null>(null)
   const [updateTimeRange, setUpdateTimeRange] = useState<[Dayjs, Dayjs] | null>(null)
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([])
+  const [testingProxy, setTestingProxy] = useState<string | null>(null)
   const [form] = Form.useForm()
   const { hasPermission } = useUserStore()
 
@@ -39,6 +45,8 @@ const ServerList = () => {
         limit: pageSize,
         res_count: true,
         host: searchHost || undefined,
+        domain: searchDomain || undefined,
+        port: searchPort,
         group_id: searchGroupId,
         status: searchStatus,
         is_sale: searchIsSale,
@@ -47,8 +55,17 @@ const ServerList = () => {
         update_time_start: updateTimeRange?.[0]?.format('YYYY-MM-DD'),
         update_time_end: updateTimeRange?.[1]?.format('YYYY-MM-DD'),
       })
-      setData(res.items || [])
-      setTotal(res.count || 0)
+      
+      let items = res.items || []
+      
+      // 客户端筛选：根据代理类型过滤
+      if (searchProxyType) {
+        items = items.filter(item => item.proxy_type === searchProxyType)
+      }
+      
+      setData(items)
+      // 如果有代理类型筛选，总数需要重新计算
+      setTotal(searchProxyType ? items.length : (res.count || 0))
     } catch (error) {
       // 404 表示无数据，静默处理
       setData([])
@@ -90,6 +107,9 @@ const ServerList = () => {
 
   const handleReset = () => {
     setSearchHost('')
+    setSearchDomain('')
+    setSearchPort(undefined)
+    setSearchProxyType(undefined)
     setSearchGroupId(undefined)
     setSearchStatus(undefined)
     setSearchIsSale(undefined)
@@ -165,11 +185,12 @@ const ServerList = () => {
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields()
+      const filteredValues = filterEmptyStrings(values)
       if (editingServer) {
-        await updateServer(editingServer.id, values)
+        await updateServer(editingServer.id, filteredValues)
         message.success('更新成功')
       } else {
-        await createServer(values)
+        await createServer(filteredValues)
         message.success('创建成功')
       }
       setModalVisible(false)
@@ -179,17 +200,70 @@ const ServerList = () => {
     }
   }
 
-  const handleCopyProxyUrl = (proxyUrl?: string) => {
+  const handleCopyProxyUrl = (proxyUrl?: string, proxyType?: string) => {
     if (!proxyUrl) {
       message.warning('代理信息不可用')
       return
     }
     
+    const typeText = proxyType === 'http' ? 'HTTP' : proxyType === 'socks5' ? 'SOCKS5' : ''
+    
     navigator.clipboard.writeText(proxyUrl).then(() => {
-      message.success('SOCKS5代理信息已复制到剪贴板')
+      message.success(`${typeText} 代理信息已复制到剪贴板`)
     }).catch(() => {
       message.error('复制失败，请手动复制')
     })
+  }
+
+  const handleTestProxy = async (proxyUrl?: string, serverId?: string) => {
+    if (!proxyUrl) {
+      message.warning('代理信息不可用')
+      return
+    }
+
+    setTestingProxy(serverId || null)
+    
+    try {
+      const result = await checkProxyDirect(proxyUrl)
+      
+      if (result.status === 'success') {
+        Modal.success({
+          title: '代理检测成功',
+          content: (
+            <div>
+              <p><strong>代理地址：</strong>{proxyUrl}</p>
+              <p><strong>检测IP：</strong>{result.ip}</p>
+              <p><strong>检测来源：</strong>{result.source}</p>
+              <p style={{ color: '#52c41a', marginTop: 8 }}>✅ 代理可用</p>
+            </div>
+          ),
+        })
+      } else {
+        Modal.error({
+          title: '代理检测失败',
+          content: (
+            <div>
+              <p><strong>代理地址：</strong>{proxyUrl}</p>
+              <p style={{ color: '#ff4d4f', marginTop: 8 }}>❌ 代理不可用</p>
+              <p><strong>原因：</strong>{result.details?.error || result.message}</p>
+            </div>
+          ),
+        })
+      }
+    } catch (error: any) {
+      Modal.error({
+        title: '代理检测失败',
+        content: (
+          <div>
+            <p><strong>代理地址：</strong>{proxyUrl}</p>
+            <p style={{ color: '#ff4d4f', marginTop: 8 }}>❌ 检测请求失败</p>
+            <p><strong>错误：</strong>{error.message || '未知错误'}</p>
+          </div>
+        ),
+      })
+    } finally {
+      setTestingProxy(null)
+    }
   }
 
   const columns = [
@@ -211,6 +285,20 @@ const ServerList = () => {
       dataIndex: 'port',
       key: 'port',
       width: 90,
+    },
+    {
+      title: '代理类型',
+      dataIndex: 'proxy_type',
+      key: 'proxy_type',
+      width: 90,
+      render: (proxy_type: string) => {
+        if (!proxy_type) return '-'
+        return (
+          <Tag color={proxy_type === 'http' ? 'blue' : 'green'}>
+            {proxy_type.toUpperCase()}
+          </Tag>
+        )
+      },
     },
     {
       title: '分组',
@@ -250,18 +338,29 @@ const ServerList = () => {
     {
       title: '操作',
       key: 'action',
-      width: 240,
+      width: 300,
       fixed: 'right' as const,
       render: (_: any, record: ServerInfo) => (
         <Space size="small">
           <Button
             type="link"
             icon={<CopyOutlined />}
-            onClick={() => handleCopyProxyUrl(record.proxy_url)}
-            title="复制SOCKS5代理信息"
+            onClick={() => handleCopyProxyUrl(record.proxy_url, record.proxy_type)}
+            title={`复制${record.proxy_type === 'http' ? 'HTTP' : 'SOCKS5'}代理信息`}
           >
             复制代理
           </Button>
+          {record.proxy_type === 'http' && (
+            <Button
+              type="link"
+              icon={testingProxy === record.id ? <Spin size="small" /> : <ApiOutlined />}
+              onClick={() => handleTestProxy(record.proxy_url, record.id)}
+              disabled={testingProxy === record.id}
+              title="测试代理是否可用"
+            >
+              测试代理
+            </Button>
+          )}
           {isAdmin && (
             <>
               <Button
@@ -298,13 +397,39 @@ const ServerList = () => {
               value={searchHost}
               onChange={(e) => setSearchHost(e.target.value)}
               onPressEnter={handleSearch}
-              style={{ width: 200 }}
+              style={{ width: 150 }}
             />
+            <Input
+              placeholder="域名"
+              value={searchDomain}
+              onChange={(e) => setSearchDomain(e.target.value)}
+              onPressEnter={handleSearch}
+              style={{ width: 150 }}
+            />
+            <InputNumber
+              placeholder="代理端口"
+              value={searchPort}
+              onChange={(value) => setSearchPort(value || undefined)}
+              onPressEnter={handleSearch}
+              style={{ width: 120 }}
+              min={1}
+              max={65535}
+            />
+            <Select
+              placeholder="代理类型"
+              value={searchProxyType}
+              onChange={setSearchProxyType}
+              style={{ width: 120 }}
+              allowClear
+            >
+              <Select.Option value="http">HTTP</Select.Option>
+              <Select.Option value="socks5">SOCKS5</Select.Option>
+            </Select>
             <Select
               placeholder="分组"
               value={searchGroupId}
               onChange={setSearchGroupId}
-              style={{ width: 200 }}
+              style={{ width: 180 }}
               allowClear
               showSearch
               filterOption={(input, option) =>
@@ -319,7 +444,7 @@ const ServerList = () => {
               placeholder="状态"
               value={searchStatus}
               onChange={setSearchStatus}
-              style={{ width: 120 }}
+              style={{ width: 100 }}
               allowClear
             >
               <Select.Option value={Status.NORMAL}>正常</Select.Option>
@@ -329,25 +454,25 @@ const ServerList = () => {
               placeholder="是否可以出售"
               value={searchIsSale}
               onChange={setSearchIsSale}
-              style={{ width: 140 }}
+              style={{ width: 130 }}
               allowClear
             >
               <Select.Option value={1}>可以出售</Select.Option>
               <Select.Option value={2}>不可以出售</Select.Option>
             </Select>
             <RangePicker
-              placeholder={['创建开始日期', '创建结束日期']}
+              placeholder={['创建开始', '创建结束']}
               value={createTimeRange}
               onChange={(dates) => setCreateTimeRange(dates as [Dayjs, Dayjs] | null)}
               format="YYYY-MM-DD"
-              style={{ width: 260 }}
+              style={{ width: 240 }}
             />
             <RangePicker
-              placeholder={['更新开始日期', '更新结束日期']}
+              placeholder={['更新开始', '更新结束']}
               value={updateTimeRange}
               onChange={(dates) => setUpdateTimeRange(dates as [Dayjs, Dayjs] | null)}
               format="YYYY-MM-DD"
-              style={{ width: 260 }}
+              style={{ width: 240 }}
             />
             <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>
               搜索
@@ -378,7 +503,7 @@ const ServerList = () => {
         dataSource={data}
         rowKey="id"
         loading={loading}
-        scroll={{ x: 1050 }}
+        scroll={{ x: 1250 }}
         rowSelection={{
           selectedRowKeys,
           onChange: (selectedKeys) => setSelectedRowKeys(selectedKeys as string[]),

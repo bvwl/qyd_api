@@ -2,6 +2,43 @@
 
 基于 FastAPI 的高性能异步后端服务，提供完整的RESTful API。支持每秒处理2000-15000条数据，具备企业级特性。
 
+## 🚀 快速部署
+
+### 方法一：一键部署（推荐）
+
+```bash
+bash quick_deploy.sh
+```
+
+### 方法二：手动部署
+
+```bash
+# 1. 安装依赖
+pip install -r requirements.txt
+
+# 2. 配置环境
+cp .env.example .env
+vim .env  # 配置数据库和 Redis
+
+# 3. 初始化数据库
+aerich init -t app.core.settings.TORTOISE_ORM
+aerich init-db
+python deploy_init.py
+
+# 4. 检查部署
+python check_deployment.py
+
+# 5. 启动服务
+python start.py
+```
+
+📚 **详细文档**:
+- [完整部署指南](DEPLOYMENT_GUIDE.md)
+- [快速参考](QUICK_DEPLOY_REFERENCE.md)
+- [部署总结](../DEPLOYMENT_SUMMARY.md)
+
+---
+
 ## 技术栈
 
 - **框架**: FastAPI (异步Web框架)

@@ -35,19 +35,25 @@ class ProjectAccountQueue(RedisQueueHandler):
             bool: 是否成功添加
         """
         # 如果有 data 字段且包含敏感信息，需要加密
-        if 'data' in data and data['data'] and 'project_id' in data:
+        if 'data' in data and data['data'] and 'account' in data:
             try:
-                # 获取项目信息
-                project = await ProjectInfo.get_or_none(id=data['project_id'])
-                if project:
-                    # 加密敏感字段
-                    data['data'] = encrypt_sensitive_fields(data['data'], project.name)
-                    logger.debug(f"队列数据已加密 [project={project.name}]")
-                else:
-                    logger.warning(f"项目不存在，无法加密数据 [project_id={data['project_id']}]")
+                account = data['account']
+                # 加密 data 字段中的敏感字段
+                data['data'] = encrypt_sensitive_fields(data['data'], account)
+                logger.debug(f"队列数据已加密 [account={account}]")
             except Exception as e:
                 logger.error(f"加密队列数据失败: {e}")
                 # 加密失败，仍然继续处理（数据可能已经是加密的）
+        
+        # 如果有 password 字段，需要加密
+        if 'password' in data and data['password'] and 'account' in data:
+            try:
+                from app.utils.project_crypto import encrypt_password
+                account = data['account']
+                data['password'] = encrypt_password(data['password'], account)
+                logger.debug(f"密码已加密 [account={account}]")
+            except Exception as e:
+                logger.error(f"加密密码失败: {e}")
         
         # 调用父类方法添加到队列
         return await super().add_to_queue(data, retry)

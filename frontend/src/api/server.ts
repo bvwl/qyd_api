@@ -61,6 +61,8 @@ export const deleteGroup = (id: string) => {
 // 服务器信息
 export const getServerList = (params?: PaginationParams & { 
   host?: string
+  domain?: string
+  port?: number
   group_id?: string
   status?: number
   is_sale?: number

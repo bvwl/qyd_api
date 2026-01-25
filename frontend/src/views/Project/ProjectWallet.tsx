@@ -6,6 +6,7 @@ import { getProjectWalletList, createProjectWallet, updateProjectWallet, deleteP
 import { useUserStore } from '@/store/useUserStore'
 import dayjs, { Dayjs } from 'dayjs'
 import type { TableProps } from 'antd'
+import { filterEmptyStrings } from '@/utils/form'
 
 const { RangePicker } = DatePicker
 
@@ -162,11 +163,12 @@ const ProjectWalletList = () => {
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields()
+      const filteredValues = filterEmptyStrings(values)
       if (editingWallet) {
-        await updateProjectWallet(editingWallet.id, values)
+        await updateProjectWallet(editingWallet.id, filteredValues)
         message.success('更新成功')
       } else {
-        await createProjectWallet(values)
+        await createProjectWallet(filteredValues)
         message.success('创建成功')
       }
       setModalVisible(false)

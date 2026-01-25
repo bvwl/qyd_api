@@ -113,9 +113,9 @@ class ProjectAccount(BaseModel):
     )
     data = fields.JSONField(null=True, description="扩展数据")
     
-    # 余额相关字段
-    balance = fields.DecimalField(max_digits=18, decimal_places=6, default=0, description="余额")
-    variable = fields.DecimalField(max_digits=18, decimal_places=6, default=0, description="变动余额")
+    # 余额相关字段（支持虚拟币精度，最多18位小数）
+    balance = fields.DecimalField(max_digits=38, decimal_places=18, default=0, description="余额")
+    variable = fields.DecimalField(max_digits=38, decimal_places=18, default=0, description="变动余额")
     balance_history = fields.JSONField(null=True, description="历史余额（可根据需要拆分为独立流水表）")
 
     project = fields.ForeignKeyField("models.ProjectInfo", related_name="accounts", description="所属项目")
@@ -136,5 +136,97 @@ class ProjectAccount(BaseModel):
 
     def __repr__(self):
         return f"<ProjectAccount(id={self.id}, account={self.account})>"
+
+    __str__ = __repr__
+
+
+# 项目提现模型
+class ProjectWithdrawal(BaseModel):
+    """
+    项目提现记录
+    每次更新都会记录完整的历史，使用时间戳作为key，所有记录永久保存
+    支持虚拟币精度（18位小数）
+    """
+    # 平台币相关（支持虚拟币精度）
+    platform_coin = fields.DecimalField(
+        max_digits=38, 
+        decimal_places=18, 
+        null=True, 
+        description="平台币当前余额"
+    )
+    platform_coin_change = fields.DecimalField(
+        max_digits=38, 
+        decimal_places=18, 
+        default=0, 
+        description="平台币最近一次变动"
+    )
+    platform_coin_history = fields.JSONField(
+        null=True, 
+        description="平台币历史记录（所有记录，格式：{'2026-01-25 14:30:45': '100.500000000000000000'}）"
+    )
+    
+    # 稳定币相关（支持虚拟币精度）
+    stable_coin = fields.DecimalField(
+        max_digits=38, 
+        decimal_places=18, 
+        null=True, 
+        description="稳定币当前余额"
+    )
+    stable_coin_change = fields.DecimalField(
+        max_digits=38, 
+        decimal_places=18, 
+        default=0, 
+        description="稳定币最近一次变动"
+    )
+    stable_coin_history = fields.JSONField(
+        null=True, 
+        description="稳定币历史记录（所有记录，格式：{'2026-01-25 14:30:45': '100.500000000000000000'}）"
+    )
+    
+    # 人民币相关（保持2位小数）
+    rmb = fields.DecimalField(
+        max_digits=20, 
+        decimal_places=2, 
+        null=True, 
+        description="人民币当前余额"
+    )
+    rmb_change = fields.DecimalField(
+        max_digits=20, 
+        decimal_places=2, 
+        default=0, 
+        description="人民币最近一次变动"
+    )
+    rmb_history = fields.JSONField(
+        null=True, 
+        description="人民币历史记录（所有记录，格式：{'2026-01-25 14:30:45': '100.50'}）"
+    )
+    
+    # 关联项目
+    project = fields.ForeignKeyField(
+        "models.ProjectInfo", 
+        related_name="withdrawals", 
+        description="所属项目",
+        index=True
+    )
+    
+    # 备注
+    remark = fields.CharField(
+        max_length=500, 
+        null=True, 
+        description="备注"
+    )
+
+    class Meta:
+        table = "project_withdrawal"
+        table_description = "项目提现记录"
+        ordering = ["-create_time"]
+        indexes = [
+            ("project_id", "create_time"),  # 按项目和时间查询（最常用）
+            ("create_time",),  # 时间范围查询
+        ]
+        unique_together = [("project_id",)]  # 每个项目只有一条记录
+
+    def __repr__(self):
+        return f"<ProjectWithdrawal(id={self.id}, project_id={self.project_id})>"
 
     __str__ = __repr__

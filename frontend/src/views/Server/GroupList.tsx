@@ -24,6 +24,7 @@ const GroupList = () => {
   const [searchStatus, setSearchStatus] = useState<number>()
   const [createTimeRange, setCreateTimeRange] = useState<[Dayjs, Dayjs] | null>(null)
   const [updateTimeRange, setUpdateTimeRange] = useState<[Dayjs, Dayjs] | null>(null)
+  const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([])
   const [form] = Form.useForm()
   const { hasPermission } = useUserStore()
 
@@ -91,6 +92,7 @@ const GroupList = () => {
     setSearchStatus(undefined)
     setCreateTimeRange(null)
     setUpdateTimeRange(null)
+    setSelectedRowKeys([])
     setPage(1)
     setTimeout(() => {
       fetchData()
@@ -124,6 +126,30 @@ const GroupList = () => {
     } catch (error) {
       message.error('删除失败')
     }
+  }
+
+  const handleBatchDelete = async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要删除的分组')
+      return
+    }
+
+    Modal.confirm({
+      title: '批量删除确认',
+      content: `确定要删除选中的 ${selectedRowKeys.length} 个分组吗？`,
+      okText: '确定',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          await Promise.all(selectedRowKeys.map(id => deleteGroup(id)))
+          message.success(`成功删除 ${selectedRowKeys.length} 个分组`)
+          setSelectedRowKeys([])
+          fetchData()
+        } catch (error) {
+          message.error('批量删除失败')
+        }
+      }
+    })
   }
 
   const handleSubmit = async () => {
@@ -262,11 +288,22 @@ const GroupList = () => {
             </Button>
             <Button onClick={handleReset}>重置</Button>
           </Space>
-          {isAdmin && (
-            <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
-              新增分组
-            </Button>
-          )}
+          <Space>
+            {selectedRowKeys.length > 0 && isAdmin && (
+              <Button 
+                danger 
+                icon={<DeleteOutlined />} 
+                onClick={handleBatchDelete}
+              >
+                批量删除 ({selectedRowKeys.length})
+              </Button>
+            )}
+            {isAdmin && (
+              <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+                新增分组
+              </Button>
+            )}
+          </Space>
         </div>
       </div>
 
@@ -275,6 +312,11 @@ const GroupList = () => {
         dataSource={data}
         rowKey="id"
         loading={loading}
+        rowSelection={{
+          selectedRowKeys,
+          onChange: (selectedKeys) => setSelectedRowKeys(selectedKeys as string[]),
+          preserveSelectedRowKeys: true,
+        }}
         pagination={{
           current: page,
           pageSize: pageSize,

@@ -1,112 +1,141 @@
 """
-数据库信息和读写分离测试API
+数据库管理API
 """
-from fastapi import APIRouter, Depends
-from tortoise import Tortoise
-from app.core.database import get_db_info
-from app.core.settings import DB_READ_WRITE_SPLIT, get_read_db, get_write_db
-from app.apis.deps import get_current_user
+from fastapi import APIRouter, Depends, HTTPException
+from app.apis.deps import get_admin_user
+from app.core.settings import (
+    _slave_health_cache,
+    check_slave_health,
+    DB_READ_WRITE_SPLIT,
+    DB_HOST,
+    DB_PORT,
+    DB_SLAVE1_HOST,
+    DB_SLAVE1_PORT,
+    DB_SLAVE2_HOST,
+    DB_SLAVE2_PORT,
+)
 
-router = APIRouter()
+app = APIRouter()
 
 
-@router.get("/info")
-async def get_database_info():
+@app.get("/health", description="获取数据库健康状态", summary="获取数据库健康状态")
+async def get_database_health(
+    admin_user: dict = Depends(get_admin_user)
+):
     """
-    获取数据库配置信息
+    获取数据库健康状态（仅管理员可用）
     
-    Returns:
-        dict: 数据库配置信息，包括主从配置
+    返回：
+    - 主库状态
+    - 从库状态
+    - 读写分离是否启用
     """
-    return get_db_info()
-
-
-@router.get("/connections")
-async def get_database_connections():
-    """
-    获取当前数据库连接状态
-    
-    Returns:
-        dict: 所有数据库连接的状态信息
-    """
-    connections = {}
-    
-    for conn_name in Tortoise._connections.keys():
-        try:
-            conn = Tortoise.get_connection(conn_name)
-            # 执行简单查询测试连接
-            result = await conn.execute_query("SELECT 1 as test, DATABASE() as db_name, @@hostname as host")
-            connections[conn_name] = {
-                "status": "connected",
-                "database": result[0]["db_name"] if result else None,
-                "host": result[0]["host"] if result else None,
+    try:
+        result = {
+            "read_write_split": DB_READ_WRITE_SPLIT,
+            "master": {
+                "host": DB_HOST,
+                "port": DB_PORT,
+                "status": "healthy"  # 主库默认健康
             }
-        except Exception as e:
-            connections[conn_name] = {
-                "status": "error",
-                "error": str(e)
-            }
+        }
+        
+        if DB_READ_WRITE_SPLIT:
+            # 检查从库健康状态
+            slave1_healthy = check_slave_health("slave1")
+            slave2_healthy = check_slave_health("slave2")
+            
+            result["slaves"] = [
+                {
+                    "name": "slave1",
+                    "host": DB_SLAVE1_HOST,
+                    "port": DB_SLAVE1_PORT,
+                    "status": "healthy" if slave1_healthy else "unhealthy"
+                },
+                {
+                    "name": "slave2",
+                    "host": DB_SLAVE2_HOST,
+                    "port": DB_SLAVE2_PORT,
+                    "status": "healthy" if slave2_healthy else "unhealthy"
+                }
+            ]
+        
+        return {
+            "code": 1,
+            "message": "成功",
+            "data": result
+        }
     
-    return {
-        "read_write_split_enabled": DB_READ_WRITE_SPLIT,
-        "connections": connections
-    }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取数据库健康状态失败: {str(e)}")
 
 
-@router.get("/test-routing")
-async def test_database_routing():
+@app.post("/health/clear-cache", description="清除健康检查缓存", summary="清除健康检查缓存")
+async def clear_health_cache(
+    admin_user: dict = Depends(get_admin_user)
+):
     """
-    测试数据库路由
+    清除健康检查缓存（仅管理员可用）
     
-    Returns:
-        dict: 读写操作的路由信息
+    用途：
+    - 强制重新检查从库健康状态
+    - 从库恢复后，立即生效
     """
-    read_dbs = []
-    for _ in range(10):
-        read_dbs.append(get_read_db())
+    try:
+        global _slave_health_cache
+        _slave_health_cache.clear()
+        
+        return {
+            "code": 1,
+            "message": "健康检查缓存已清除"
+        }
     
-    from collections import Counter
-    read_distribution = Counter(read_dbs)
-    
-    return {
-        "read_write_split_enabled": DB_READ_WRITE_SPLIT,
-        "write_db": get_write_db(),
-        "read_db_distribution": dict(read_distribution),
-        "total_read_samples": len(read_dbs)
-    }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"清除缓存失败: {str(e)}")
 
 
-@router.get("/test-query")
-async def test_database_query():
+@app.get("/stats", description="获取数据库统计信息", summary="获取数据库统计信息")
+async def get_database_stats(
+    admin_user: dict = Depends(get_admin_user)
+):
     """
-    测试数据库查询
+    获取数据库统计信息（仅管理员可用）
     
-    执行简单查询测试所有数据库连接
-    
-    Returns:
-        dict: 各数据库的查询结果
+    返回：
+    - 连接池状态
+    - 查询统计
     """
-    results = {}
+    try:
+        from tortoise import Tortoise
+        
+        result = {
+            "connections": {}
+        }
+        
+        # 获取所有连接的状态
+        for conn_name in ["default", "slave1", "slave2"]:
+            try:
+                conn = Tortoise.get_connection(conn_name)
+                if conn:
+                    result["connections"][conn_name] = {
+                        "status": "connected",
+                        "pool_size": getattr(conn._pool, 'size', 'unknown') if hasattr(conn, '_pool') else 'unknown'
+                    }
+                else:
+                    result["connections"][conn_name] = {
+                        "status": "not_configured"
+                    }
+            except Exception as e:
+                result["connections"][conn_name] = {
+                    "status": "error",
+                    "error": str(e)
+                }
+        
+        return {
+            "code": 1,
+            "message": "成功",
+            "data": result
+        }
     
-    for conn_name in Tortoise._connections.keys():
-        try:
-            conn = Tortoise.get_connection(conn_name)
-            result = await conn.execute_query("""
-                SELECT 
-                    DATABASE() as current_db,
-                    @@hostname as hostname,
-                    @@port as port,
-                    @@server_id as server_id,
-                    NOW() as current_time
-            """)
-            results[conn_name] = {
-                "status": "success",
-                "data": result[0] if result else None
-            }
-        except Exception as e:
-            results[conn_name] = {
-                "status": "error",
-                "error": str(e)
-            }
-    
-    return results
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取数据库统计信息失败: {str(e)}")

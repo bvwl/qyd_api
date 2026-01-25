@@ -42,6 +42,7 @@ async def get(
 @app.get("", response_model=OutList, description="获取分组信息", summary="获取分组信息")
 async def gets(
     name: str | None = Query(None, description="分组名称"),
+    country_id: UUID | None = Query(None, description="国家ID"),
     status: int | None = Query(None, description="状态(1:正常,2:异常)"),
     order_by: str | None = Query(
         "-create_time",
@@ -73,6 +74,7 @@ async def gets(
         name_filter = name.upper() if name else None
         return await server_group_crud.get_multi(
             name=name_filter,
+            country_id=country_id,
             status=status,
             page=page,
             limit=limit,

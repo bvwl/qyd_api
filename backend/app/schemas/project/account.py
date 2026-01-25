@@ -51,6 +51,7 @@ class Create(BaseModel):
     balance_history: dict | None = Field(None, description="历史余额")
     project_id: UUID = Field(..., description="所属项目ID")
     server_id: UUID | None = Field(None, description="关联服务器信息ID")
+    host: str | None = Field(None, description="服务器host（可选，如果提供则自动查询server_id）")
 
 
 class Update(BaseModel):
@@ -70,6 +71,7 @@ class Update(BaseModel):
     balance_history: dict | None = Field(None, description="历史余额")
     project_id: UUID | None = Field(None, description="所属项目ID")
     server_id: UUID | None = Field(None, description="关联服务器信息ID")
+    host: str | None = Field(None, description="服务器host（可选，如果提供则自动查询server_id）")
 
 
 class Out(Base):

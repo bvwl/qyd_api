@@ -31,10 +31,14 @@ class ReadWriteRouter:
             user = await ReadWriteRouter.read(User).get(id=1)
         """
         if DB_READ_WRITE_SPLIT:
+            from tortoise import Tortoise
             db_name = get_read_db()
-            # 使用 filter() 创建 QuerySet，然后指定数据库
-            return model.filter().using_db(db_name)
-        return model.all()
+            # 获取实际的数据库连接对象
+            db_conn = Tortoise.get_connection(db_name)
+            # 使用 filter() 创建 QuerySet，然后指定数据库连接
+            return model.filter().using_db(db_conn)
+        # 不启用读写分离时，返回一个空的QuerySet（不是all()）
+        return model.filter()
     
     @staticmethod
     def write(model: Type[T]) -> QuerySet[T]:
@@ -61,8 +65,11 @@ class ReadWriteRouter:
             await ReadWriteRouter.write(User).filter(id=1).delete()
         """
         if DB_READ_WRITE_SPLIT:
+            from tortoise import Tortoise
             db_name = get_write_db()
-            return model.filter().using_db(db_name)
+            # 获取实际的数据库连接对象
+            db_conn = Tortoise.get_connection(db_name)
+            return model.filter().using_db(db_conn)
         return model.filter()
 
 

@@ -47,6 +47,9 @@ class Out(Base):
     update_time: datetime = Field(..., description='更新时间')
 
     user_id: UUID | None = Field(None, description='关联用户ID')
+    
+    # XUI 入站状态
+    is_all_inbound_added: bool = Field(False, description='是否已添加到所有入站')
 
     # 关联的用户信息
     user: UserBase | None = Field(None, description='关联用户信息')

@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel, Field, field_serializer, computed_field
+from pydantic import BaseModel, Field, field_serializer
 from typing import List
 from uuid import UUID
 
@@ -59,20 +59,9 @@ class Out(Base):
     group_id: UUID = Field(..., description='分组ID')
     group: GroupBase = Field(..., description='分组信息')
     
-    # proxy_url 将在 CRUD 层计算后设置
+    # proxy_url 和 proxy_type 将在 CRUD 层计算后设置
     proxy_url: str = Field("", description='代理URL')
-
-
-    @computed_field
-    @property
-    def proxy_type(self) -> str:
-        if self.port is None:
-            return "unknown"
-        if 20000 <= self.port < 30000:
-            return "http"
-        elif 30000 <= self.port < 40000:
-            return "socks5"
-        return "unknown"
+    proxy_type: str = Field("", description='代理类型')
 
     @field_serializer('create_time', 'update_time')
     def format_datetime(self, dt: datetime) -> str:

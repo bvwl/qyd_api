@@ -14,15 +14,23 @@
 
 | 文档 | 说明 | 优先级 |
 |------|------|--------|
+| [PROJECT_ACCOUNT_ENCRYPTION_UPDATE.md](../PROJECT_ACCOUNT_ENCRYPTION_UPDATE.md) | **项目账号加密更新（2026-01-25）** | ⭐⭐⭐⭐ |
+| [PROJECT_ACCOUNT_ENCRYPTION_SUMMARY.md](../PROJECT_ACCOUNT_ENCRYPTION_SUMMARY.md) | 加密更新快速总结 | ⭐⭐⭐⭐ |
 | [PROJECT_ACCOUNT_ENCRYPTION.md](encryption/PROJECT_ACCOUNT_ENCRYPTION.md) | 项目账号加密详细文档 | ⭐⭐⭐ |
 | [PROJECT_ACCOUNT_ENCRYPTION_QUICK_REF.md](encryption/PROJECT_ACCOUNT_ENCRYPTION_QUICK_REF.md) | 加密功能快速参考 | ⭐⭐⭐ |
 | [PROJECT_ACCOUNT_ENCRYPTION_FLOW.md](encryption/PROJECT_ACCOUNT_ENCRYPTION_FLOW.md) | 加密流程图（含详细说明） | ⭐⭐ |
 | [SOCKS5_ACCOUNT_AES_ENCRYPTION.md](encryption/SOCKS5_ACCOUNT_AES_ENCRYPTION.md) | SOCKS5账号加密实现 | ⭐ |
 | [SOCKS5_ACCOUNT_IMPLEMENTATION_SUMMARY.md](encryption/SOCKS5_ACCOUNT_IMPLEMENTATION_SUMMARY.md) | SOCKS5账号实现总结 | ⭐ |
 
+**最新更新（2026-01-25）**：
+- ✅ 加密密钥从"项目名称+9527"改为"项目账号+9527"
+- ✅ 新增 password 字段加密支持
+- ✅ 不需要查询关联的项目信息
+- ✅ 每个账号使用独立密钥
+
 **核心特性**：
 - AES-CBC 加密
-- 每个项目独立密钥
+- 每个账号独立密钥
 - 基于权限的自动解密
 - Redis 队列数据加密
 - 递归加密所有层级

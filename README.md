@@ -56,7 +56,63 @@
 - MySQL 8.0+
 - Redis 7.0+ (可选，用于队列处理)
 
-### 后端启动
+### Docker 部署（推荐）
+
+#### 一键部署
+
+```bash
+# 1. 配置环境变量
+cp .env.docker .env
+vim .env  # 配置 MySQL 和 Redis 连接
+
+# 2. 运行部署脚本
+bash docker-deploy.sh
+```
+
+#### 手动部署
+
+```bash
+# 1. 配置环境
+cp .env.docker .env
+vim .env
+
+# 2. 构建镜像
+docker-compose build
+
+# 3. 初始化数据库
+docker-compose run --rm backend-api python deploy_init.py
+
+# 4. 启动服务
+docker-compose up -d
+```
+
+**访问地址**:
+- 前端: http://localhost
+- 后端: http://localhost:6080
+- API 文档: http://localhost:6080/docs
+
+详细文档：[DOCKER_DEPLOYMENT.md](docs/deployment/DOCKER_DEPLOYMENT.md) | [快速参考](docs/deployment/DOCKER_QUICK_REFERENCE.md)
+
+---
+
+### 后端部署
+
+#### 方法一：快速部署（推荐）
+
+```bash
+cd backend
+bash quick_deploy.sh
+```
+
+脚本会自动完成：
+- ✅ 检查环境
+- ✅ 创建虚拟环境
+- ✅ 安装依赖
+- ✅ 配置环境变量
+- ✅ 初始化数据库
+- ✅ 导入初始数据
+
+#### 方法二：手动部署
 
 ```bash
 cd backend
@@ -68,12 +124,21 @@ pip install -r requirements.txt
 cp .env.example .env
 # 编辑 .env 文件，配置数据库、Redis等信息
 
-# 3. 初始化数据库
-python db/init_roles_and_admin.py
+# 3. 使用 Aerich 初始化数据库
+aerich init -t app.core.settings.TORTOISE_ORM
+aerich init-db
 
-# 4. 启动服务
+# 4. 导入初始数据
+python deploy_init.py
+
+# 5. 检查部署
+python check_deployment.py
+
+# 6. 启动服务
 python start.py
 ```
+
+详细部署文档：[backend/DEPLOYMENT_GUIDE.md](backend/DEPLOYMENT_GUIDE.md) | [部署总结](docs/deployment/DEPLOYMENT_SUMMARY.md)
 
 后端服务将在 `http://localhost:6080` 启动
 
@@ -211,8 +276,24 @@ qyd_api2/
 │   │   ├── schemas/            # Pydantic模型
 │   │   ├── utils/              # 工具类
 │   │   └── main.py             # 应用入口
+│   ├── tests/                  # 测试文件 ✨
+│   │   ├── api/                # API 测试
+│   │   ├── integration/        # 集成测试
+│   │   ├── performance/        # 性能测试
+│   │   ├── unit/               # 单元测试
+│   │   └── README.md           # 测试说明
+│   ├── scripts/                # 脚本工具 ✨
+│   │   ├── database/           # 数据库脚本
+│   │   ├── xui/                # XUI 脚本
+│   │   ├── test/               # 测试脚本
+│   │   └── README.md           # 脚本说明
+│   ├── docs/                   # 后端文档 ✨
+│   │   ├── deployment/         # 部署文档
+│   │   ├── migration/          # 迁移文档
+│   │   ├── features/           # 功能文档
+│   │   └── README.md           # 文档索引
 │   ├── db/                     # 数据库初始化脚本
-│   ├── scripts/                # 工具脚本
+│   ├── examples/               # 示例代码
 │   ├── logs/                   # 日志文件
 │   ├── .env.example            # 环境变量示例
 │   ├── .env.high_performance   # 高性能配置模板
@@ -242,15 +323,22 @@ qyd_api2/
 │   ├── api/                    # API文档
 │   ├── features/               # 功能文档
 │   ├── fixes/                  # 修复记录
-│   └── rbac/                   # RBAC设计文档
+│   ├── rbac/                   # RBAC设计文档
+│   ├── project/                # 项目文档 ✨
+│   ├── archived/               # 归档文档 ✨
+│   └── DOCUMENTATION_INDEX.md  # 文档索引
 ├── scripts/                    # 项目级脚本
 │   ├── mysql/                  # MySQL相关脚本
 │   ├── test/                   # 测试脚本
 │   ├── debug/                  # 调试脚本
-│   └── utils/                  # 工具脚本
-├── QUICK_START_GUIDE.md        # 快速开始指南
+│   ├── utils/                  # 工具脚本 ✨
+│   └── SCRIPTS_README.md       # 脚本说明
+├── PROJECT_ORGANIZATION_COMPLETE.md  # 文件整理报告 ✨ (已移至 docs/summaries/)
+├── organize_all_files.sh       # 文件整理脚本 ✨
 └── README.md                   # 项目说明文档
 ```
+
+> ✨ 标记的目录为最近整理优化的部分（2026-01-26）
 
 ## 📚 API文档
 
@@ -323,7 +411,7 @@ sudo apt-get install supervisor
 ## 📖 文档
 
 ### 快速开始
-- [QUICK_START_GUIDE.md](QUICK_START_GUIDE.md) - 快速开始指南（推荐）
+- [QUICK_START_GUIDE.md](docs/project/QUICK_START_GUIDE.md) - 快速开始指南（推荐）
 
 ### 加密功能文档 (`docs/encryption/`)
 
@@ -510,6 +598,47 @@ mysql -u qyd -p qyd < backup_20260123.sql
 
 ## 📝 更新日志
 
+### v1.2.0 (2026-01-26)
+
+**Docker 部署方案**：
+- ✅ 完整的 Docker 部署配置（前后端分离）
+- ✅ 优化的 Dockerfile（多阶段构建）
+- ✅ Docker Compose 配置（3个服务）
+- ✅ 一键部署脚本 `docker-deploy.sh`
+- ✅ Nginx 配置（前端服务）
+- ✅ 环境变量模板 `.env.docker`
+- ✅ 详细部署文档和快速参考
+- ✅ 支持连接外部 MySQL 和 Redis
+- ✅ 详见 [DOCKER_SETUP_COMPLETE.md](docs/deployment/DOCKER_SETUP_COMPLETE.md)
+
+**部署优化**：
+- ✅ 完善 requirements.txt，添加版本号和分类
+- ✅ 新增快速部署脚本 `quick_deploy.sh`
+- ✅ 新增部署初始化脚本 `deploy_init.py`
+- ✅ 新增部署检查脚本 `check_deployment.py`
+- ✅ 新增详细部署指南 `DEPLOYMENT_GUIDE.md`
+- ✅ 使用 Aerich 管理数据库迁移
+- ✅ Python 脚本自动导入初始数据
+- ✅ 详见 [DEPLOYMENT_SUMMARY.md](docs/deployment/DEPLOYMENT_SUMMARY.md)
+
+**项目整理**：
+- ✅ 完成项目文件整理，优化目录结构
+- ✅ 整理 71 个文件到对应目录
+- ✅ 创建测试、脚本、文档索引文件
+- ✅ 详见 [PROJECT_ORGANIZATION_COMPLETE.md](docs/summaries/PROJECT_ORGANIZATION_COMPLETE.md)
+
+**功能更新**：
+- ✅ 批量创建钱包功能开放给所有用户
+- ✅ 详见 [WALLET_BATCH_CREATE_PERMISSION_UPDATE.md](docs/features/WALLET_BATCH_CREATE_PERMISSION_UPDATE.md)
+
+**目录优化**：
+- ✅ backend/tests/ - 测试文件按类型分类（api/integration/performance）
+- ✅ backend/scripts/ - 脚本文件按功能分类（database/xui）
+- ✅ backend/docs/ - 后端文档按主题分类（deployment/migration/features）
+- ✅ docs/project/ - 项目级文档
+- ✅ docs/archived/ - 归档文档
+- ✅ scripts/utils/ - 工具脚本
+
 ### v1.1.0 (2026-01-25)
 
 **新功能**：
@@ -565,5 +694,5 @@ mysql -u qyd -p qyd < backup_20260123.sql
 ---
 
 **项目状态**: ✅ 生产就绪  
-**最后更新**: 2026-01-25  
-**版本**: v1.1.0
+**最后更新**: 2026-01-26  
+**版本**: v1.2.0

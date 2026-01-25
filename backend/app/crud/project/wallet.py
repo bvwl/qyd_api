@@ -1,10 +1,12 @@
 from uuid import UUID
 from fastapi import HTTPException
 
-from app.models.project import ProjectWallet
-from app.schemas.project.wallet import Create, Update, Out, OutList
+from app.models.project import ProjectWallet, ProjectInfo
+from app.schemas.project.wallet import Create, Update, Out, OutList, BatchCreate, BatchCreateOut
 from app.schemas.base import BaseOut
 from app.utils.time_tool import parse_time
+from app.clients.wallet import WalletClient
+from app.core.tools import aes_encrypt_wallet
 
 
 class CRUD:
@@ -128,6 +130,81 @@ class CRUD:
         
         await record.fetch_related('project')
         return Out.model_validate(record)
+
+    # 批量创建钱包
+    async def batch_create(self, item: BatchCreate) -> BatchCreateOut:
+        """
+        批量创建钱包
+        :param item: 批量创建参数
+        :return: 创建的钱包列表
+        """
+        # 验证链类型并转换为大写
+        chain_upper = item.chain.upper()
+        if chain_upper not in ['ETH', 'SOL']:
+            raise ValueError('链类型只支持 ETH 或 SOL')
+        
+        # 初始化钱包客户端
+        wallet_client = WalletClient()
+        
+        # 批量创建钱包
+        created_wallets = []
+        for i in range(item.count):
+            try:
+                # 根据链类型创建钱包
+                if chain_upper == 'ETH':
+                    private_key, public_key, mnemonic = await wallet_client.eth_create()
+                else:  # SOL
+                    private_key, public_key, mnemonic = await wallet_client.solana_create()
+                
+                # 使用项目名称加密私钥和助记词
+                encrypted_private_key = aes_encrypt_wallet(private_key, item.project_name)
+                encrypted_mnemonic = aes_encrypt_wallet(mnemonic, item.project_name) if mnemonic else None
+                
+                # 创建钱包记录（使用大写链类型）
+                wallet = await ProjectWallet.create(
+                    private_key=encrypted_private_key,
+                    public_key=public_key,
+                    mnemonic=encrypted_mnemonic,
+                    chain=chain_upper,
+                    remark=item.remark
+                )
+                
+                created_wallets.append(wallet)
+                
+            except Exception as e:
+                # 如果某个钱包创建失败，记录错误但继续创建其他钱包
+                print(f"创建第 {i+1} 个钱包失败: {str(e)}")
+                continue
+        
+        if not created_wallets:
+            raise HTTPException(status_code=500, detail='批量创建失败，没有成功创建任何钱包')
+        
+        # 手动构建输出数据（避免Pydantic验证关联字段）
+        items = []
+        for wallet in created_wallets:
+            # 使用项目名称解密（因为前端需要明文显示）
+            from app.core.tools import aes_decrypt_wallet
+            
+            # 构建字典，排除 project 字段
+            wallet_dict = {
+                'message': '成功',
+                'id': wallet.id,
+                'private_key': aes_decrypt_wallet(wallet.private_key, item.project_name),
+                'public_key': wallet.public_key,
+                'mnemonic': aes_decrypt_wallet(wallet.mnemonic, item.project_name) if wallet.mnemonic else None,
+                'chain': wallet.chain,
+                'remark': wallet.remark,
+                'project_id': None,
+                'create_time': wallet.create_time,
+                'update_time': wallet.update_time,
+            }
+            items.append(Out(**wallet_dict))
+        
+        return BatchCreateOut(
+            message=f'成功创建 {len(created_wallets)} 个钱包',
+            count=len(created_wallets),
+            items=items
+        )
 
 
 project_wallet_crud = CRUD()

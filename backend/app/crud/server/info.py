@@ -9,12 +9,28 @@ from app.core.tools import aes_encrypt, aes_decrypt
 
 
 class CRUD:
-    async def _generate_proxy_url(self, server: ServerInfo, current_user_id: UUID | None = None) -> str:
+    async def _generate_proxy_url(self, server: ServerInfo, current_user_id: UUID | None = None) -> tuple[str, str]:
         """
-        生成代理URL，使用当前用户的服务器账号
+        生成代理URL和代理类型，使用当前用户的服务器账号
+        
+        Returns:
+            tuple[str, str]: (proxy_url, proxy_type)
         """
         if server.port is None:
-            return ""
+            return "", ""
+        
+        # 根据端口范围判断代理类型
+        port = server.port
+        if 21999 < port < 29999:
+            proxy_type = "http"
+            protocol = "http"
+        elif 31999 < port < 39999:
+            proxy_type = "socks5"
+            protocol = "socks5"
+        else:
+            # 默认为 socks5
+            proxy_type = "socks5"
+            protocol = "socks5"
         
         # 获取当前用户的服务器账号
         username = "username"
@@ -36,9 +52,10 @@ class CRUD:
                 pass
         
         # 生成代理URL
-        if server.domain:
-            return f"socks5://{username}:{password}@{server.domain}:{server.port}"
-        return f"socks5://{username}:{password}@{server.host}:{server.port}"
+        host = server.domain if server.domain else server.host
+        proxy_url = f"{protocol}://{username}:{password}@{host}:{server.port}"
+        
+        return proxy_url, proxy_type
     
     # 创建
     async def create(self, item: Create, current_user_id: UUID | None = None) -> Out:
@@ -59,8 +76,8 @@ class CRUD:
         
         result = Out.model_validate(res)
         
-        # 生成 proxy_url
-        result.proxy_url = await self._generate_proxy_url(res, current_user_id)
+        # 生成 proxy_url 和 proxy_type
+        result.proxy_url, result.proxy_type = await self._generate_proxy_url(res, current_user_id)
         
         return result
 
@@ -82,8 +99,8 @@ class CRUD:
                 # 解密失败，保持原密文
                 pass
         
-        # 生成 proxy_url
-        item.proxy_url = await self._generate_proxy_url(res, current_user_id)
+        # 生成 proxy_url 和 proxy_type
+        item.proxy_url, item.proxy_type = await self._generate_proxy_url(res, current_user_id)
         
         return item
 
@@ -91,6 +108,7 @@ class CRUD:
     async def get_multi(self,
                         host: str | None = None,
                         domain: str | None = None,
+                        port: int | None = None,
                         page: int = 1,
                         limit: int = 10,
                         res_count: bool = False,
@@ -107,6 +125,8 @@ class CRUD:
             query = query.filter(host__icontains=host)
         if domain:
             query = query.filter(domain__icontains=domain)
+        if port is not None:
+            query = query.filter(port=port)
         if create_time_start:
             query = query.filter(create_time__gte=parse_time(create_time_start))
         if create_time_end:
@@ -149,8 +169,8 @@ class CRUD:
                     # 解密失败，保持原密文
                     pass
             
-            # 生成 proxy_url
-            item.proxy_url = await self._generate_proxy_url(obj, current_user_id)
+            # 生成 proxy_url 和 proxy_type
+            item.proxy_url, item.proxy_type = await self._generate_proxy_url(obj, current_user_id)
             
             items.append(item)
         
@@ -191,8 +211,8 @@ class CRUD:
                 # 解密失败，保持原密文
                 pass
         
-        # 生成 proxy_url
-        result.proxy_url = await self._generate_proxy_url(res, current_user_id)
+        # 生成 proxy_url 和 proxy_type
+        result.proxy_url, result.proxy_type = await self._generate_proxy_url(res, current_user_id)
         
         return result
 
@@ -217,8 +237,8 @@ class CRUD:
         
         result = Out.model_validate(record)
         
-        # 生成 proxy_url
-        result.proxy_url = await self._generate_proxy_url(record, current_user_id)
+        # 生成 proxy_url 和 proxy_type
+        result.proxy_url, result.proxy_type = await self._generate_proxy_url(record, current_user_id)
         
         return result
 

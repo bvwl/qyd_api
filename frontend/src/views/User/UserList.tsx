@@ -10,6 +10,7 @@ import { USER_STATUS_MAP } from '@/utils/constants'
 import { formatDateTime } from '@/utils/format'
 import { useUserStore } from '@/store/useUserStore'
 import dayjs, { Dayjs } from 'dayjs'
+import { filterEmptyStrings } from '@/utils/form'
 
 const { RangePicker } = DatePicker
 
@@ -156,11 +157,12 @@ export default function UserList() {
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields()
+      const filteredValues = filterEmptyStrings(values)
       if (editingUser) {
-        await updateUser(editingUser.id, values)
+        await updateUser(editingUser.id, filteredValues)
         message.success('更新成功')
       } else {
-        await createUser(values)
+        await createUser(filteredValues)
         message.success('创建成功')
       }
       setModalVisible(false)
