@@ -9,7 +9,7 @@ message.config({
 })
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:6080/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://192.168.13.6:6080',
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json'
