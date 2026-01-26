@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Table, Button, Modal, Form, Input, App, Space, Popconfirm, Select, DatePicker } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, EyeOutlined, EyeInvisibleOutlined } from '@ant-design/icons'
+import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, EyeOutlined, EyeInvisibleOutlined, CopyOutlined } from '@ant-design/icons'
 import type { ServerAccount, User } from '@/types'
 import { getServerAccountList, createServerAccount, updateServerAccount, deleteServerAccount } from '@/api/server'
 import { getUserList } from '@/api/user'
@@ -107,6 +107,15 @@ const ServerAccountList = () => {
     }
   }
 
+  const handleCopyAccount = (record: ServerAccount) => {
+    const accountInfo = `用户名: ${record.username}\n密码: ${record.password}`
+    navigator.clipboard.writeText(accountInfo).then(() => {
+      message.success('账号信息已复制到剪贴板')
+    }).catch(() => {
+      message.error('复制失败')
+    })
+  }
+
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields()
@@ -209,6 +218,14 @@ const ServerAccountList = () => {
       key: 'action',
       render: (_: any, record: ServerAccount) => (
         <Space>
+          <Button
+            type="link"
+            icon={<CopyOutlined />}
+            onClick={() => handleCopyAccount(record)}
+            title="复制账号信息"
+          >
+            复制
+          </Button>
           {isAdmin && (
             <>
               <Button
