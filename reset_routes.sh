@@ -23,7 +23,7 @@ fi
 # 1. 清除所有路由数据
 echo ""
 echo "[1/4] 清除所有路由数据..."
-docker compose exec backend-api python3 << 'EOF'
+docker compose exec -T backend-api python3 << 'EOF'
 import asyncio
 from tortoise import Tortoise
 from app.core import settings
@@ -53,12 +53,12 @@ EOF
 # 2. 重新初始化路由
 echo ""
 echo "[2/4] 重新初始化路由..."
-docker compose exec backend-api python db/init_routes.py
+docker compose exec -T backend-api python db/init_routes.py
 
 # 3. 将所有路由分配给 ADMIN 角色
 echo ""
 echo "[3/4] 将所有路由分配给 ADMIN 角色..."
-docker compose exec backend-api python3 << 'EOF'
+docker compose exec -T backend-api python3 << 'EOF'
 import asyncio
 from tortoise import Tortoise
 from app.core import settings
@@ -92,7 +92,7 @@ EOF
 # 4. 验证结果
 echo ""
 echo "[4/4] 验证结果..."
-docker compose exec backend-api python3 << 'EOF'
+docker compose exec -T backend-api python3 << 'EOF'
 import asyncio
 from tortoise import Tortoise
 from app.core import settings
