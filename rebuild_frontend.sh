@@ -43,10 +43,10 @@ echo "[5/6] 重新构建前端镜像..."
 echo "  使用 API 地址: ${VITE_API_BASE_URL}"
 docker compose build --no-cache frontend
 
-# 6. 启动前端容器
+# 6. 启动所有服务（保持正确的副本数）
 echo ""
-echo "[6/6] 启动前端容器..."
-docker compose up -d frontend
+echo "[6/6] 启动所有服务..."
+docker compose up -d --scale backend-api=5 --scale queue-worker=5
 
 # 等待服务启动
 echo ""
@@ -58,7 +58,13 @@ echo ""
 echo "=========================================="
 echo "服务状态"
 echo "=========================================="
-docker compose ps frontend
+docker compose ps
+
+# 统计容器数量
+echo ""
+echo "容器统计："
+echo "  后端 API: $(docker compose ps backend-api --format '{{.Name}}' | wc -l) 个"
+echo "  队列 Worker: $(docker compose ps queue-worker --format '{{.Name}}' | wc -l) 个"
 
 # 测试前端
 echo ""
