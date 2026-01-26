@@ -3,6 +3,9 @@ import { Card, Row, Col, List, Tree, Button, App, Spin, Empty } from 'antd'
 import { TeamOutlined, SaveOutlined } from '@ant-design/icons'
 import type { DataNode } from 'antd/es/tree'
 
+// 使用环境变量中的 API 地址
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://192.168.13.6:6080'
+
 interface Role {
   id: string
   name: string
@@ -42,13 +45,13 @@ export default function PermissionManageWorking() {
       }
 
       // 获取角色列表
-      const rolesResponse = await fetch('http://127.0.0.1:6080/v1/user/role?page=1&limit=100', {
+      const rolesResponse = await fetch(`${API_BASE_URL}/v1/user/role?page=1&limit=100`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
       const rolesData = await rolesResponse.json()
       
       // 获取路由树
-      const routesResponse = await fetch('http://127.0.0.1:6080/v1/user/route/tree?status=1', {
+      const routesResponse = await fetch(`${API_BASE_URL}/v1/user/route/tree?status=1`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
       const routesData = await routesResponse.json()
@@ -80,7 +83,7 @@ export default function PermissionManageWorking() {
     setSelectedRole(role)
     try {
       const token = localStorage.getItem('access_token')
-      const response = await fetch(`http://127.0.0.1:6080/v1/user/role/${role.id}/routes`, {
+      const response = await fetch(`${API_BASE_URL}/v1/user/role/${role.id}/routes`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
       const data = await response.json()
@@ -113,7 +116,7 @@ export default function PermissionManageWorking() {
       // 后端会自动过滤父节点，只保存叶子节点（实际权限）
       console.log('保存的权限ID:', checkedKeys)
       
-      const response = await fetch(`http://127.0.0.1:6080/v1/user/role/${selectedRole.id}/routes`, {
+      const response = await fetch(`${API_BASE_URL}/v1/user/role/${selectedRole.id}/routes`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
