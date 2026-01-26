@@ -44,7 +44,7 @@ async def upload_file(
     - 支持格式：PDF, Word, Excel, PowerPoint, TXT
     - 最大文件大小：50MB
     - 文件存储路径：static/{项目名称}/{文件名}
-    - 自动更新项目的content字段为文件路径
+    - 不会修改项目的content字段
     """
     try:
         # 检查项目是否存在
@@ -77,12 +77,9 @@ async def upload_file(
         with open(file_path, 'wb') as f:
             f.write(content)
         
-        # 更新项目的content字段为文件路径
-        relative_path = f"static/{project.name}/{file.filename}"
-        project.content = relative_path
-        await project.save()
+        # 不再更新项目的content字段
         
-        return BaseOut(message=f'文件上传成功：{file.filename}，已更新项目内容路径', count=1)
+        return BaseOut(message=f'文件上传成功：{file.filename}', count=1)
     
     except HTTPException:
         raise
