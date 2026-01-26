@@ -239,6 +239,10 @@ class DeployInitializer:
             children = route_data.pop('children', None)
             route_data['parent_id'] = parent_id
             
+            # 如果没有 title，使用 name 作为 title
+            if 'title' not in route_data:
+                route_data['title'] = route_data['name']
+            
             # 检查路由是否已存在
             existing_route = await FrontendRoute.filter(path=route_data['path']).first()
             if existing_route:
