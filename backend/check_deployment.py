@@ -142,7 +142,7 @@ class DeploymentChecker:
         
         try:
             from tortoise import Tortoise
-            from app.core.database import TORTOISE_ORM
+            from app.core.settings import TORTOISE_ORM
             
             # 尝试连接数据库
             await Tortoise.init(config=TORTOISE_ORM)
@@ -280,7 +280,7 @@ class DeploymentChecker:
         
         try:
             from tortoise import Tortoise
-            from app.core.database import TORTOISE_ORM
+            from app.core.settings import TORTOISE_ORM
             from app.models.user import User, Role, FrontendRoute
             
             await Tortoise.init(config=TORTOISE_ORM)

@@ -22,7 +22,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from tortoise import Tortoise
-from app.core.database import TORTOISE_ORM
+from app.core.settings import TORTOISE_ORM
 from app.core.tools import get_password_hash
 from app.models.user import User, Role, FrontendRoute, UserRole, RoleRoute
 import uuid
