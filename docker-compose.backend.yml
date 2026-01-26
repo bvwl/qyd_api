@@ -1,0 +1,127 @@
+# 后端服务器专用 Docker Compose 配置
+# 用于部署 Backend API + Queue Worker
+# 注意：Redis 使用外部已部署的服务器，不在此启动
+
+version: '3.8'
+
+services:
+  # 后端 API 服务
+  backend-api:
+    build:
+      context: ./backend
+      target: backend-api
+    container_name: qyd-backend-api
+    restart: unless-stopped
+    ports:
+      - "6080:6080"
+    environment:
+      # 数据库配置
+      - DB_HOST=${DB_HOST:-192.168.1.30}
+      - DB_PORT=${DB_PORT:-3306}
+      - DB_USER=${DB_USER:-qyd}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME:-qyd}
+      - DB_MINSIZE=${DB_MINSIZE:-5}
+      - DB_MAXSIZE=${DB_MAXSIZE:-20}
+      
+      # 读写分离配置
+      - DB_READ_WRITE_SPLIT=${DB_READ_WRITE_SPLIT:-0}
+      - DB_SLAVE1_HOST=${DB_SLAVE1_HOST}
+      - DB_SLAVE1_PORT=${DB_SLAVE1_PORT:-3306}
+      - DB_SLAVE1_USER=${DB_SLAVE1_USER:-${DB_USER}}
+      - DB_SLAVE1_PASSWORD=${DB_SLAVE1_PASSWORD:-${DB_PASSWORD}}
+      - DB_SLAVE1_NAME=${DB_SLAVE1_NAME:-${DB_NAME}}
+      
+      # Redis 配置（使用外部 Redis 服务器）
+      - REDIS_ENABLED=${REDIS_ENABLED:-1}
+      - REDIS_HOST=${REDIS_HOST:-192.168.1.20}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_password}
+      - REDIS_DB=${REDIS_DB:-0}
+      - REDIS_MAX_CONNECTIONS=${REDIS_MAX_CONNECTIONS:-50}
+      
+      # Redis 队列配置
+      - REDIS_QUEUE_BATCH_SIZE=${REDIS_QUEUE_BATCH_SIZE:-200}
+      - REDIS_QUEUE_NUM_WORKERS=${REDIS_QUEUE_NUM_WORKERS:-4}
+      - REDIS_QUEUE_CACHE_EXPIRE=${REDIS_QUEUE_CACHE_EXPIRE:-3600}
+      
+      # JWT 配置
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      - JWT_EXPIRE_TIME=${JWT_EXPIRE_TIME:-86400}
+      
+      # 服务配置
+      - HOST=0.0.0.0
+      - PORT=6080
+      - DEBUG=${DEBUG:-0}
+      - WORKERS=${WORKERS:-1}
+      
+      # CORS 配置（允许前端服务器访问）
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://192.168.1.10,http://192.168.1.10:80}
+      
+      # 日志配置
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_RETENTION_DAYS=${LOG_RETENTION_DAYS:-90}
+    volumes:
+      - ./backend/logs:/app/logs
+      - ./backend/status:/app/status
+    networks:
+      - qyd-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:6080/docs', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # 队列 Worker 服务
+  queue-worker:
+    build:
+      context: ./backend
+      target: queue-worker
+    container_name: qyd-queue-worker
+    restart: unless-stopped
+    environment:
+      # 数据库配置
+      - DB_HOST=${DB_HOST:-192.168.1.30}
+      - DB_PORT=${DB_PORT:-3306}
+      - DB_USER=${DB_USER:-qyd}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME:-qyd}
+      - DB_MINSIZE=${DB_MINSIZE:-5}
+      - DB_MAXSIZE=${DB_MAXSIZE:-20}
+      
+      # 读写分离配置
+      - DB_READ_WRITE_SPLIT=${DB_READ_WRITE_SPLIT:-0}
+      - DB_SLAVE1_HOST=${DB_SLAVE1_HOST}
+      - DB_SLAVE1_PORT=${DB_SLAVE1_PORT:-3306}
+      
+      # Redis 配置（使用外部 Redis 服务器）
+      - REDIS_ENABLED=${REDIS_ENABLED:-1}
+      - REDIS_HOST=${REDIS_HOST:-192.168.1.20}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_password}
+      - REDIS_DB=${REDIS_DB:-0}
+      - REDIS_MAX_CONNECTIONS=${REDIS_MAX_CONNECTIONS:-50}
+      
+      # Redis 队列配置
+      - REDIS_QUEUE_BATCH_SIZE=${REDIS_QUEUE_BATCH_SIZE:-200}
+      - REDIS_QUEUE_NUM_WORKERS=${REDIS_QUEUE_NUM_WORKERS:-4}
+      - REDIS_QUEUE_CACHE_EXPIRE=${REDIS_QUEUE_CACHE_EXPIRE:-3600}
+      
+      # JWT 配置
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      
+      # 日志配置
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_RETENTION_DAYS=${LOG_RETENTION_DAYS:-90}
+    volumes:
+      - ./backend/logs:/app/logs
+      - ./backend/status:/app/status
+    networks:
+      - qyd-network
+
+networks:
+  qyd-network:
+    driver: bridge
