@@ -51,15 +51,29 @@ vim .env
 **必须配置的参数**：
 
 ```env
-# MySQL 主库（外部服务器）
+# MySQL 主库（外部服务器，用于写操作）
 DB_HOST=192.168.1.100        # MySQL 主库 IP
 DB_PORT=3306
 DB_USER=qyd
 DB_PASSWORD=your_mysql_password
 DB_NAME=qyd
 
-# MySQL 从库（可选，用于读写分离）
-DB_SLAVE_HOSTS=192.168.1.101:3306,192.168.1.102:3306
+# 是否启用读写分离（1=启用, 0=禁用）
+DB_READ_WRITE_SPLIT=1
+
+# MySQL 从库1（外部服务器，用于读操作）
+DB_SLAVE1_HOST=192.168.1.101
+DB_SLAVE1_PORT=3306
+DB_SLAVE1_USER=qyd                    # 从库账号（可与主库不同）
+DB_SLAVE1_PASSWORD=your_slave1_password  # 从库密码（可与主库不同）
+DB_SLAVE1_NAME=qyd
+
+# MySQL 从库2（外部服务器，用于读操作）
+DB_SLAVE2_HOST=192.168.1.102
+DB_SLAVE2_PORT=3306
+DB_SLAVE2_USER=qyd                    # 从库账号（可与主库不同）
+DB_SLAVE2_PASSWORD=your_slave2_password  # 从库密码（可与主库不同）
+DB_SLAVE2_NAME=qyd
 
 # Redis 密码（容器内 Redis）
 REDIS_PASSWORD=redis_fNmAxZ
@@ -67,6 +81,11 @@ REDIS_PASSWORD=redis_fNmAxZ
 # JWT 密钥（至少32字符）
 JWT_SECRET_KEY=your-secret-key-min-32-chars
 ```
+
+**说明**：
+- 如果从库账号密码与主库相同，可以不配置 `DB_SLAVE*_USER` 和 `DB_SLAVE*_PASSWORD`
+- 如果只有一个从库，只配置 `DB_SLAVE1_*` 即可
+- 如果不启用读写分离，设置 `DB_READ_WRITE_SPLIT=0`
 
 ### 2. 启动所有服务
 
@@ -137,18 +156,48 @@ redis:
 ### MySQL 主从配置
 
 ```env
-# 主库
+# 主库（用于写操作）
 DB_HOST=192.168.1.100
 DB_PORT=3306
+DB_USER=qyd
+DB_PASSWORD=master_password
+DB_NAME=qyd
 
-# 从库（多个用逗号分隔）
-DB_SLAVE_HOSTS=192.168.1.101:3306,192.168.1.102:3306
+# 启用读写分离
+DB_READ_WRITE_SPLIT=1
+
+# 从库1（用于读操作）
+DB_SLAVE1_HOST=192.168.1.101
+DB_SLAVE1_PORT=3306
+DB_SLAVE1_USER=qyd_readonly        # 可以使用只读账号
+DB_SLAVE1_PASSWORD=slave1_password
+DB_SLAVE1_NAME=qyd
+
+# 从库2（用于读操作）
+DB_SLAVE2_HOST=192.168.1.102
+DB_SLAVE2_PORT=3306
+DB_SLAVE2_USER=qyd_readonly        # 可以使用只读账号
+DB_SLAVE2_PASSWORD=slave2_password
+DB_SLAVE2_NAME=qyd
 ```
 
 **说明**：
-- 主库用于所有写操作（INSERT, UPDATE, DELETE）
-- 从库用于所有读操作（SELECT）
-- 系统自动根据操作类型选择数据库
+- **主库**：用于所有写操作（INSERT, UPDATE, DELETE）
+- **从库**：用于所有读操作（SELECT）
+- **账号权限**：
+  - 主库账号需要完整的读写权限
+  - 从库账号可以只配置只读权限（推荐）
+- **自动路由**：系统自动根据操作类型选择数据库
+- **负载均衡**：多个从库会轮询使用
+
+**从库只读账号创建**（推荐）：
+
+```sql
+-- 在从库上创建只读账号
+CREATE USER 'qyd_readonly'@'%' IDENTIFIED BY 'slave_password';
+GRANT SELECT ON qyd.* TO 'qyd_readonly'@'%';
+FLUSH PRIVILEGES;
+```
 
 ### 服务依赖关系
 
