@@ -206,6 +206,8 @@ export interface ServerAccount {
   user?: User
   is_all_inbound_added: boolean
   proxy_type?: string  // 代理类型（HTTP/SOCKS5）
+  inbound_host?: string  // 入站监听地址
+  inbound_port?: number  // 入站监听端口
   create_time: string
   update_time: string
 }

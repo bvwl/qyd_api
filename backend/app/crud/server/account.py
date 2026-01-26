@@ -158,20 +158,24 @@ class CRUD:
         from app.models.xui import XuiInbound
         account_ids = [str(obj.id) for obj in res]
         
-        # 查询所有相关的入站
+        # 查询所有相关的入站（预加载 server 信息）
         inbounds_with_accounts = await XuiInbound.filter(
             accounts__id__in=account_ids
-        ).prefetch_related('accounts')
+        ).prefetch_related('accounts', 'server')
         
-        # 构建账号ID到端口的映射
-        account_port_map = {}
+        # 构建账号ID到入站信息的映射
+        account_inbound_map = {}
         for inbound in inbounds_with_accounts:
             accounts = await inbound.accounts.all()
             for account in accounts:
                 account_id = str(account.id)
-                if account_id not in account_port_map:
-                    account_port_map[account_id] = []
-                account_port_map[account_id].append(inbound.listen_port)
+                if account_id not in account_inbound_map:
+                    account_inbound_map[account_id] = []
+                account_inbound_map[account_id].append({
+                    'port': inbound.listen_port,
+                    'host': inbound.listen_host,
+                    'server': inbound.server
+                })
         
         # 如果是管理员，自动解密所有密码并替换 password 字段
         for obj in res:
@@ -184,20 +188,34 @@ class CRUD:
                     # 解密失败，保持原密文
                     pass
             
-            # 添加代理类型字段
+            # 添加代理类型和入站信息
             account_id = str(obj.id)
-            ports = account_port_map.get(account_id, [])
+            inbounds = account_inbound_map.get(account_id, [])
             
             # 根据端口判断代理类型
             proxy_types = set()
-            for port in ports:
+            inbound_host = None
+            inbound_port = None
+            
+            for inbound_info in inbounds:
+                port = inbound_info['port']
                 if 21999 <= port <= 22999:
                     proxy_types.add('HTTP')
+                    # 优先使用 HTTP 入站信息
+                    if not inbound_host or 'HTTP' not in item.proxy_type if item.proxy_type else True:
+                        inbound_host = inbound_info['host']
+                        inbound_port = port
                 elif 31999 <= port <= 32999:
                     proxy_types.add('SOCKS5')
+                    # 如果没有 HTTP，使用 SOCKS5 入站信息
+                    if not inbound_host:
+                        inbound_host = inbound_info['host']
+                        inbound_port = port
             
             # 如果有多个类型，用逗号分隔；如果没有，显示为空
             item.proxy_type = ','.join(sorted(proxy_types)) if proxy_types else None
+            item.inbound_host = inbound_host
+            item.inbound_port = inbound_port
             
             items.append(item)
         

@@ -108,11 +108,38 @@ const ServerAccountList = () => {
   }
 
   const handleCopyAccount = (record: ServerAccount) => {
-    const accountInfo = `用户名: ${record.username}\n密码: ${record.password}`
-    navigator.clipboard.writeText(accountInfo).then(() => {
-      message.success('账号信息已复制到剪贴板')
+    // 检查是否有入站信息
+    if (!record.inbound_host || !record.inbound_port || !record.proxy_type) {
+      message.warning('该账号未添加到任何入站，无法生成代理地址')
+      return
+    }
+    
+    // 构建代理 URL
+    // 格式: protocol://username:password@host:port
+    const protocol = record.proxy_type.includes('HTTP') ? 'http' : 'socks5'
+    const proxyUrl = `${protocol}://${record.username}:${record.password}@${record.inbound_host}:${record.inbound_port}`
+    
+    navigator.clipboard.writeText(proxyUrl).then(() => {
+      message.success(`${record.proxy_type} 代理地址已复制到剪贴板`)
     }).catch(() => {
-      message.error('复制失败')
+      // 如果复制失败，显示代理地址让用户手动复制
+      Modal.info({
+        title: '代理地址',
+        content: (
+          <div>
+            <p>复制失败，请手动复制：</p>
+            <pre style={{ 
+              background: '#f5f5f5', 
+              padding: '10px', 
+              borderRadius: '4px',
+              wordBreak: 'break-all',
+              whiteSpace: 'pre-wrap'
+            }}>
+              {proxyUrl}
+            </pre>
+          </div>
+        ),
+      })
     })
   }
 

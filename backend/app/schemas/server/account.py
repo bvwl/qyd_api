@@ -53,6 +53,10 @@ class Out(Base):
     
     # 代理类型（根据端口判断）
     proxy_type: str | None = Field(None, description='代理类型（HTTP/SOCKS5，根据端口自动判断）')
+    
+    # 入站信息（用于构建代理地址）
+    inbound_host: str | None = Field(None, description='入站监听地址')
+    inbound_port: int | None = Field(None, description='入站监听端口')
 
     # 关联的用户信息
     user: UserBase | None = Field(None, description='关联用户信息')
