@@ -311,18 +311,4 @@ async def remove_account_from_all_inbounds(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    从所有 XUI 入站删除服务器账号
-    
-    权限要求：ADMIN
-    """
-    try:
-        result = await xui_inbound_account_crud.remove_account_from_all_inbounds(account_id)
-        return {
-            'code': 200,
-            'message': f'批量删除完成: 成功 {result["success"]} 个, 失败 {result["failed"]} 个',
-            'data': result
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+
