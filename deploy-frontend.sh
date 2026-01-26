@@ -26,7 +26,14 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
+# 检查 Docker Compose 版本并设置命令
+if command -v docker-compose &> /dev/null; then
+    DOCKER_COMPOSE="docker-compose"
+    echo -e "${GREEN}✓ 使用 docker-compose 命令${NC}"
+elif docker compose version &> /dev/null 2>&1; then
+    DOCKER_COMPOSE="docker compose"
+    echo -e "${GREEN}✓ 使用 docker compose 命令${NC}"
+else
     echo -e "${RED}错误: Docker Compose 未安装${NC}"
     exit 1
 fi
@@ -60,20 +67,20 @@ fi
 
 # 构建镜像
 echo -e "\n${YELLOW}[3/5] 构建 Docker 镜像...${NC}"
-docker-compose -f docker-compose.frontend.yml build
+$DOCKER_COMPOSE -f docker-compose.frontend.yml build
 
 echo -e "${GREEN}✓ 镜像构建完成${NC}"
 
 # 启动服务
 echo -e "\n${YELLOW}[4/5] 启动服务...${NC}"
-docker-compose -f docker-compose.frontend.yml up -d
+$DOCKER_COMPOSE -f docker-compose.frontend.yml up -d
 
 echo -e "${GREEN}✓ 服务启动完成${NC}"
 
 # 检查服务状态
 echo -e "\n${YELLOW}[5/5] 检查服务状态...${NC}"
 sleep 3
-docker-compose -f docker-compose.frontend.yml ps
+$DOCKER_COMPOSE -f docker-compose.frontend.yml ps
 
 echo -e "\n${GREEN}=========================================="
 echo "前端部署完成！"
@@ -83,8 +90,8 @@ echo "访问地址："
 echo "  - 前端应用: http://$(hostname -I | awk '{print $1}')"
 echo ""
 echo "常用命令："
-echo "  - 查看状态: docker-compose -f docker-compose.frontend.yml ps"
-echo "  - 查看日志: docker-compose -f docker-compose.frontend.yml logs -f"
-echo "  - 重启服务: docker-compose -f docker-compose.frontend.yml restart"
-echo "  - 停止服务: docker-compose -f docker-compose.frontend.yml stop"
+echo "  - 查看状态: $DOCKER_COMPOSE -f docker-compose.frontend.yml ps"
+echo "  - 查看日志: $DOCKER_COMPOSE -f docker-compose.frontend.yml logs -f"
+echo "  - 重启服务: $DOCKER_COMPOSE -f docker-compose.frontend.yml restart"
+echo "  - 停止服务: $DOCKER_COMPOSE -f docker-compose.frontend.yml stop"
 echo ""
