@@ -245,6 +245,5 @@ export const removeAccountFromAllInbounds = (accountId: string) => {
       account_username: string
       status: string  // 'processing'
     }
-    }
   }>(`/v1/xui/account/remove-from-all-inbounds/${accountId}`)
 }
