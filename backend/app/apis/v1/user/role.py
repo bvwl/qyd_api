@@ -11,6 +11,47 @@ from app.apis.deps import get_current_user, get_admin_user
 app = APIRouter()
 
 
+@app.get("/tree", response_model=list, description="获取角色树", summary="获取角色树")
+async def get_tree(
+    status: int | None = Query(None, description="状态筛选"),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    获取角色列表（树形结构，实际上角色是扁平的，但为了前端兼容性返回列表）
+    """
+    try:
+        from app.models.user import UserRole
+        
+        # 构建查询条件
+        query = UserRole.all()
+        if status is not None:
+            query = query.filter(status=status)
+        
+        # 获取所有角色
+        roles = await query.order_by('create_time')
+        
+        # 构建角色列表
+        result = []
+        for role in roles:
+            role_dict = {
+                'id': str(role.id),
+                'code': role.code,
+                'name': role.name,
+                'description': role.description,
+                'status': role.status,
+                'create_time': role.create_time.strftime("%Y-%m-%d %H:%M:%S"),
+                'update_time': role.update_time.strftime("%Y-%m-%d %H:%M:%S"),
+            }
+            result.append(role_dict)
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/{id}/routes", response_model=dict, description="获取角色的路由权限", summary="获取角色的路由权限")
 async def get_role_routes(
     id: UUID = Path(..., description="角色ID"),
