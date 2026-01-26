@@ -206,8 +206,13 @@ if [ ! -f ".initialized" ]; then
     echo "等待 Redis 启动..."
     sleep 10
     
-    # 初始化数据库
+    # 初始化角色和管理员
+    echo "初始化角色和管理员..."
     docker compose run --rm backend-api python deploy_init.py
+    
+    # 初始化路由
+    echo "初始化路由..."
+    docker compose run --rm backend-api python db/init_routes.py
     
     # 标记已初始化
     touch .initialized
@@ -215,6 +220,8 @@ if [ ! -f ".initialized" ]; then
     echo -e "${GREEN}✓ 数据库初始化完成${NC}"
 else
     echo "数据库已初始化，跳过"
+    echo -e "${YELLOW}提示: 如需重新初始化路由，请执行:${NC}"
+    echo "  docker compose run --rm backend-api python db/init_routes.py"
 fi
 echo ""
 
