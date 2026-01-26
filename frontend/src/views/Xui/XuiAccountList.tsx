@@ -100,16 +100,6 @@ const XuiAccountList = () => {
       })
     }
   }
-    } catch (error: any) {
-      message.error(error.response?.data?.detail || '删除失败')
-    } finally {
-      setRemovingIds(prev => {
-        const newSet = new Set(prev)
-        newSet.delete(accountId)
-        return newSet
-      })
-    }
-  }
 
   const columns = [
     {
