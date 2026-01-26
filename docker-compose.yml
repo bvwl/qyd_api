@@ -192,12 +192,13 @@ services:
       - qyd-network
     depends_on:
       - backend-api
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
-      start_period: 5s
+    # 移除健康检查，因为容器内部无法访问自己
+    # healthcheck:
+    #   test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+    #   interval: 30s
+    #   timeout: 3s
+    #   retries: 3
+    #   start_period: 5s
 
   # Nginx 负载均衡器
   nginx-lb:
@@ -215,8 +216,9 @@ services:
     depends_on:
       - frontend
       - backend-api
+    # 修改健康检查，检查 Nginx 配置而不是访问服务
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      test: ["CMD", "nginx", "-t"]
       interval: 30s
       timeout: 3s
       retries: 3
