@@ -222,32 +222,29 @@ export const batchAddAccountsToInbound = (inboundId: string, accountIds: string[
   })
 }
 
-// 将账号添加到所有入站
+// 将账号添加到所有入站（后台任务）
 export const addAccountToAllInbounds = (accountId: string) => {
   return api.post<any, {
     code: number
     message: string
     data: {
-      total: number
-      success: number
-      failed: number
-      failed_list: Array<{ inbound_id: string; inbound_info: string; error: string }>
-      is_all_added: boolean
+      account_id: string
+      account_username: string
+      status: string  // 'processing'
     }
   }>(`/v1/xui/account/add-to-all-inbounds/${accountId}`)
 }
 
-// 从所有入站删除账号
+// 从所有入站删除账号（后台任务）
 export const removeAccountFromAllInbounds = (accountId: string) => {
   return api.delete<any, {
     code: number
     message: string
     data: {
-      total: number
-      success: number
-      failed: number
-      failed_list: Array<{ inbound_id: string; inbound_info: string; error: string }>
-      is_all_removed: boolean
+      account_id: string
+      account_username: string
+      status: string  // 'processing'
+    }
     }
   }>(`/v1/xui/account/remove-from-all-inbounds/${accountId}`)
 }

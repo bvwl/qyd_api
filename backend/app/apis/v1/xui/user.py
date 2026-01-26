@@ -2,7 +2,7 @@
 XUI 入站账号管理 API
 """
 from uuid import UUID
-from fastapi import APIRouter, Query, Body, HTTPException, Path, Depends
+from fastapi import APIRouter, Query, Body, HTTPException, Path, Depends, BackgroundTasks
 from typing import List
 
 from app.schemas.xui.user import (
@@ -15,8 +15,36 @@ from app.schemas.xui.user import (
 from app.schemas.base import BaseOut
 from app.crud.xui.user import xui_inbound_account_crud
 from app.apis.deps import get_current_user, get_admin_user
+from loguru import logger
 
 app = APIRouter()
+
+
+# 后台任务：添加账号到所有入站
+async def add_account_to_all_inbounds_task(account_id: UUID):
+    """
+    后台任务：将账号添加到所有入站
+    """
+    try:
+        logger.info(f'开始后台任务：添加账号到所有入站, account_id={account_id}')
+        result = await xui_inbound_account_crud.add_account_to_all_inbounds(account_id)
+        logger.info(f'后台任务完成：添加账号到所有入站, account_id={account_id}, 结果={result}')
+    except Exception as e:
+        logger.error(f'后台任务失败：添加账号到所有入站, account_id={account_id}, 错误={str(e)}', exc_info=True)
+
+
+# 后台任务：从所有入站删除账号
+async def remove_account_from_all_inbounds_task(account_id: UUID):
+    """
+    后台任务：从所有入站删除账号
+    """
+    try:
+        logger.info(f'开始后台任务：从所有入站删除账号, account_id={account_id}')
+        result = await xui_inbound_account_crud.remove_account_from_all_inbounds(account_id)
+        logger.info(f'后台任务完成：从所有入站删除账号, account_id={account_id}, 结果={result}')
+    except Exception as e:
+        logger.error(f'后台任务失败：从所有入站删除账号, account_id={account_id}, 错误={str(e)}', exc_info=True)
+
 
 
 @app.post("/add", response_model=XuiInboundAccountOut, summary='添加账号到入站')
@@ -199,22 +227,42 @@ async def batch_retry_failed_logs(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/add-to-all-inbounds/{account_id}", summary='将账号添加到所有入站')
+@app.post("/add-to-all-inbounds/{account_id}", summary='将账号添加到所有入站（后台任务）')
 async def add_account_to_all_inbounds(
+    background_tasks: BackgroundTasks,
     account_id: UUID = Path(..., description='账号 ID'),
     admin_user: dict = Depends(get_admin_user)
 ):
     """
-    将服务器账号添加到所有 XUI 入站
+    将服务器账号添加到所有 XUI 入站（后台任务执行）
     
     权限要求：ADMIN
+    
+    说明：
+    - 此操作会在后台异步执行，不会阻塞接口响应
+    - 可以通过日志查看执行进度和结果
+    - 建议在 XUI 账号列表页面查看账号的 is_all_inbound_added 状态
     """
     try:
-        result = await xui_inbound_account_crud.add_account_to_all_inbounds(account_id)
+        # 先验证账号是否存在
+        from app.models.server import ServerAccount
+        from app.core.database import db_read
+        
+        account = await db_read(ServerAccount).get_or_none(id=account_id)
+        if not account:
+            raise HTTPException(status_code=404, detail='服务器账号不存在')
+        
+        # 添加后台任务
+        background_tasks.add_task(add_account_to_all_inbounds_task, account_id)
+        
         return {
             'code': 200,
-            'message': f'批量添加完成: 成功 {result["success"]} 个, 失败 {result["failed"]} 个',
-            'data': result
+            'message': '已提交后台任务，正在添加账号到所有入站，请稍后查看结果',
+            'data': {
+                'account_id': str(account_id),
+                'account_username': account.username,
+                'status': 'processing'
+            }
         }
     except HTTPException:
         raise
@@ -222,12 +270,47 @@ async def add_account_to_all_inbounds(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.delete("/remove-from-all-inbounds/{account_id}", summary='从所有入站删除账号')
+@app.delete("/remove-from-all-inbounds/{account_id}", summary='从所有入站删除账号（后台任务）')
 async def remove_account_from_all_inbounds(
+    background_tasks: BackgroundTasks,
     account_id: UUID = Path(..., description='账号 ID'),
     admin_user: dict = Depends(get_admin_user)
 ):
     """
+    从所有 XUI 入站删除服务器账号（后台任务执行）
+    
+    权限要求：ADMIN
+    
+    说明：
+    - 此操作会在后台异步执行，不会阻塞接口响应
+    - 可以通过日志查看执行进度和结果
+    - 建议在 XUI 账号列表页面查看账号的 is_all_inbound_added 状态
+    """
+    try:
+        # 先验证账号是否存在
+        from app.models.server import ServerAccount
+        from app.core.database import db_read
+        
+        account = await db_read(ServerAccount).get_or_none(id=account_id)
+        if not account:
+            raise HTTPException(status_code=404, detail='服务器账号不存在')
+        
+        # 添加后台任务
+        background_tasks.add_task(remove_account_from_all_inbounds_task, account_id)
+        
+        return {
+            'code': 200,
+            'message': '已提交后台任务，正在从所有入站删除账号，请稍后查看结果',
+            'data': {
+                'account_id': str(account_id),
+                'account_username': account.username,
+                'status': 'processing'
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
     从所有 XUI 入站删除服务器账号
     
     权限要求：ADMIN

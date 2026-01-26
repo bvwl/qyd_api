@@ -205,6 +205,7 @@ export interface ServerAccount {
   user_id: string
   user?: User
   is_all_inbound_added: boolean
+  proxy_type?: string  // 代理类型（HTTP/SOCKS5）
   create_time: string
   update_time: string
 }

@@ -21,6 +21,7 @@ const ServerAccountList = () => {
   const [editingAccount, setEditingAccount] = useState<ServerAccount | null>(null)
   const [userList, setUserList] = useState<User[]>([])
   const [searchUserId, setSearchUserId] = useState<string>()
+  const [searchProxyType, setSearchProxyType] = useState<string>()
   const [createTimeRange, setCreateTimeRange] = useState<[Dayjs, Dayjs] | null>(null)
   const [updateTimeRange, setUpdateTimeRange] = useState<[Dayjs, Dayjs] | null>(null)
   const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({})
@@ -37,6 +38,7 @@ const ServerAccountList = () => {
         limit: pageSize,
         res_count: true,
         user_id: searchUserId,
+        proxy_type: searchProxyType,
         create_time_start: createTimeRange?.[0]?.format('YYYY-MM-DD'),
         create_time_end: createTimeRange?.[1]?.format('YYYY-MM-DD'),
         update_time_start: updateTimeRange?.[0]?.format('YYYY-MM-DD'),
@@ -69,7 +71,7 @@ const ServerAccountList = () => {
 
   useEffect(() => {
     fetchData()
-  }, [page, pageSize, searchUserId])
+  }, [page, pageSize, searchUserId, searchProxyType])
 
   useEffect(() => {
     const loadData = async () => {
@@ -156,6 +158,37 @@ const ServerAccountList = () => {
       },
     },
     {
+      title: '代理类型',
+      dataIndex: 'proxy_type',
+      key: 'proxy_type',
+      width: 120,
+      render: (proxyType: string) => {
+        if (!proxyType) return '-'
+        
+        // 如果包含多个类型，用逗号分隔显示
+        const types = proxyType.split(',')
+        return (
+          <Space size={4}>
+            {types.map(type => {
+              const color = type === 'HTTP' ? 'blue' : 'green'
+              return (
+                <span key={type} style={{ 
+                  padding: '2px 8px', 
+                  borderRadius: '4px', 
+                  backgroundColor: color === 'blue' ? '#e6f7ff' : '#f6ffed',
+                  border: `1px solid ${color === 'blue' ? '#91d5ff' : '#b7eb8f'}`,
+                  color: color === 'blue' ? '#1890ff' : '#52c41a',
+                  fontSize: '12px'
+                }}>
+                  {type}
+                </span>
+              )
+            })}
+          </Space>
+        )
+      },
+    },
+    {
       title: '关联用户',
       dataIndex: 'user',
       key: 'user',
@@ -221,6 +254,17 @@ const ServerAccountList = () => {
               value: user.id,
             }))}
           />
+          <Select
+            placeholder="代理类型"
+            value={searchProxyType}
+            onChange={setSearchProxyType}
+            allowClear
+            style={{ width: 150 }}
+            options={[
+              { label: 'HTTP', value: 'HTTP' },
+              { label: 'SOCKS5', value: 'SOCKS5' },
+            ]}
+          />
           <RangePicker
             placeholder={['创建开始日期', '创建结束日期']}
             value={createTimeRange}
@@ -238,7 +282,7 @@ const ServerAccountList = () => {
           <Button type="primary" icon={<SearchOutlined />} onClick={() => { setPage(1); fetchData(); }}>
             搜索
           </Button>
-          <Button onClick={() => { setSearchUserId(undefined); setCreateTimeRange(null); setUpdateTimeRange(null); setPage(1); setTimeout(fetchData, 0); }}>
+          <Button onClick={() => { setSearchUserId(undefined); setSearchProxyType(undefined); setCreateTimeRange(null); setUpdateTimeRange(null); setPage(1); setTimeout(fetchData, 0); }}>
             重置
           </Button>
         </Space>

@@ -18,13 +18,15 @@
 
 - [技术栈](#技术栈)
 - [快速开始](#快速开始)
+- [启动指南](#启动指南)
 - [主要功能](#主要功能)
 - [性能配置](#性能配置)
 - [项目结构](#项目结构)
 - [API文档](#api文档)
 - [开发指南](#开发指南)
 - [部署指南](#部署指南)
-- [文档](#文档)
+- [脚本工具](#脚本工具)
+- [文档索引](#文档索引)
 
 ## 🛠 技术栈
 
@@ -86,206 +88,18 @@
 - Redis 7.0+ (可选，用于队列处理)
 - Docker 20.10+ 和 Docker Compose 2.0+ (Docker 部署)
 
-### Docker 部署（推荐）
+## 📖 启动指南
 
-Docker 部署采用**多阶段构建**和**容器化架构**，提供最佳的生产环境部署方案。
+根据不同场景选择合适的启动方式，详见 [STARTUP_GUIDE.md](STARTUP_GUIDE.md)
 
-#### 架构说明
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                      Docker 容器                         │
-├─────────────────────────────────────────────────────────┤
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐ │
-│  │   Frontend   │  │ Backend API  │  │Queue Worker  │ │
-│  │   (Nginx)    │  │  (FastAPI)   │  │  (Python)    │ │
-│  │   Port: 80   │  │  Port: 6080  │  │              │ │
-│  └──────────────┘  └──────────────┘  └──────────────┘ │
-└─────────────────────────────────────────────────────────┘
-         ↓                  ↓                  ↓
-    ┌─────────┐        ┌─────────┐        ┌─────────┐
-    │  MySQL  │        │  Redis  │        │  Logs   │
-    │ (外部)  │        │ (外部)  │        │ (挂载)  │
-    └─────────┘        └─────────┘        └─────────┘
-```
-
-**容器说明**：
-- **frontend**: Nginx 服务器，提供前端静态文件（打包后的 React 应用）
-- **backend-api**: FastAPI 应用，处理 HTTP 请求
-- **queue-worker**: Python 进程，处理 Redis 队列任务
-
-**前端构建方式**：
-- 使用**多阶段构建**（Multi-stage build）
-- 第一阶段：Node.js 构建（`npm run build`）
-- 第二阶段：Nginx 服务（只包含静态文件）
-- 最终镜像体积小（约 20-30MB），性能优异
-
-#### 一键部署
-
-```bash
-# 1. 配置环境变量
-cp .env.docker .env
-vim .env  # 配置 MySQL 和 Redis 连接
-
-# 2. 运行部署脚本
-bash docker-deploy.sh
-```
-
-#### 手动部署
-
-```bash
-# 1. 配置环境
-cp .env.docker .env
-vim .env
-
-# 2. 构建镜像（会自动执行前端打包）
-docker-compose build
-
-# 3. 初始化数据库
-docker-compose run --rm backend-api python deploy_init.py
-
-# 4. 启动服务
-docker-compose up -d
-
-# 5. 查看状态
-docker-compose ps
-```
-
-**访问地址**:
-- 前端: http://localhost
-- 后端: http://localhost:6080
-- API 文档: http://localhost:6080/docs
-
-**常用命令**:
-```bash
-# 查看日志
-docker-compose logs -f
-
-# 重启服务
-docker-compose restart
-
-# 停止服务
-docker-compose stop
-
-# 删除服务
-docker-compose down
-```
-
-详细文档：[DOCKER_DEPLOYMENT.md](docs/deployment/DOCKER_DEPLOYMENT.md) | [快速参考](docs/deployment/DOCKER_QUICK_REFERENCE.md)
-
----
-
-### 后端部署
-
-#### 方法一：快速部署（推荐）
-
-```bash
-cd backend
-bash quick_deploy.sh
-```
-
-脚本会自动完成：
-- ✅ 检查环境
-- ✅ 创建虚拟环境
-- ✅ 安装依赖
-- ✅ 配置环境变量
-- ✅ 初始化数据库
-- ✅ 导入初始数据
-
-#### 方法二：手动部署
-
-```bash
-cd backend
-
-# 1. 安装依赖
-pip install -r requirements.txt
-
-# 2. 配置环境变量
-cp .env.example .env
-# 编辑 .env 文件，配置数据库、Redis等信息
-
-# 3. 使用 Aerich 初始化数据库
-aerich init -t app.core.settings.TORTOISE_ORM
-aerich init-db
-
-# 4. 导入初始数据
-python deploy_init.py
-
-# 5. 检查部署
-python check_deployment.py
-
-# 6. 启动服务
-python start.py
-```
-
-详细部署文档：[backend/DEPLOYMENT_GUIDE.md](backend/DEPLOYMENT_GUIDE.md) | [部署总结](docs/deployment/DEPLOYMENT_SUMMARY.md)
-
-后端服务将在 `http://localhost:6080` 启动
-
-### 前端部署
-
-#### 开发模式
-
-```bash
-cd frontend
-
-# 1. 安装依赖
-npm install
-
-# 2. 启动开发服务器
-npm run dev
-```
-
-前端应用将在 `http://localhost:3000` 启动
-
-#### 生产部署
-
-**方式一：Docker 部署（推荐）**
-
-前端使用多阶段构建，自动完成打包和部署：
-
-```bash
-# 构建镜像（会自动执行 npm run build）
-docker-compose build frontend
-
-# 启动容器
-docker-compose up -d frontend
-```
-
-**方式二：手动打包部署**
-
-```bash
-cd frontend
-
-# 1. 构建生产版本
-npm run build
-
-# 2. 部署 dist 目录到 Nginx 或其他静态服务器
-# dist/ 目录包含所有打包后的静态文件
-```
-
-**Dockerfile 说明**：
-```dockerfile
-# 第一阶段：构建（Builder）
-FROM node:18-alpine as builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production
-COPY . .
-RUN npm run build  # 生成 dist 目录
-
-# 第二阶段：生产（Nginx）
-FROM nginx:alpine
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=builder /app/dist /usr/share/nginx/html
-# 最终镜像只包含 Nginx + 静态文件（约 20-30MB）
-```
-
-**优势**：
-- ✅ 镜像体积小（只有 Nginx + 静态文件）
-- ✅ 性能好（Nginx 专门优化静态文件服务）
-- ✅ 安全性高（不暴露源码和依赖）
-- ✅ 启动快（无需运行时编译）
+| 场景 | 文档 | 适用情况 | 推荐指数 |
+|------|------|---------|---------|
+| 开发环境 | [STARTUP_GUIDE.md](STARTUP_GUIDE.md#场景-1-开发环境) | 本地开发、调试 | ⭐⭐⭐⭐⭐ |
+| Docker 快速部署 | [DOCKER_QUICK_START.md](DOCKER_QUICK_START.md) | 快速体验、测试 | ⭐⭐⭐⭐⭐ |
+| 生产环境（本地） | [QUICK_START.md](QUICK_START.md) | 小型生产环境 | ⭐⭐⭐⭐ |
+| 高并发生产 | [HIGH_CONCURRENCY_DEPLOYMENT.md](HIGH_CONCURRENCY_DEPLOYMENT.md) | 大型生产环境 | ⭐⭐⭐⭐⭐ |
+| 仅启动后端 | [STARTUP_GUIDE.md](STARTUP_GUIDE.md#场景-5-仅启动后端) | 后端开发、API 测试 | ⭐⭐⭐ |
+| 仅启动前端 | [STARTUP_GUIDE.md](STARTUP_GUIDE.md#场景-6-仅启动前端) | 前端开发、UI 调试 | ⭐⭐⭐ |
 
 ### 默认管理员账号
 
@@ -294,6 +108,39 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 - **角色**: ADMIN (管理员)
 
 > ⚠️ 首次登录后请立即修改密码！
+
+---
+
+### 快速部署示例
+
+#### Docker 部署（推荐）
+
+```bash
+# 一键部署
+bash docker-deploy-fast.sh
+```
+
+详细文档：[DOCKER_QUICK_START.md](DOCKER_QUICK_START.md)
+
+#### 本地部署
+
+```bash
+# 一键部署
+bash deploy_native.sh
+```
+
+详细文档：[QUICK_START.md](QUICK_START.md)
+
+#### 高并发部署
+
+```bash
+# 高并发部署
+bash deploy-high-concurrency.sh
+```
+
+详细文档：[HIGH_CONCURRENCY_DEPLOYMENT.md](HIGH_CONCURRENCY_DEPLOYMENT.md)
+
+---
 
 ## 📦 主要功能
 
@@ -667,74 +514,35 @@ sudo supervisorctl status
 ## 📖 文档
 
 ### 快速开始
-- [QUICK_START_GUIDE.md](docs/project/QUICK_START_GUIDE.md) - 快速开始指南（推荐）
+- [STARTUP_GUIDE.md](STARTUP_GUIDE.md) - 启动指南（所有场景）⭐⭐⭐⭐⭐
+- [QUICK_START.md](QUICK_START.md) - 本地快速部署
+- [DOCKER_QUICK_START.md](DOCKER_QUICK_START.md) - Docker 快速部署
 
-### 加密功能文档 (`docs/encryption/`)
+### 完整文档索引
+- [docs/DOCUMENTATION_COMPLETE_INDEX.md](docs/DOCUMENTATION_COMPLETE_INDEX.md) - 完整文档索引⭐⭐⭐⭐⭐
 
-| 文档 | 说明 |
-|------|------|
-| [PROJECT_ACCOUNT_ENCRYPTION.md](docs/encryption/PROJECT_ACCOUNT_ENCRYPTION.md) | 项目账号加密详细文档 |
-| [PROJECT_ACCOUNT_ENCRYPTION_QUICK_REF.md](docs/encryption/PROJECT_ACCOUNT_ENCRYPTION_QUICK_REF.md) | 加密功能快速参考 |
-| [PROJECT_ACCOUNT_ENCRYPTION_FLOW.md](docs/encryption/PROJECT_ACCOUNT_ENCRYPTION_FLOW.md) | 加密流程图 |
-| [SOCKS5_ACCOUNT_AES_ENCRYPTION.md](docs/encryption/SOCKS5_ACCOUNT_AES_ENCRYPTION.md) | SOCKS5账号加密 |
+### 部署文档
+- [NATIVE_DEPLOYMENT.md](NATIVE_DEPLOYMENT.md) - 本地详细部署
+- [HIGH_CONCURRENCY_DEPLOYMENT.md](HIGH_CONCURRENCY_DEPLOYMENT.md) - 高并发部署
+- [docs/deployment/](docs/deployment/) - 部署文档目录
 
-### 日志管理文档 (`docs/logs/`)
+### 开发文档
+- [.kiro/steering/conventions.md](.kiro/steering/conventions.md) - 开发规范⭐⭐⭐⭐⭐
+- [.kiro/steering/structure.md](.kiro/steering/structure.md) - 项目结构
+- [backend/README.md](backend/README.md) - 后端开发指南
+- [frontend/README.md](frontend/README.md) - 前端开发指南
 
-| 文档 | 说明 |
-|------|------|
-| [LOG_SYSTEM_COMPLETE.md](docs/logs/LOG_SYSTEM_COMPLETE.md) | 日志系统完整文档 |
-| [LOG_QUICK_REFERENCE.md](docs/logs/LOG_QUICK_REFERENCE.md) | 日志快速参考 |
-| [LOG_MANAGEMENT_UPDATE.md](docs/logs/LOG_MANAGEMENT_UPDATE.md) | 日志管理更新说明 |
+### 功能文档
+- [docs/encryption/](docs/encryption/) - 加密功能文档
+- [docs/logs/](docs/logs/) - 日志管理文档
+- [docs/performance/](docs/performance/) - 性能优化文档
+- [docs/rbac/](docs/rbac/) - RBAC 设计文档
+- [docs/features/](docs/features/) - 功能文档目录
 
-### 性能优化文档 (`docs/performance/`)
+### 脚本工具
+- [scripts/SCRIPTS_INDEX.md](scripts/SCRIPTS_INDEX.md) - 脚本工具索引⭐⭐⭐⭐⭐
 
-| 文档 | 说明 |
-|------|------|
-| [QUEUE_SEPARATION_QUICK_START.md](docs/performance/QUEUE_SEPARATION_QUICK_START.md) | 队列分离快速开始 |
-| [REDIS_QUEUE_SEPARATION_GUIDE.md](docs/performance/REDIS_QUEUE_SEPARATION_GUIDE.md) | Redis队列分离完整指南 |
-| [SCALE_TO_10K_GUIDE.md](docs/performance/SCALE_TO_10K_GUIDE.md) | 扩展到10000+条/秒指南 |
-| [PERFORMANCE_QUICK_REFERENCE.md](docs/performance/PERFORMANCE_QUICK_REFERENCE.md) | 性能配置快速参考 |
-| [UVICORN_WORKERS_VS_REDIS_WORKERS.md](docs/performance/UVICORN_WORKERS_VS_REDIS_WORKERS.md) | Uvicorn Workers问题详解 |
-
-### 导出功能文档 (`docs/export/`)
-
-- 项目统计导出功能
-- Excel导出实现
-- 导出状态列和修复
-
-### 使用指南 (`docs/guides/`)
-
-- Redis队列使用指南
-- Redis缓存逻辑说明
-- 权限管理快速开始
-- RBAC使用指南
-- 邮件查看器快速开始
-- 菜单绑定指南
-
-### 功能文档 (`docs/features/`)
-
-- 邮件查看器功能
-- 钱包功能更新
-- 项目用户管理
-- 复制ID功能
-- 项目账号功能总结
-- 项目整理总结
-
-### RBAC设计文档 (`docs/rbac/`)
-
-- RBAC设计对比
-- 企业级RBAC设计
-- 现代RBAC设计
-- 实用RBAC设计
-- V1 vs V2对比
-
-### 修复记录 (`docs/fixes/`)
-
-详细的修复和更新记录，包括：
-- JWT认证优化
-- RBAC权限修复
-- 日志系统更新
-- 性能优化记录
+---
 
 ## 🧪 测试
 
@@ -781,24 +589,94 @@ npm run lint
 
 ## 🛠 脚本工具
 
-项目提供了丰富的脚本工具，位于 `scripts/` 目录：
+项目提供了丰富的脚本工具，详见 [scripts/SCRIPTS_INDEX.md](scripts/SCRIPTS_INDEX.md)
 
-### MySQL脚本 (`scripts/mysql/`)
-- `check_mysql_status.sh` - 检查MySQL状态
-- `connect_mysql.sh` - 连接MySQL
-- `restart_mysql.sh` - 重启MySQL
-- `fix_replication.sh` - 修复主从复制
-- `deploy_mysql_*.sh` - MySQL部署脚本
+### 脚本分类
 
-### 测试脚本 (`scripts/test/`)
-- `test_api_endpoints.sh` - 测试API接口
-- `test_*_permission.sh` - 测试权限功能
-- `test_batch_upsert.py` - 测试批量操作
+| 类型 | 位置 | 说明 |
+|------|------|------|
+| 部署脚本 | 根目录 | 环境安装、项目部署 |
+| 服务管理 | 根目录 | 启动、重启、更新服务 |
+| 数据库脚本 | `scripts/mysql/`, `backend/db/` | MySQL 管理、数据迁移 |
+| 测试脚本 | `scripts/test/` | API 测试、权限测试 |
+| 调试脚本 | `scripts/debug/` | 问题诊断、调试工具 |
+| 工具脚本 | `scripts/utils/`, `backend/scripts/` | 备份、日志管理等 |
 
-### 调试脚本 (`scripts/debug/`)
-- `check_api_auth.py` - 检查API认证状态
-- `check_delete_permissions.py` - 检查删除权限
-- `debug_account.py` - 调试账号问题
+### 常用脚本
+
+```bash
+# 部署相关
+bash setup_environment.sh          # 环境安装
+bash deploy_native.sh              # 本地部署
+bash docker-deploy-fast.sh         # Docker 快速部署
+
+# 服务管理
+bash start_all_services.sh         # 启动所有服务
+bash restart_all_services.sh       # 重启所有服务
+bash update-and-restart.sh         # 更新并重启
+
+# 数据库管理
+bash scripts/mysql/check_mysql_status.sh    # 检查 MySQL 状态
+bash scripts/mysql/fix_replication.sh       # 修复主从复制
+
+# 测试和调试
+bash scripts/test/test_api_endpoints.sh     # 测试 API
+python scripts/debug/check_api_auth.py      # 检查认证
+
+# 工具
+bash scripts/utils/backup_database.sh       # 备份数据库
+python backend/scripts/cleanup_logs.py      # 清理日志
+```
+
+---
+
+## 📚 文档索引
+
+完整的文档索引和导航，详见 [docs/DOCUMENTATION_COMPLETE_INDEX.md](docs/DOCUMENTATION_COMPLETE_INDEX.md)
+
+### 核心文档
+
+| 文档 | 说明 | 推荐指数 |
+|------|------|---------|
+| [NAVIGATION_GUIDE.md](NAVIGATION_GUIDE.md) | 导航指南（按角色/任务） | ⭐⭐⭐⭐⭐ |
+| [STARTUP_GUIDE.md](STARTUP_GUIDE.md) | 启动指南（所有场景） | ⭐⭐⭐⭐⭐ |
+| [QUICK_REFERENCE.md](QUICK_REFERENCE.md) | 快速参考卡（常用命令） | ⭐⭐⭐⭐⭐ |
+| [DOCKER_QUICK_START.md](DOCKER_QUICK_START.md) | Docker 快速部署 | ⭐⭐⭐⭐⭐ |
+| [QUICK_START.md](QUICK_START.md) | 本地快速部署 | ⭐⭐⭐⭐ |
+| [HIGH_CONCURRENCY_DEPLOYMENT.md](HIGH_CONCURRENCY_DEPLOYMENT.md) | 高并发部署 | ⭐⭐⭐⭐⭐ |
+
+### 开发文档
+
+| 文档 | 说明 | 推荐指数 |
+|------|------|---------|
+| [.kiro/steering/conventions.md](.kiro/steering/conventions.md) | 开发规范和最佳实践 | ⭐⭐⭐⭐⭐ |
+| [.kiro/steering/structure.md](.kiro/steering/structure.md) | 项目结构说明 | ⭐⭐⭐⭐⭐ |
+| [backend/README.md](backend/README.md) | 后端开发指南 | ⭐⭐⭐⭐⭐ |
+| [frontend/README.md](frontend/README.md) | 前端开发指南 | ⭐⭐⭐⭐⭐ |
+
+### 性能优化
+
+| 文档 | 说明 | 推荐指数 |
+|------|------|---------|
+| [docs/performance/PERFORMANCE_QUICK_REFERENCE.md](docs/performance/PERFORMANCE_QUICK_REFERENCE.md) | 性能配置快速参考 | ⭐⭐⭐⭐⭐ |
+| [docs/performance/SCALE_TO_10K_GUIDE.md](docs/performance/SCALE_TO_10K_GUIDE.md) | 扩展到 10000+ QPS | ⭐⭐⭐⭐⭐ |
+
+### 功能文档
+
+| 文档 | 说明 | 推荐指数 |
+|------|------|---------|
+| [docs/encryption/PROJECT_ACCOUNT_ENCRYPTION_QUICK_REF.md](docs/encryption/PROJECT_ACCOUNT_ENCRYPTION_QUICK_REF.md) | 加密功能快速参考 | ⭐⭐⭐⭐⭐ |
+| [docs/logs/LOG_QUICK_REFERENCE.md](docs/logs/LOG_QUICK_REFERENCE.md) | 日志快速参考 | ⭐⭐⭐⭐⭐ |
+| [docs/rbac/QUICK_START.md](docs/rbac/QUICK_START.md) | RBAC 快速开始 | ⭐⭐⭐⭐⭐ |
+
+### 脚本工具
+
+| 文档 | 说明 | 推荐指数 |
+|------|------|---------|
+| [scripts/SCRIPTS_INDEX.md](scripts/SCRIPTS_INDEX.md) | 脚本工具完整索引 | ⭐⭐⭐⭐⭐ |
+| [backend/scripts/README.md](backend/scripts/README.md) | 后端脚本说明 | ⭐⭐⭐⭐ |
+
+---
 
 ## 📊 监控和维护
 

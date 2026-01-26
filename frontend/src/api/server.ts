@@ -93,6 +93,7 @@ export const deleteServer = (id: string) => {
 // 服务器账号
 export const getServerAccountList = (params?: PaginationParams & { 
   user_id?: string
+  proxy_type?: string  // 代理类型过滤（HTTP/SOCKS5）
   create_time_start?: string
   create_time_end?: string
   update_time_start?: string

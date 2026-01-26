@@ -65,6 +65,7 @@ class CRUD:
     async def get_multi(self,
                         username: str | None = None,
                         user_id: UUID | None = None,
+                        proxy_type: str | None = None,
                         page: int = 1,
                         limit: int = 10,
                         res_count: bool = False,
@@ -80,6 +81,48 @@ class CRUD:
             query = query.filter(username__icontains=username)
         if user_id:
             query = query.filter(user_id=user_id)
+        
+        # 根据代理类型过滤（基于端口范围）
+        if proxy_type:
+            from app.models.xui import XuiInbound
+            
+            if proxy_type == 'HTTP':
+                # HTTP 类型：端口在 21999-22999 之间
+                # 查找符合条件的账号ID
+                http_inbounds = await XuiInbound.filter(
+                    listen_port__gte=21999,
+                    listen_port__lte=22999
+                ).prefetch_related('accounts')
+                
+                http_account_ids = set()
+                for inbound in http_inbounds:
+                    accounts = await inbound.accounts.all()
+                    http_account_ids.update([str(acc.id) for acc in accounts])
+                
+                if http_account_ids:
+                    query = query.filter(id__in=list(http_account_ids))
+                else:
+                    # 如果没有找到任何HTTP账号，返回空结果
+                    query = query.filter(id__in=[])
+                    
+            elif proxy_type == 'SOCKS5':
+                # SOCKS5 类型：端口在 31999-32999 之间
+                socks5_inbounds = await XuiInbound.filter(
+                    listen_port__gte=31999,
+                    listen_port__lte=32999
+                ).prefetch_related('accounts')
+                
+                socks5_account_ids = set()
+                for inbound in socks5_inbounds:
+                    accounts = await inbound.accounts.all()
+                    socks5_account_ids.update([str(acc.id) for acc in accounts])
+                
+                if socks5_account_ids:
+                    query = query.filter(id__in=list(socks5_account_ids))
+                else:
+                    # 如果没有找到任何SOCKS5账号，返回空结果
+                    query = query.filter(id__in=[])
+        
         if create_time_start:
             query = query.filter(create_time__gte=parse_time(create_time_start))
         if create_time_end:
@@ -111,6 +154,25 @@ class CRUD:
         num = len(res)
         items = []
         
+        # 预加载所有账号的入站信息，用于判断代理类型
+        from app.models.xui import XuiInbound
+        account_ids = [str(obj.id) for obj in res]
+        
+        # 查询所有相关的入站
+        inbounds_with_accounts = await XuiInbound.filter(
+            accounts__id__in=account_ids
+        ).prefetch_related('accounts')
+        
+        # 构建账号ID到端口的映射
+        account_port_map = {}
+        for inbound in inbounds_with_accounts:
+            accounts = await inbound.accounts.all()
+            for account in accounts:
+                account_id = str(account.id)
+                if account_id not in account_port_map:
+                    account_port_map[account_id] = []
+                account_port_map[account_id].append(inbound.listen_port)
+        
         # 如果是管理员，自动解密所有密码并替换 password 字段
         for obj in res:
             item = Out.model_validate(obj)
@@ -121,6 +183,22 @@ class CRUD:
                 except Exception:
                     # 解密失败，保持原密文
                     pass
+            
+            # 添加代理类型字段
+            account_id = str(obj.id)
+            ports = account_port_map.get(account_id, [])
+            
+            # 根据端口判断代理类型
+            proxy_types = set()
+            for port in ports:
+                if 21999 <= port <= 22999:
+                    proxy_types.add('HTTP')
+                elif 31999 <= port <= 32999:
+                    proxy_types.add('SOCKS5')
+            
+            # 如果有多个类型，用逗号分隔；如果没有，显示为空
+            item.proxy_type = ','.join(sorted(proxy_types)) if proxy_types else None
+            
             items.append(item)
         
         return OutList(message='成功', count=count, num=num, items=items)

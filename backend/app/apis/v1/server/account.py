@@ -41,6 +41,7 @@ async def get(
 async def gets(
     username: str | None = Query(None, description="用户名"),
     user_id: UUID | None = Query(None, description="用户ID（管理员可用）"),
+    proxy_type: str | None = Query(None, description="代理类型（HTTP/SOCKS5）", pattern="^(HTTP|SOCKS5)$"),
     order_by: str | None = Query(
         "-create_time",
         description="排序字段",
@@ -86,6 +87,7 @@ async def gets(
         return await server_account_crud.get_multi(
             username=username,
             user_id=user_id if user_id or not is_admin else None,
+            proxy_type=proxy_type,
             page=page,
             limit=limit,
             res_count=res_count,

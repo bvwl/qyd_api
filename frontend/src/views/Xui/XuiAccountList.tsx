@@ -54,17 +54,18 @@ const XuiAccountList = () => {
     try {
       const result = await addAccountToAllInbounds(accountId)
       
-      if (result.data.is_all_added) {
-        message.success(`成功添加到所有 ${result.data.total} 个入站`)
-      } else {
-        message.warning(
-          `部分添加成功: 成功 ${result.data.success} 个, 失败 ${result.data.failed} 个`
-        )
-      }
+      // 后台任务已提交，显示提示信息
+      message.success({
+        content: '已提交后台任务，正在添加账号到所有入站。任务将在后台执行，请稍后刷新页面查看结果。',
+        duration: 5
+      })
       
-      fetchData()
+      // 延迟刷新数据，给后台任务一些执行时间
+      setTimeout(() => {
+        fetchData()
+      }, 3000)
     } catch (error: any) {
-      message.error(error.response?.data?.detail || '添加失败')
+      message.error(error.response?.data?.detail || '提交任务失败')
     } finally {
       setAddingIds(prev => {
         const newSet = new Set(prev)
@@ -79,15 +80,26 @@ const XuiAccountList = () => {
     try {
       const result = await removeAccountFromAllInbounds(accountId)
       
-      if (result.data.is_all_removed) {
-        message.success(`成功从所有 ${result.data.total} 个入站删除`)
-      } else {
-        message.warning(
-          `部分删除成功: 成功 ${result.data.success} 个, 失败 ${result.data.failed} 个`
-        )
-      }
+      // 后台任务已提交，显示提示信息
+      message.success({
+        content: '已提交后台任务，正在从所有入站删除账号。任务将在后台执行，请稍后刷新页面查看结果。',
+        duration: 5
+      })
       
-      fetchData()
+      // 延迟刷新数据，给后台任务一些执行时间
+      setTimeout(() => {
+        fetchData()
+      }, 3000)
+    } catch (error: any) {
+      message.error(error.response?.data?.detail || '提交任务失败')
+    } finally {
+      setRemovingIds(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(accountId)
+        return newSet
+      })
+    }
+  }
     } catch (error: any) {
       message.error(error.response?.data?.detail || '删除失败')
     } finally {
