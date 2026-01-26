@@ -9,9 +9,13 @@ from app.core.tools import aes_encrypt, aes_decrypt
 
 
 class CRUD:
-    async def _generate_proxy_url(self, server: ServerInfo, current_user_id: UUID | None = None) -> tuple[str, str]:
+    async def _generate_proxy_url(self, server: ServerInfo, current_user: dict | None = None) -> tuple[str, str]:
         """
-        生成代理URL和代理类型，使用当前用户的服务器账号
+        生成代理URL和代理类型，使用JWT用户对应的服务器账号
+        
+        Args:
+            server: 服务器信息对象
+            current_user: JWT 用户信息字典，包含 user_id
         
         Returns:
             tuple[str, str]: (proxy_url, proxy_type)
@@ -32,24 +36,30 @@ class CRUD:
             proxy_type = "socks5"
             protocol = "socks5"
         
-        # 获取当前用户的服务器账号
+        # 默认账号密码
         username = "username"
         password = "password"
         
-        if current_user_id:
-            from app.models.server import ServerAccount
-            
-            try:
-                account = await ServerAccount.get_or_none(user_id=current_user_id)
-                if account:
-                    username = account.username
-                    # 解密密码
-                    try:
-                        password = aes_decrypt(account.password, str(current_user_id))
-                    except Exception:
-                        password = "password"
-            except Exception:
-                pass
+        # 如果有用户信息，获取用户对应的服务器账号
+        if current_user:
+            user_id = current_user.get('user_id') or current_user.get('id')
+            if user_id:
+                from app.models.server import ServerAccount
+                
+                try:
+                    # 通过 user_id 查询服务器账号
+                    account = await ServerAccount.get_or_none(user_id=UUID(user_id))
+                    if account:
+                        username = account.username
+                        # 解密密码（使用 user_id 作为密钥）
+                        try:
+                            password = aes_decrypt(account.password, str(user_id))
+                        except Exception:
+                            # 解密失败，使用默认密码
+                            password = "password"
+                except Exception:
+                    # 查询失败，使用默认账号密码
+                    pass
         
         # 生成代理URL
         host = server.domain if server.domain else server.host
@@ -58,7 +68,7 @@ class CRUD:
         return proxy_url, proxy_type
     
     # 创建
-    async def create(self, item: Create, current_user_id: UUID | None = None) -> Out:
+    async def create(self, item: Create, current_user: dict | None = None) -> Out:
         is_exist = await ServerInfo.get_or_none(host=item.host)
         if is_exist:
             raise HTTPException(status_code=400, detail='服务器地址已存在')
@@ -77,12 +87,12 @@ class CRUD:
         result = Out.model_validate(res)
         
         # 生成 proxy_url 和 proxy_type
-        result.proxy_url, result.proxy_type = await self._generate_proxy_url(res, current_user_id)
+        result.proxy_url, result.proxy_type = await self._generate_proxy_url(res, current_user)
         
         return result
 
     # 查询
-    async def get(self, id: UUID, is_admin: bool = False, current_user_id: UUID | None = None) -> Out:
+    async def get(self, id: UUID, is_admin: bool = False, current_user: dict | None = None) -> Out:
         res = await ServerInfo.get_or_none(id=id)
         if not res:
             raise HTTPException(status_code=404, detail='数据不存在')
@@ -100,7 +110,7 @@ class CRUD:
                 pass
         
         # 生成 proxy_url 和 proxy_type
-        item.proxy_url, item.proxy_type = await self._generate_proxy_url(res, current_user_id)
+        item.proxy_url, item.proxy_type = await self._generate_proxy_url(res, current_user)
         
         return item
 
@@ -118,7 +128,7 @@ class CRUD:
                         update_time_start: str | int | None = None,
                         update_time_end: str | int | None = None,
                         is_admin: bool = False,
-                        current_user_id: UUID | None = None
+                        current_user: dict | None = None
                         ) -> OutList:
         query = ServerInfo.all()
         if host:
@@ -170,14 +180,14 @@ class CRUD:
                     pass
             
             # 生成 proxy_url 和 proxy_type
-            item.proxy_url, item.proxy_type = await self._generate_proxy_url(obj, current_user_id)
+            item.proxy_url, item.proxy_type = await self._generate_proxy_url(obj, current_user)
             
             items.append(item)
         
         return OutList(message='成功', count=count, num=num, items=items)
 
     # 更新
-    async def update(self, id: UUID, item: Update, is_admin: bool = False, current_user_id: UUID | None = None) -> Out:
+    async def update(self, id: UUID, item: Update, is_admin: bool = False, current_user: dict | None = None) -> Out:
         res = await ServerInfo.get_or_none(id=id)
         if not res:
             raise HTTPException(status_code=404, detail='数据不存在')
@@ -212,7 +222,7 @@ class CRUD:
                 pass
         
         # 生成 proxy_url 和 proxy_type
-        result.proxy_url, result.proxy_type = await self._generate_proxy_url(res, current_user_id)
+        result.proxy_url, result.proxy_type = await self._generate_proxy_url(res, current_user)
         
         return result
 
@@ -225,7 +235,7 @@ class CRUD:
         return BaseOut(message='成功', count=1)
 
     # 创建或更新
-    async def upsert(self, item: Create, current_user_id: UUID | None = None) -> Out:
+    async def upsert(self, item: Create, current_user: dict | None = None) -> Out:
         record, created = await ServerInfo.get_or_create(
             defaults=item.model_dump(),
             host=item.host
@@ -238,7 +248,7 @@ class CRUD:
         result = Out.model_validate(record)
         
         # 生成 proxy_url 和 proxy_type
-        result.proxy_url, result.proxy_type = await self._generate_proxy_url(record, current_user_id)
+        result.proxy_url, result.proxy_type = await self._generate_proxy_url(record, current_user)
         
         return result
 
