@@ -13,7 +13,6 @@ app = APIRouter()
 
 @app.get("/tree", response_model=list, description="获取角色树", summary="获取角色树")
 async def get_tree(
-    status: int | None = Query(None, description="状态筛选"),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -22,13 +21,8 @@ async def get_tree(
     try:
         from app.models.user import UserRole
         
-        # 构建查询条件
-        query = UserRole.all()
-        if status is not None:
-            query = query.filter(status=status)
-        
         # 获取所有角色
-        roles = await query.order_by('create_time')
+        roles = await UserRole.all().order_by('create_time')
         
         # 构建角色列表
         result = []
@@ -38,7 +32,6 @@ async def get_tree(
                 'code': role.code,
                 'name': role.name,
                 'description': role.description,
-                'status': role.status,
                 'create_time': role.create_time.strftime("%Y-%m-%d %H:%M:%S"),
                 'update_time': role.update_time.strftime("%Y-%m-%d %H:%M:%S"),
             }
