@@ -226,7 +226,8 @@ echo -e "${YELLOW}[8/8] 启动服务（高并发模式）...${NC}"
 echo "启动 $BACKEND_INSTANCES 个后端容器和 $QUEUE_INSTANCES 个队列容器..."
 docker compose up -d \
     --scale backend-api=$BACKEND_INSTANCES \
-    --scale queue-worker=$QUEUE_INSTANCES
+    --scale queue-worker=$QUEUE_INSTANCES \
+    frontend
 
 echo ""
 echo "等待服务启动（30秒）..."
