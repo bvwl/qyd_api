@@ -12,6 +12,10 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
+# 配置国内镜像源（加速构建）
+RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources \
+    && sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources
+
 # 安装系统依赖
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -21,6 +25,10 @@ RUN apt-get update \
         default-libmysqlclient-dev \
         pkg-config \
     && rm -rf /var/lib/apt/lists/*
+
+# 配置 pip 国内镜像源
+RUN pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/ \
+    && pip config set install.trusted-host mirrors.aliyun.com
 
 # 复制依赖文件并安装
 COPY requirements.txt .

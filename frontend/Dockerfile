@@ -4,6 +4,9 @@ FROM node:18-alpine as builder
 # 设置工作目录
 WORKDIR /app
 
+# 配置 npm 国内镜像源（加速构建）
+RUN npm config set registry https://registry.npmmirror.com
+
 # 复制 package 文件
 COPY package*.json ./
 
