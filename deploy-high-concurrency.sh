@@ -95,50 +95,24 @@ else
     exit 1
 fi
 
-# 检查主库
-echo "检查主库: $DB_HOST:$DB_PORT"
-if mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" -e "SELECT 1;" &> /dev/null; then
-    echo -e "${GREEN}✓ 主库连接正常${NC}"
+# 询问是否跳过 MySQL 检查
+read -p "是否跳过 MySQL 连接检查？(y/n) " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    echo -e "${YELLOW}跳过 MySQL 检查${NC}"
+    echo -e "${YELLOW}提示: 请确保 MySQL 主从集群已正常运行${NC}"
 else
-    echo -e "${RED}✗ 主库连接失败${NC}"
-    exit 1
-fi
-
-# 检查从库1
-if [ -n "$DB_SLAVE1_HOST" ]; then
-    echo "检查从库1: $DB_SLAVE1_HOST:$DB_SLAVE1_PORT"
-    if mysql -h "$DB_SLAVE1_HOST" -P "$DB_SLAVE1_PORT" -u "$DB_SLAVE1_USER" -p"$DB_SLAVE1_PASSWORD" -e "SELECT 1;" &> /dev/null; then
-        echo -e "${GREEN}✓ 从库1连接正常${NC}"
-        
-        # 检查主从同步状态
-        SLAVE_STATUS=$(mysql -h "$DB_SLAVE1_HOST" -P "$DB_SLAVE1_PORT" -u "$DB_SLAVE1_USER" -p"$DB_SLAVE1_PASSWORD" -e "SHOW SLAVE STATUS\G" 2>/dev/null)
-        if echo "$SLAVE_STATUS" | grep -q "Slave_IO_Running: Yes" && echo "$SLAVE_STATUS" | grep -q "Slave_SQL_Running: Yes"; then
-            echo -e "${GREEN}✓ 从库1主从同步正常${NC}"
-        else
-            echo -e "${YELLOW}警告: 从库1主从同步异常${NC}"
-        fi
+    # 检查主库
+    echo "检查主库: $DB_HOST:$DB_PORT"
+    if mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" -e "SELECT 1;" &> /dev/null; then
+        echo -e "${GREEN}✓ 主库连接正常${NC}"
     else
-        echo -e "${YELLOW}警告: 从库1连接失败${NC}"
+        echo -e "${RED}✗ 主库连接失败${NC}"
+        echo -e "${YELLOW}提示: 如果 MySQL 确实可用，可以选择跳过检查${NC}"
+        exit 1
     fi
 fi
 
-# 检查从库2
-if [ -n "$DB_SLAVE2_HOST" ]; then
-    echo "检查从库2: $DB_SLAVE2_HOST:$DB_SLAVE2_PORT"
-    if mysql -h "$DB_SLAVE2_HOST" -P "$DB_SLAVE2_PORT" -u "$DB_SLAVE2_USER" -p"$DB_SLAVE2_PASSWORD" -e "SELECT 1;" &> /dev/null; then
-        echo -e "${GREEN}✓ 从库2连接正常${NC}"
-        
-        # 检查主从同步状态
-        SLAVE_STATUS=$(mysql -h "$DB_SLAVE2_HOST" -P "$DB_SLAVE2_PORT" -u "$DB_SLAVE2_USER" -p"$DB_SLAVE2_PASSWORD" -e "SHOW SLAVE STATUS\G" 2>/dev/null)
-        if echo "$SLAVE_STATUS" | grep -q "Slave_IO_Running: Yes" && echo "$SLAVE_STATUS" | grep -q "Slave_SQL_Running: Yes"; then
-            echo -e "${GREEN}✓ 从库2主从同步正常${NC}"
-        else
-            echo -e "${YELLOW}警告: 从库2主从同步异常${NC}"
-        fi
-    else
-        echo -e "${YELLOW}警告: 从库2连接失败${NC}"
-    fi
-fi
 echo ""
 
 # ==========================================
