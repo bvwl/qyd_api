@@ -67,7 +67,7 @@ async def check_database():
         print("\n1. 角色列表:")
         roles = await UserRole.all()
         for role in roles:
-            print(f"  - {role.code}: {role.name} (状态: {role.status})")
+            print(f"  - {role.code}: {role.name}")
         
         # 2. 检查路由
         print(f"\n2. 路由总数: {await FrontendRoute.all().count()}")
