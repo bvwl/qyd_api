@@ -7,8 +7,46 @@ import asyncio
 import os
 import sys
 from pathlib import Path
+from dotenv import load_dotenv
 
-sys.path.insert(0, str(Path(__file__).parent / 'backend'))
+# 获取脚本所在目录（项目根目录）
+script_dir = Path(__file__).parent.resolve()
+
+# 尝试加载环境变量文件
+env_files = [
+    script_dir / '.env.high_concurrency',
+    script_dir / '.env',
+    script_dir / 'backend' / '.env',
+]
+
+print("=" * 60)
+print("环境配置加载")
+print("=" * 60)
+
+loaded = False
+for env_file in env_files:
+    if env_file.exists():
+        print(f"✓ 找到配置文件: {env_file.name}")
+        load_dotenv(env_file, override=True)
+        loaded = True
+        break
+    else:
+        print(f"✗ 未找到: {env_file}")
+
+if not loaded:
+    print("⚠️  警告: 未找到任何 .env 配置文件")
+    sys.exit(1)
+
+# 显示当前数据库配置
+print(f"\n当前数据库配置:")
+print(f"  主机: {os.getenv('DB_HOST', '未设置')}")
+print(f"  端口: {os.getenv('DB_PORT', '未设置')}")
+print(f"  用户: {os.getenv('DB_USER', '未设置')}")
+print(f"  数据库: {os.getenv('DB_NAME', '未设置')}")
+print()
+
+# 添加 backend 目录到 Python 路径
+sys.path.insert(0, str(script_dir / 'backend'))
 
 from tortoise import Tortoise
 from app.core.settings import TORTOISE_ORM
@@ -75,7 +113,4 @@ async def check_database():
 
 
 if __name__ == '__main__':
-    from dotenv import load_dotenv
-    load_dotenv()
-    
     asyncio.run(check_database())
