@@ -17,6 +17,17 @@ RUN npm install --production=false
 # 复制源代码
 COPY . .
 
+# 接收构建参数
+ARG VITE_API_BASE_URL=http://192.168.13.6:6080
+ARG VITE_APP_TITLE=QYD项目管理系统
+
+# 设置环境变量（Vite 会在构建时读取）
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+ENV VITE_APP_TITLE=${VITE_APP_TITLE}
+
+# 显示构建配置
+RUN echo "Building with API URL: ${VITE_API_BASE_URL}"
+
 # 构建应用（直接使用 vite build，跳过 tsc 类型检查）
 # Vite 在构建时会进行基本的语法检查，但不会严格检查类型
 RUN npx vite build

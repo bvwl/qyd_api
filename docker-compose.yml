@@ -181,12 +181,13 @@ services:
   frontend:
     build:
       context: ./frontend
+      args:
+        - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://192.168.13.6:6080}
+        - VITE_APP_TITLE=${VITE_APP_TITLE:-QYD项目管理系统}
     restart: unless-stopped
     # 移除端口映射，通过 Nginx 访问
     # ports:
     #   - "80:80"
-    environment:
-      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:6080}
     networks:
       - qyd-network
     depends_on:
