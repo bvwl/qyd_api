@@ -324,6 +324,7 @@ const ProjectList = () => {
     try {
       await uploadProjectFile(managingFileProject.id, file)
       message.success('文件上传成功')
+      // 重新加载文件列表，不更新项目内容
       await loadProjectFiles(managingFileProject.id)
     } catch (error: any) {
       message.error(error.response?.data?.detail || '文件上传失败')
@@ -394,20 +395,29 @@ const ProjectList = () => {
       title: '项目名称',
       dataIndex: 'name',
       key: 'name',
+      width: 150,
       sorter: true,
       sortOrder: getSortOrder('name'),
+      ellipsis: {
+        showTitle: false,
+      },
+      render: (name: string) => (
+        <Tooltip placement="topLeft" title={name}>
+          {name}
+        </Tooltip>
+      ),
     },
     {
       title: '项目ID',
       dataIndex: 'id',
       key: 'id',
-      width: 280,
+      width: 200,
       ellipsis: true,
       render: (id: string) => (
         <Space>
           <Tooltip title={id}>
             <span style={{ fontFamily: 'monospace', fontSize: '12px' }}>
-              {id.substring(0, 8)}...{id.substring(id.length - 8)}
+              {id.substring(0, 8)}...
             </span>
           </Tooltip>
           <Button
@@ -423,6 +433,7 @@ const ProjectList = () => {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
+      width: 100,
       render: (status: ProjectStatus) => {
         const { text, color } = getStatusText(status)
         return <Tag color={color}>{text}</Tag>
@@ -432,6 +443,7 @@ const ProjectList = () => {
       title: '关联人员',
       dataIndex: 'users',
       key: 'users',
+      width: 200,
       render: (users: any[]) => (
         <Space size={[0, 4]} wrap>
           {users && users.length > 0 ? (
@@ -450,26 +462,38 @@ const ProjectList = () => {
       title: '内容',
       dataIndex: 'content',
       key: 'content',
-      ellipsis: true,
+      width: 200,
+      ellipsis: {
+        showTitle: false,
+      },
+      render: (content: string) => (
+        <Tooltip placement="topLeft" title={content}>
+          {content || '-'}
+        </Tooltip>
+      ),
     },
     {
       title: '创建时间',
       dataIndex: 'create_time',
       key: 'create_time',
+      width: 110,
       sorter: true,
       sortOrder: getSortOrder('create_time'),
+      render: (text: string) => text ? text.split(' ')[0] : '-',
     },
     {
       title: '更新时间',
       dataIndex: 'update_time',
       key: 'update_time',
+      width: 110,
       sorter: true,
       sortOrder: getSortOrder('update_time'),
+      render: (text: string) => text ? text.split(' ')[0] : '-',
     },
     {
       title: '操作',
       key: 'action',
-      width: 280,
+      width: 320,
       render: (_: any, record: Project) => (
         <Space size="small" wrap>
           <Button
@@ -477,7 +501,7 @@ const ProjectList = () => {
             icon={<FileOutlined />}
             onClick={() => handleManageFiles(record)}
           >
-            文件管理
+            文件
           </Button>
           {(isAdmin || isGM) && (
             <>
@@ -486,7 +510,7 @@ const ProjectList = () => {
                 icon={<TeamOutlined />}
                 onClick={() => handleManageUsers(record)}
               >
-                管理人员
+                管理
               </Button>
               <Button
                 type="link"

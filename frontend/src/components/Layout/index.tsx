@@ -11,6 +11,7 @@ import {
   MenuUnfoldOutlined,
   ApiOutlined,
   EditOutlined,
+  DownloadOutlined,
 } from '@ant-design/icons'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useUserStore } from '@/store/useUserStore'
@@ -183,6 +184,53 @@ export default function AppLayout() {
   }
 
   const userMenuItems: MenuProps['items'] = [
+    // 只有管理员才能看到导出数据选项
+    ...(userInfo?.roles?.some((role: any) => role.code === 'ADMIN') ? [{
+      key: 'export',
+      icon: <DownloadOutlined />,
+      label: '导出数据',
+      onClick: async () => {
+        try {
+          message.loading({ content: '正在导出数据库...', key: 'export', duration: 0 })
+          // 调用导出API（路径是 /v1/ 而不是 /api/v1/）
+          const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/v1/system/database/export-database`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+            },
+          })
+          
+          if (!response.ok) {
+            throw new Error('导出失败')
+          }
+          
+          // 获取文件名
+          const contentDisposition = response.headers.get('Content-Disposition')
+          let filename = `database_backup_${new Date().toISOString().split('T')[0]}.zip`
+          if (contentDisposition) {
+            const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
+            if (filenameMatch && filenameMatch[1]) {
+              filename = filenameMatch[1].replace(/['"]/g, '')
+            }
+          }
+          
+          // 下载文件
+          const blob = await response.blob()
+          const url = window.URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url
+          a.download = filename
+          document.body.appendChild(a)
+          a.click()
+          window.URL.revokeObjectURL(url)
+          document.body.removeChild(a)
+          
+          message.success({ content: '数据库导出成功', key: 'export' })
+        } catch (error) {
+          message.error({ content: '数据库导出失败', key: 'export' })
+        }
+      },
+    }] : []),
     {
       key: 'profile',
       icon: <EditOutlined />,

@@ -103,9 +103,66 @@ frontend/
 ├── public/               # Static assets
 ├── .env.development      # Development environment config
 ├── .env.production       # Production environment config
+├── Dockerfile            # Docker multi-stage build config
+├── nginx.conf            # Nginx configuration for production
 ├── vite.config.ts        # Vite configuration
 ├── tsconfig.json         # TypeScript configuration
 └── package.json          # Dependencies and scripts
+```
+
+## Docker Deployment Structure
+
+### Frontend Dockerfile (Multi-stage Build)
+
+```dockerfile
+# Stage 1: Build (Node.js)
+FROM node:18-alpine as builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=production
+COPY . .
+RUN npm run build  # Generate dist/
+
+# Stage 2: Production (Nginx)
+FROM nginx:alpine
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/dist /usr/share/nginx/html
+EXPOSE 80
+```
+
+**Benefits**:
+- Final image only contains Nginx + static files (~20-30MB)
+- No Node.js or source code in production
+- Fast startup and excellent performance
+- Secure (no exposed dependencies)
+
+### Backend Dockerfile
+
+```dockerfile
+FROM python:3.11-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+EXPOSE 6080
+CMD ["python", "start.py"]
+```
+
+### Docker Compose Structure
+
+```yaml
+services:
+  frontend:          # Nginx serving static files
+    build: ./frontend
+    ports: ["80:80"]
+    
+  backend-api:       # FastAPI HTTP service
+    build: ./backend
+    ports: ["6080:6080"]
+    
+  queue-worker:      # Redis queue processor
+    build: ./backend
+    command: python start_queue_worker.py
 ```
 
 ## Documentation Structure (`docs/`)

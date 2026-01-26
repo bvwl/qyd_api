@@ -33,6 +33,31 @@ APScheduler, loguru, httpx, aiohttp
 - **Date Handling**: dayjs
 - **Styling**: Less + CSS Modules
 - **Security**: DOMPurify for HTML sanitization
+- **Deployment**: Docker (multi-stage build) + Nginx
+
+## Deployment & Infrastructure
+
+### Docker
+
+- **Frontend Container**: Nginx Alpine (~30MB)
+  - Multi-stage build (Node.js build → Nginx serve)
+  - Only contains static files in production
+  - Fast startup and excellent performance
+  
+- **Backend Container**: Python 3.11 Slim (~500MB)
+  - FastAPI application
+  - All Python dependencies included
+  
+- **Queue Worker Container**: Python 3.11 Slim (~500MB)
+  - Redis queue processor
+  - Separate from HTTP service
+
+### Container Orchestration
+
+- **Docker Compose**: Service orchestration
+- **Networks**: Bridge network for inter-container communication
+- **Volumes**: Log persistence to host machine
+- **Health Checks**: Automatic service health monitoring
 
 ## Common Commands
 
@@ -47,6 +72,9 @@ python db/init_roles_and_admin.py
 
 # Start development server
 python start.py
+
+# Start queue worker
+python start_queue_worker.py
 
 # Run tests
 pytest
@@ -73,6 +101,37 @@ npm run preview
 
 # Lint code
 npm run lint
+```
+
+### Docker
+
+```bash
+# Build all images
+docker-compose build
+
+# Start all services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f [service_name]
+
+# Stop services
+docker-compose stop
+
+# Restart services
+docker-compose restart
+
+# Remove services
+docker-compose down
+
+# Initialize database (first time only)
+docker-compose run --rm backend-api python deploy_init.py
+
+# Execute command in container
+docker-compose exec backend-api python check_deployment.py
+
+# Scale queue workers
+docker-compose up -d --scale queue-worker=3
 ```
 
 ## Environment Configuration

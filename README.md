@@ -36,6 +36,7 @@
 - **任务调度**: APScheduler
 - **日志**: 自定义日志系统 (按模块分类、自动轮转压缩)
 - **邮件集成**: Outlook API
+- **容器化**: Docker + Docker Compose
 
 ### 前端
 - **框架**: React 18 + TypeScript 5
@@ -46,6 +47,34 @@
 - **构建工具**: Vite 5
 - **日期处理**: dayjs
 - **样式**: Less + CSS Modules
+- **容器化**: Docker (多阶段构建) + Nginx
+
+### 部署架构
+
+#### Docker 容器化部署（推荐）
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                      Docker 容器                         │
+├─────────────────────────────────────────────────────────┤
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐ │
+│  │   Frontend   │  │ Backend API  │  │Queue Worker  │ │
+│  │   (Nginx)    │  │  (FastAPI)   │  │  (Python)    │ │
+│  │   Port: 80   │  │  Port: 6080  │  │              │ │
+│  └──────────────┘  └──────────────┘  └──────────────┘ │
+└─────────────────────────────────────────────────────────┘
+         ↓                  ↓                  ↓
+    ┌─────────┐        ┌─────────┐        ┌─────────┐
+    │  MySQL  │        │  Redis  │        │  Logs   │
+    │ (外部)  │        │ (外部)  │        │ (挂载)  │
+    └─────────┘        └─────────┘        └─────────┘
+```
+
+**特点**：
+- 前端使用多阶段构建（Node.js 构建 → Nginx 服务）
+- 后端和队列处理分离部署
+- 支持连接外部 MySQL 和 Redis
+- 日志持久化到宿主机
 
 ## 🚀 快速开始
 
@@ -55,8 +84,41 @@
 - Node.js 18+
 - MySQL 8.0+
 - Redis 7.0+ (可选，用于队列处理)
+- Docker 20.10+ 和 Docker Compose 2.0+ (Docker 部署)
 
 ### Docker 部署（推荐）
+
+Docker 部署采用**多阶段构建**和**容器化架构**，提供最佳的生产环境部署方案。
+
+#### 架构说明
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                      Docker 容器                         │
+├─────────────────────────────────────────────────────────┤
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐ │
+│  │   Frontend   │  │ Backend API  │  │Queue Worker  │ │
+│  │   (Nginx)    │  │  (FastAPI)   │  │  (Python)    │ │
+│  │   Port: 80   │  │  Port: 6080  │  │              │ │
+│  └──────────────┘  └──────────────┘  └──────────────┘ │
+└─────────────────────────────────────────────────────────┘
+         ↓                  ↓                  ↓
+    ┌─────────┐        ┌─────────┐        ┌─────────┐
+    │  MySQL  │        │  Redis  │        │  Logs   │
+    │ (外部)  │        │ (外部)  │        │ (挂载)  │
+    └─────────┘        └─────────┘        └─────────┘
+```
+
+**容器说明**：
+- **frontend**: Nginx 服务器，提供前端静态文件（打包后的 React 应用）
+- **backend-api**: FastAPI 应用，处理 HTTP 请求
+- **queue-worker**: Python 进程，处理 Redis 队列任务
+
+**前端构建方式**：
+- 使用**多阶段构建**（Multi-stage build）
+- 第一阶段：Node.js 构建（`npm run build`）
+- 第二阶段：Nginx 服务（只包含静态文件）
+- 最终镜像体积小（约 20-30MB），性能优异
 
 #### 一键部署
 
@@ -76,7 +138,7 @@ bash docker-deploy.sh
 cp .env.docker .env
 vim .env
 
-# 2. 构建镜像
+# 2. 构建镜像（会自动执行前端打包）
 docker-compose build
 
 # 3. 初始化数据库
@@ -84,12 +146,30 @@ docker-compose run --rm backend-api python deploy_init.py
 
 # 4. 启动服务
 docker-compose up -d
+
+# 5. 查看状态
+docker-compose ps
 ```
 
 **访问地址**:
 - 前端: http://localhost
 - 后端: http://localhost:6080
 - API 文档: http://localhost:6080/docs
+
+**常用命令**:
+```bash
+# 查看日志
+docker-compose logs -f
+
+# 重启服务
+docker-compose restart
+
+# 停止服务
+docker-compose stop
+
+# 删除服务
+docker-compose down
+```
 
 详细文档：[DOCKER_DEPLOYMENT.md](docs/deployment/DOCKER_DEPLOYMENT.md) | [快速参考](docs/deployment/DOCKER_QUICK_REFERENCE.md)
 
@@ -142,7 +222,9 @@ python start.py
 
 后端服务将在 `http://localhost:6080` 启动
 
-### 前端启动
+### 前端部署
+
+#### 开发模式
 
 ```bash
 cd frontend
@@ -155,6 +237,55 @@ npm run dev
 ```
 
 前端应用将在 `http://localhost:3000` 启动
+
+#### 生产部署
+
+**方式一：Docker 部署（推荐）**
+
+前端使用多阶段构建，自动完成打包和部署：
+
+```bash
+# 构建镜像（会自动执行 npm run build）
+docker-compose build frontend
+
+# 启动容器
+docker-compose up -d frontend
+```
+
+**方式二：手动打包部署**
+
+```bash
+cd frontend
+
+# 1. 构建生产版本
+npm run build
+
+# 2. 部署 dist 目录到 Nginx 或其他静态服务器
+# dist/ 目录包含所有打包后的静态文件
+```
+
+**Dockerfile 说明**：
+```dockerfile
+# 第一阶段：构建（Builder）
+FROM node:18-alpine as builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=production
+COPY . .
+RUN npm run build  # 生成 dist 目录
+
+# 第二阶段：生产（Nginx）
+FROM nginx:alpine
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/dist /usr/share/nginx/html
+# 最终镜像只包含 Nginx + 静态文件（约 20-30MB）
+```
+
+**优势**：
+- ✅ 镜像体积小（只有 Nginx + 静态文件）
+- ✅ 性能好（Nginx 专门优化静态文件服务）
+- ✅ 安全性高（不暴露源码和依赖）
+- ✅ 启动快（无需运行时编译）
 
 ### 默认管理员账号
 
@@ -377,36 +508,161 @@ qyd_api2/
 
 ## 🚢 部署指南
 
-### 使用Docker部署
+### Docker 部署（推荐）
+
+Docker 部署提供完整的容器化解决方案，支持前后端分离架构。
+
+#### 快速部署
 
 ```bash
-# 后端
-cd backend
-docker-compose up -d
-
-# 前端
-cd frontend
-npm run build
-# 将 dist/ 目录部署到Nginx或其他静态服务器
+# 一键部署
+bash docker-deploy.sh
 ```
 
-### 使用Supervisor管理进程（推荐）
+#### 详细步骤
+
+```bash
+# 1. 配置环境变量
+cp .env.docker .env
+vim .env  # 配置 MySQL、Redis 等
+
+# 2. 构建镜像
+docker-compose build
+
+# 3. 初始化数据库
+docker-compose run --rm backend-api python deploy_init.py
+
+# 4. 启动所有服务
+docker-compose up -d
+
+# 5. 查看服务状态
+docker-compose ps
+```
+
+#### 服务管理
+
+```bash
+# 查看日志
+docker-compose logs -f [service_name]
+
+# 重启服务
+docker-compose restart [service_name]
+
+# 停止服务
+docker-compose stop
+
+# 删除服务（保留数据）
+docker-compose down
+
+# 删除服务和数据
+docker-compose down -v
+```
+
+#### 容器说明
+
+| 容器 | 说明 | 端口 | 镜像大小 |
+|------|------|------|---------|
+| frontend | Nginx + 静态文件 | 80 | ~30MB |
+| backend-api | FastAPI 应用 | 6080 | ~500MB |
+| queue-worker | Redis 队列处理 | - | ~500MB |
+
+**前端容器特点**：
+- 使用多阶段构建，第一阶段编译，第二阶段部署
+- 最终镜像只包含 Nginx 和打包后的静态文件
+- 体积小、启动快、性能优异
+
+**详细文档**：
+- [Docker 完整部署指南](docs/deployment/DOCKER_DEPLOYMENT.md)（60+ 页）
+- [Docker 快速参考](docs/deployment/DOCKER_QUICK_REFERENCE.md)
+- [Docker 部署方案总结](docs/deployment/DOCKER_SETUP_COMPLETE.md)
+
+---
+
+### 传统部署
+
+#### 后端部署
+
+```bash
+cd backend
+
+# 方式一：快速部署
+bash quick_deploy.sh
+
+# 方式二：手动部署
+pip install -r requirements.txt
+cp .env.example .env
+vim .env
+aerich init -t app.core.settings.TORTOISE_ORM
+aerich init-db
+python deploy_init.py
+python start.py
+```
+
+#### 前端部署
+
+```bash
+cd frontend
+
+# 构建生产版本
+npm install
+npm run build
+
+# 部署 dist 目录到 Nginx
+sudo cp -r dist/* /var/www/html/
+```
+
+**Nginx 配置示例**：
+
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+    
+    root /var/www/html;
+    index index.html;
+    
+    # 前端路由
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+    
+    # API 代理
+    location /v1/ {
+        proxy_pass http://localhost:6080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+---
+
+### 使用 Supervisor 管理进程（推荐）
 
 适用于生产环境，自动重启和日志管理。
 
 ```bash
-# 安装Supervisor
+# 安装 Supervisor
 sudo apt-get install supervisor
 
 # 配置文件示例见：
 # docs/performance/REDIS_QUEUE_SEPARATION_GUIDE.md
+
+# 启动服务
+sudo supervisorctl start qyd:*
+
+# 查看状态
+sudo supervisorctl status
 ```
+
+---
 
 ### 性能优化部署
 
 对于高性能需求（10000+条/秒），请参考：
 - [超高性能部署指南](docs/performance/SCALE_TO_10K_GUIDE.md)
 - [Redis队列分离部署](docs/performance/REDIS_QUEUE_SEPARATION_GUIDE.md)
+- [性能配置快速参考](docs/performance/PERFORMANCE_QUICK_REFERENCE.md)
 
 ## 📖 文档
 
