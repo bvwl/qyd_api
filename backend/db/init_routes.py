@@ -192,11 +192,35 @@ ROUTES_DATA = [
         ],
     },
     {
+        "name": "xui",
+        "path": "/xui",
+        "title": "XUI管理",
+        "icon": "CloudOutlined",
+        "sort": 6,
+        "status": Status.OK,
+        "children": [
+            {
+                "name": "xui-account",
+                "path": "/xui/account",
+                "title": "XUI账号",
+                "component": "XuiAccountList",
+                "sort": 1,
+            },
+            {
+                "name": "xui-inbound",
+                "path": "/xui/inbound",
+                "title": "XUI入站",
+                "component": "XuiInboundList",
+                "sort": 2,
+            },
+        ],
+    },
+    {
         "name": "api-docs",
         "path": "/api-docs",
         "title": "API文档",
         "icon": "ApiOutlined",
-        "sort": 6,
+        "sort": 7,
         "status": Status.OK,
         "children": [
             {
