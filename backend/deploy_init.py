@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from tortoise import Tortoise
 from app.core.settings import TORTOISE_ORM
-from app.core.tools import get_password_hash
+from app.core.tools import hashing
 from app.models.user import User, Role, FrontendRoute, UserRole, RoleRoute
 import uuid
 
@@ -285,7 +285,7 @@ class DeployInitializer:
         admin_user = await User.create(
             email=admin_email,
             nickname='系统管理员',
-            password=get_password_hash(admin_password),
+            password=hashing.hash(admin_password),
             status=1
         )
         
