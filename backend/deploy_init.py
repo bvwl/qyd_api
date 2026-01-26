@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from tortoise import Tortoise
 from app.core.settings import TORTOISE_ORM
 from app.core.tools import hashing
-from app.models.user import User, Role, FrontendRoute, UserRole, RoleRoute
+from app.models.user import UserInfo, UserRole, FrontendRoute
 import uuid
 
 
@@ -122,14 +122,14 @@ class DeployInitializer:
         created_roles = {}
         for role_data in roles_data:
             # 检查角色是否已存在
-            existing_role = await Role.filter(code=role_data['code']).first()
+            existing_role = await UserRole.filter(code=role_data['code']).first()
             if existing_role:
                 print(f"  - 角色 {role_data['code']} 已存在，跳过")
                 created_roles[role_data['code']] = existing_role
                 continue
             
             # 创建角色
-            role = await Role.create(**role_data)
+            role = await UserRole.create(**role_data)
             created_roles[role_data['code']] = role
             print(f"  ✓ 创建角色: {role_data['code']} - {role_data['name']}")
         
@@ -276,13 +276,13 @@ class DeployInitializer:
         admin_password = '2201101122@qq.com'
         
         # 检查管理员是否已存在
-        existing_admin = await User.filter(email=admin_email).first()
+        existing_admin = await UserInfo.filter(email=admin_email).first()
         if existing_admin:
             print(f"  - 管理员用户 {admin_email} 已存在，跳过")
             return existing_admin
         
         # 创建管理员用户
-        admin_user = await User.create(
+        admin_user = await UserInfo.create(
             email=admin_email,
             nickname='系统管理员',
             password=hashing.hash(admin_password),
@@ -292,10 +292,7 @@ class DeployInitializer:
         # 分配 ADMIN 角色
         admin_role = roles.get('ADMIN')
         if admin_role:
-            await UserRole.create(
-                user_id=admin_user.id,
-                role_id=admin_role.id
-            )
+            await admin_user.roles.add(admin_role)
             print(f"  ✓ 创建管理员用户: {admin_email}")
             print(f"  ✓ 分配角色: ADMIN")
         
@@ -321,14 +318,10 @@ class DeployInitializer:
         all_routes = await FrontendRoute.all()
         
         # 清除现有绑定
-        await RoleRoute.filter(role_id=admin_role.id).delete()
+        await admin_role.routes.clear()
         
         # 绑定所有路由
-        for route in all_routes:
-            await RoleRoute.create(
-                role_id=admin_role.id,
-                route_id=route.id
-            )
+        await admin_role.routes.add(*all_routes)
         
         print(f"  ✓ 为 ADMIN 角色绑定 {len(all_routes)} 个路由")
         return True
@@ -364,20 +357,18 @@ class DeployInitializer:
         ]
         
         # 清除现有绑定
-        await RoleRoute.filter(role_id=gm_role.id).delete()
+        await gm_role.routes.clear()
         
         # 绑定路由
-        bound_count = 0
+        gm_routes = []
         for path in gm_routes_paths:
             route = await FrontendRoute.filter(path=path).first()
             if route:
-                await RoleRoute.create(
-                    role_id=gm_role.id,
-                    route_id=route.id
-                )
-                bound_count += 1
+                gm_routes.append(route)
         
-        print(f"  ✓ 为 GM 角色绑定 {bound_count} 个路由")
+        await gm_role.routes.add(*gm_routes)
+        
+        print(f"  ✓ 为 GM 角色绑定 {len(gm_routes)} 个路由")
         return True
     
     async def verify_initialization(self):
@@ -387,7 +378,7 @@ class DeployInitializer:
         print("=" * 60)
         
         # 检查角色
-        roles_count = await Role.all().count()
+        roles_count = await UserRole.all().count()
         print(f"  ✓ 角色数量: {roles_count}")
         
         # 检查路由
@@ -395,11 +386,11 @@ class DeployInitializer:
         print(f"  ✓ 路由数量: {routes_count}")
         
         # 检查用户
-        users_count = await User.all().count()
+        users_count = await UserInfo.all().count()
         print(f"  ✓ 用户数量: {users_count}")
         
         # 检查管理员
-        admin = await User.filter(email='zhiyu').first()
+        admin = await UserInfo.filter(email='zhiyu').first()
         if admin:
             admin_roles = await admin.roles.all()
             print(f"  ✓ 管理员用户: zhiyu")
