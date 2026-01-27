@@ -199,23 +199,6 @@ export default function Dashboard() {
       },
     })
   }
-
-  const handleCopyToken = () => {
-    if (!userToken?.token) return
-    
-    // 尝试使用现代 API
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(userToken.token).then(() => {
-        message.success('Token已复制到剪贴板')
-      }).catch(() => {
-        // 降级到传统方法
-        fallbackCopyTextToClipboard(userToken.token)
-      })
-    } else {
-      // 降级到传统方法
-      fallbackCopyTextToClipboard(userToken.token)
-    }
-  }
   
   // 降级复制方法（兼容旧浏览器和非 HTTPS 环境）
   const fallbackCopyTextToClipboard = (text: string) => {
@@ -247,6 +230,23 @@ export default function Dashboard() {
     }
     
     document.body.removeChild(textArea)
+  }
+
+  const handleCopyToken = () => {
+    if (!userToken?.token) return
+    
+    // 尝试使用现代 API
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      navigator.clipboard.writeText(userToken.token).then(() => {
+        message.success('Token已复制到剪贴板')
+      }).catch(() => {
+        // 降级到传统方法
+        fallbackCopyTextToClipboard(userToken.token)
+      })
+    } else {
+      // 降级到传统方法
+      fallbackCopyTextToClipboard(userToken.token)
+    }
   }
 
   const handleGenerateServerAccount = () => {
@@ -305,7 +305,7 @@ export default function Dashboard() {
   const handleCopyUsername = () => {
     if (!serverAccount?.username) return
     
-    if (navigator.clipboard && navigator.clipboard.writeText) {
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
       navigator.clipboard.writeText(serverAccount.username).then(() => {
         message.success('用户名已复制到剪贴板')
       }).catch(() => {
@@ -336,7 +336,7 @@ export default function Dashboard() {
   const handleCopyPassword = () => {
     if (!decryptedPassword) return
     
-    if (navigator.clipboard && navigator.clipboard.writeText) {
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
       navigator.clipboard.writeText(decryptedPassword).then(() => {
         message.success('密码已复制到剪贴板')
       }).catch(() => {
