@@ -45,15 +45,7 @@ class ProjectAccountQueue(RedisQueueHandler):
                 logger.error(f"加密队列数据失败: {e}")
                 # 加密失败，仍然继续处理（数据可能已经是加密的）
         
-        # 如果有 password 字段，需要加密
-        if 'password' in data and data['password'] and 'account' in data:
-            try:
-                from app.utils.project_crypto import encrypt_password
-                account = data['account']
-                data['password'] = encrypt_password(data['password'], account)
-                logger.debug(f"密码已加密 [account={account}]")
-            except Exception as e:
-                logger.error(f"加密密码失败: {e}")
+        # password 字段不加密，直接存储明文
         
         # 调用父类方法添加到队列
         return await super().add_to_queue(data, retry)

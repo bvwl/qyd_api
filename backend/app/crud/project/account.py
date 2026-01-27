@@ -10,8 +10,6 @@ from app.utils.time_tool import parse_time
 from app.utils.project_crypto import (
     encrypt_sensitive_fields, 
     decrypt_sensitive_fields, 
-    encrypt_password,
-    decrypt_password,
     check_user_can_decrypt
 )
 
@@ -51,9 +49,7 @@ class CRUD:
         if 'data' in filtered_item and filtered_item['data']:
             filtered_item['data'] = encrypt_sensitive_fields(filtered_item['data'], account)
         
-        # 如果有 password 字段，加密密码
-        if 'password' in filtered_item and filtered_item['password']:
-            filtered_item['password'] = encrypt_password(filtered_item['password'], account)
+        # password 字段不加密，直接存储明文
         
         # 先创建记录
         res = await ProjectAccount.create(**filtered_item)
@@ -119,13 +115,7 @@ class CRUD:
                         # 解密失败，保持加密状态
                         print(f"解密 data 失败: {e}")
                 
-                # 解密 password 字段
-                if result.password:
-                    try:
-                        result.password = decrypt_password(result.password, res.account)
-                    except Exception as e:
-                        # 解密失败，保持加密状态
-                        print(f"解密 password 失败: {e}")
+                # password 字段不解密，直接返回明文
             # 没有权限，保持加密状态（不做任何处理）
         
         return result
@@ -219,13 +209,7 @@ class CRUD:
                             # 解密失败，保持加密状态
                             print(f"解密 data 失败: {e}")
                     
-                    # 解密 password 字段
-                    if item.password:
-                        try:
-                            item.password = decrypt_password(item.password, obj.account)
-                        except Exception as e:
-                            # 解密失败，保持加密状态
-                            print(f"解密 password 失败: {e}")
+                    # password 字段不解密，直接返回明文
                 # 没有权限，保持加密状态（不做任何处理）
             
             items.append(item)
@@ -259,9 +243,7 @@ class CRUD:
         if 'data' in update_data and update_data['data']:
             update_data['data'] = encrypt_sensitive_fields(update_data['data'], account)
         
-        # 如果更新了 password 字段，加密密码
-        if 'password' in update_data and update_data['password']:
-            update_data['password'] = encrypt_password(update_data['password'], account)
+        # password 字段不加密，直接存储明文
         
         # 如果传入了余额，需要计算变动余额和更新历史
         if item.balance is not None:
@@ -360,9 +342,7 @@ class CRUD:
             if 'data' in update_data and update_data['data']:
                 update_data['data'] = encrypt_sensitive_fields(update_data['data'], account)
             
-            # 如果更新了 password 字段，加密密码
-            if 'password' in update_data and update_data['password']:
-                update_data['password'] = encrypt_password(update_data['password'], account)
+            # password 字段不加密，直接存储明文
             
             # 如果传入了余额，需要计算变动余额和更新历史
             if item.balance is not None:

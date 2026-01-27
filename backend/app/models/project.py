@@ -104,7 +104,7 @@ class ProjectAccount(BaseModel):
     项目账号
     """
     account = fields.CharField(max_length=255, index=True, description="账号")
-    password = fields.TextField(null=True, description="密码（加密存储）")
+    password = fields.TextField(null=True, description="密码（明文存储）")
     status = fields.IntEnumField(Status, default=Status.OK, description="状态(1:正常,2:异常)")
     account_type = fields.IntEnumField(
         AccountType,
