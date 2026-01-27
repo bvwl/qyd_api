@@ -7,7 +7,7 @@ import { getServerList } from '@/api/server'
 import type { EmailInfo, ServerInfo } from '@/types'
 import { Status, EmailType } from '@/types'
 import { STATUS_MAP, EMAIL_TYPE_MAP } from '@/utils/constants'
-import { formatDateTime, maskPassword, copyToClipboard } from '@/utils/format'
+import { formatDateTime, copyToClipboard } from '@/utils/format'
 import { Dayjs } from 'dayjs'
 import { useUserStore } from '@/store/useUserStore'
 

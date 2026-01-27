@@ -5,7 +5,7 @@ import type { UserToken, User } from '@/types'
 import { getTokenList, createToken, updateToken, deleteToken, getUserList } from '@/api/user'
 import { useUserStore } from '@/store/useUserStore'
 import { copyToClipboard } from '@/utils/format'
-import dayjs, { Dayjs } from 'dayjs'
+import type { Dayjs } from 'dayjs'
 
 const { RangePicker } = DatePicker
 
@@ -236,7 +236,7 @@ const TokenList = () => {
     onChange: (selectedKeys: React.Key[]) => {
       setSelectedRowKeys(selectedKeys as string[])
     },
-    getCheckboxProps: (record: UserToken) => ({
+    getCheckboxProps: (_record: UserToken) => ({
       disabled: !isAdmin, // 非管理员禁用选择
     }),
   }

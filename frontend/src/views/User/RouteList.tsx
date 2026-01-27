@@ -4,7 +4,7 @@ import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined } from '@ant
 import type { Route } from '@/types'
 import { getRouteList, createRoute, updateRoute, deleteRoute } from '@/api/user'
 import { useUserStore } from '@/store/useUserStore'
-import dayjs, { Dayjs } from 'dayjs'
+import type { Dayjs } from 'dayjs'
 
 const { RangePicker } = DatePicker
 

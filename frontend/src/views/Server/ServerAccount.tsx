@@ -203,7 +203,7 @@ const ServerAccountList = () => {
           </div>
         ),
       })
-    })
+    }
   }
 
   const handleSubmit = async () => {

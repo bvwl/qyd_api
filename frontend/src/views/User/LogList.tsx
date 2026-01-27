@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Table, App, Tag, Input, Button, Space, DatePicker, Select } from 'antd'
+import { Table, Tag, Input, Button, Space, DatePicker, Select } from 'antd'
 import { SearchOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import type { UserLog } from '@/types'
@@ -8,7 +8,6 @@ import { getLogList } from '@/api/user'
 const { RangePicker } = DatePicker
 
 const LogList = () => {
-  const { message } = App.useApp()
   const [data, setData] = useState<UserLog[]>([])
   const [loading, setLoading] = useState(false)
   const [total, setTotal] = useState(0)

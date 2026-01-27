@@ -20,6 +20,7 @@ import {
 import axios from 'axios'
 import type { AxiosRequestConfig } from 'axios'
 import { TokenManager } from '@/utils/token'
+import { copyToClipboard } from '@/utils/format'
 
 const { TextArea } = Input
 
@@ -185,9 +186,13 @@ export default function ApiTester({
     setParams(newParams)
   }
 
-  const copyResponse = () => {
-    navigator.clipboard.writeText(JSON.stringify(response as Record<string, unknown>, null, 2))
-    message.success('已复制到剪贴板')
+  const copyResponse = async () => {
+    const success = await copyToClipboard(JSON.stringify(response as Record<string, unknown>, null, 2))
+    if (success) {
+      message.success('已复制到剪贴板')
+    } else {
+      message.error('复制失败')
+    }
   }
 
   const headerColumns = [

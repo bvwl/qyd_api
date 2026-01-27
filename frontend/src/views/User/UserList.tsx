@@ -9,7 +9,7 @@ import { UserStatus } from '@/types'
 import { USER_STATUS_MAP } from '@/utils/constants'
 import { formatDateTime, copyToClipboard } from '@/utils/format'
 import { useUserStore } from '@/store/useUserStore'
-import dayjs, { Dayjs } from 'dayjs'
+import { Dayjs } from 'dayjs'
 import { filterEmptyStrings } from '@/utils/form'
 
 const { RangePicker } = DatePicker
@@ -437,9 +437,11 @@ export default function UserList() {
               placeholder="请选择角色"
               optionFilterProp="children"
               showSearch
-              filterOption={(input, option) =>
-                (option?.children as string)?.toLowerCase().includes(input.toLowerCase())
-              }
+              filterOption={(input, option) => {
+                if (!option || !option.children) return false
+                const children = option.children
+                return String(children).toLowerCase().includes(input.toLowerCase())
+              }}
             >
               {roles.map(role => (
                 <Select.Option key={role.id} value={role.id}>

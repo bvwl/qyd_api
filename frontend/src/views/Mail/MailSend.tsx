@@ -23,12 +23,8 @@ export default function MailSend() {
         content_type: contentType,
       })
       
-      if (res.code === 1) {
-        message.success('邮件发送成功')
-        form.resetFields()
-      } else {
-        message.error(res.message || '邮件发送失败')
-      }
+      message.success(res.message || '邮件发送成功')
+      form.resetFields()
     } catch (error: any) {
       message.error(error.response?.data?.detail || '邮件发送失败')
     } finally {

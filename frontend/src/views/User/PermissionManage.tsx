@@ -25,7 +25,7 @@ import type { DataNode } from 'antd/es/tree'
 import { getRoleList, getRoleRoutes, setRoleRoutes, getRouteTree } from '@/api/user'
 import type { Role, Route } from '@/types'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 
 export default function PermissionManage() {
   const [roles, setRoles] = useState<Role[]>([])
@@ -139,21 +139,6 @@ export default function PermissionManage() {
         ? convertToTreeData(route.children) 
         : undefined,
     }))
-  }
-
-  // 提取所有路由ID
-  const extractRouteIds = (routes: Route[]): string[] => {
-    const ids: string[] = []
-    const extract = (routeList: Route[]) => {
-      routeList.forEach((route) => {
-        ids.push(route.id)
-        if (route.children && route.children.length > 0) {
-          extract(route.children)
-        }
-      })
-    }
-    extract(routes)
-    return ids
   }
 
   // 保存权限配置
