@@ -152,7 +152,7 @@ async def check_and_update_emails_logic(
                 try:
                     manager = AzureAuthManager(email.email)
                     res = await manager.get_emails_main('@', 1, 1)
-                    new_status = 4 if res == 0 else 1
+                    new_status = 2 if res == 0 else 1  # 2=异常, 1=正常
                     
                     # 只在状态变化时更新
                     if email.status != new_status:
