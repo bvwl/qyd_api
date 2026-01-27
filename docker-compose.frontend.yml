@@ -15,7 +15,7 @@ services:
     container_name: qyd-frontend
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "8080:80"  # 修改为 8080 端口，避免与系统 Nginx 冲突
     networks:
       - qyd-network
     healthcheck:

@@ -1,10 +1,34 @@
 # 后端服务器专用 Docker Compose 配置
-# 用于部署 Backend API + Queue Worker
-# 注意：Redis 使用外部已部署的服务器，不在此启动
+# 用于部署 Backend API + Queue Worker + Redis
 
 version: '3.8'
 
 services:
+  # Redis 服务
+  redis:
+    image: redis:7-alpine
+    container_name: qyd-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:-redis_password}
+      --maxmemory 2gb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --appendfsync everysec
+    volumes:
+      - redis-data:/data
+    networks:
+      - qyd-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
   # 后端 API 服务
   backend-api:
     build:
@@ -32,10 +56,10 @@ services:
       - DB_SLAVE1_PASSWORD=${DB_SLAVE1_PASSWORD:-${DB_PASSWORD}}
       - DB_SLAVE1_NAME=${DB_SLAVE1_NAME:-${DB_NAME}}
       
-      # Redis 配置（使用外部 Redis 服务器）
+      # Redis 配置（使用 Docker 容器内的 Redis）
       - REDIS_ENABLED=${REDIS_ENABLED:-1}
-      - REDIS_HOST=${REDIS_HOST:-192.168.1.20}
-      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_password}
       - REDIS_DB=${REDIS_DB:-0}
       - REDIS_MAX_CONNECTIONS=${REDIS_MAX_CONNECTIONS:-50}
@@ -73,6 +97,9 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    depends_on:
+      redis:
+        condition: service_healthy
 
   # 队列 Worker 服务
   queue-worker:
@@ -96,10 +123,10 @@ services:
       - DB_SLAVE1_HOST=${DB_SLAVE1_HOST}
       - DB_SLAVE1_PORT=${DB_SLAVE1_PORT:-3306}
       
-      # Redis 配置（使用外部 Redis 服务器）
+      # Redis 配置（使用 Docker 容器内的 Redis）
       - REDIS_ENABLED=${REDIS_ENABLED:-1}
-      - REDIS_HOST=${REDIS_HOST:-192.168.1.20}
-      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_password}
       - REDIS_DB=${REDIS_DB:-0}
       - REDIS_MAX_CONNECTIONS=${REDIS_MAX_CONNECTIONS:-50}
@@ -121,7 +148,14 @@ services:
       - ./backend/status:/app/status
     networks:
       - qyd-network
+    depends_on:
+      redis:
+        condition: service_healthy
 
 networks:
   qyd-network:
     driver: bridge
+
+volumes:
+  redis-data:
+    driver: local
