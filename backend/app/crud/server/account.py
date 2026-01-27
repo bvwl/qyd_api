@@ -88,16 +88,11 @@ class CRUD:
             
             if proxy_type == 'HTTP':
                 # HTTP 类型：端口在 21999-22999 之间
-                # 查找符合条件的账号ID
-                http_inbounds = await XuiInbound.filter(
+                # 使用子查询优化，避免 N+1 问题
+                http_account_ids = await XuiInbound.filter(
                     listen_port__gte=21999,
                     listen_port__lte=22999
-                ).prefetch_related('accounts')
-                
-                http_account_ids = set()
-                for inbound in http_inbounds:
-                    accounts = await inbound.accounts.all()
-                    http_account_ids.update([str(acc.id) for acc in accounts])
+                ).values_list('accounts__id', flat=True)
                 
                 if http_account_ids:
                     query = query.filter(id__in=list(http_account_ids))
@@ -107,15 +102,10 @@ class CRUD:
                     
             elif proxy_type == 'SOCKS5':
                 # SOCKS5 类型：端口在 31999-32999 之间
-                socks5_inbounds = await XuiInbound.filter(
+                socks5_account_ids = await XuiInbound.filter(
                     listen_port__gte=31999,
                     listen_port__lte=32999
-                ).prefetch_related('accounts')
-                
-                socks5_account_ids = set()
-                for inbound in socks5_inbounds:
-                    accounts = await inbound.accounts.all()
-                    socks5_account_ids.update([str(acc.id) for acc in accounts])
+                ).values_list('accounts__id', flat=True)
                 
                 if socks5_account_ids:
                     query = query.filter(id__in=list(socks5_account_ids))
@@ -158,16 +148,16 @@ class CRUD:
         from app.models.xui import XuiInbound
         account_ids = [str(obj.id) for obj in res]
         
-        # 查询所有相关的入站（预加载 server 信息）
+        # 一次性查询所有相关的入站（使用 prefetch_related 优化）
         inbounds_with_accounts = await XuiInbound.filter(
             accounts__id__in=account_ids
-        ).prefetch_related('accounts', 'server')
+        ).prefetch_related('accounts', 'server').all()
         
-        # 构建账号ID到入站信息的映射
+        # 构建账号ID到入站信息的映射（避免重复查询）
         account_inbound_map = {}
         for inbound in inbounds_with_accounts:
-            accounts = await inbound.accounts.all()
-            for account in accounts:
+            # 使用 prefetch_related 已经加载的数据，不会触发额外查询
+            for account in inbound.accounts:
                 account_id = str(account.id)
                 if account_id not in account_inbound_map:
                     account_inbound_map[account_id] = []
