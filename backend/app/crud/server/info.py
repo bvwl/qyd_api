@@ -99,6 +99,7 @@ class CRUD:
                         domain: str | None = None,
                         port: int | None = None,
                         proxy_type: str | None = None,
+                        group_id: UUID | None = None,
                         page: int = 1,
                         limit: int = 10,
                         res_count: bool = False,
@@ -117,6 +118,8 @@ class CRUD:
             query = query.filter(domain__icontains=domain)
         if port is not None:
             query = query.filter(port=port)
+        if group_id is not None:
+            query = query.filter(group_id=group_id)
         
         # 根据代理类型过滤
         if proxy_type:
