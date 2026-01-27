@@ -72,7 +72,15 @@ fi
 
 # 构建镜像
 echo -e "\n${YELLOW}[3/6] 构建 Docker 镜像...${NC}"
-$DOCKER_COMPOSE -f docker-compose.backend.yml build
+read -p "是否强制重新构建（不使用缓存）？代码更新后建议选 y (y/n) " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    echo "正在强制重新构建（不使用缓存）..."
+    $DOCKER_COMPOSE -f docker-compose.backend.yml build --no-cache
+else
+    echo "正在构建（使用缓存）..."
+    $DOCKER_COMPOSE -f docker-compose.backend.yml build
+fi
 
 echo -e "${GREEN}✓ 镜像构建完成${NC}"
 
