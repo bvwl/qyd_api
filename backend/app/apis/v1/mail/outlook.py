@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta
-import asyncio
 from loguru import logger
 from fastapi import APIRouter, Body, HTTPException, Query, BackgroundTasks, Depends
 from app.clients.outlook import AzureAuthManager
@@ -124,7 +123,7 @@ async def check_and_update_emails_logic(
     分批检测邮箱状态并更新
     使用分页方式避免一次性查询过多数据导致内存问题
     """
-    batch_size = 10  # 每批处理10条，避免频繁请求导致账号被封
+    batch_size = 10  # 每批处理10条，避免一次性处理过多
     page = 1
     total_checked = 0
     
@@ -175,9 +174,6 @@ async def check_and_update_emails_logic(
                 except Exception as e:
                     logger.error(f"检查邮箱 {email.email} 失败: {str(e)}")
                     continue
-                
-                # 每检查一个邮箱后延迟2秒，避免请求过快
-                await asyncio.sleep(2)
             
             # 如果返回的数量少于批次大小，说明已经是最后一批
             if len(emails) < batch_size:
