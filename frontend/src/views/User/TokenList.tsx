@@ -4,6 +4,7 @@ import { PlusOutlined, EditOutlined, DeleteOutlined, CopyOutlined, SearchOutline
 import type { UserToken, User } from '@/types'
 import { getTokenList, createToken, updateToken, deleteToken, getUserList } from '@/api/user'
 import { useUserStore } from '@/store/useUserStore'
+import { copyToClipboard } from '@/utils/format'
 import dayjs, { Dayjs } from 'dayjs'
 
 const { RangePicker } = DatePicker
@@ -138,9 +139,13 @@ const TokenList = () => {
     }
   }
 
-  const handleCopy = (token: string) => {
-    navigator.clipboard.writeText(token)
-    message.success('Token已复制到剪贴板')
+  const handleCopy = async (token: string) => {
+    const success = await copyToClipboard(token)
+    if (success) {
+      message.success('Token已复制到剪贴板')
+    } else {
+      message.error('复制失败')
+    }
   }
 
   // 批量删除

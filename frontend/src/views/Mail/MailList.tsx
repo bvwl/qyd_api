@@ -7,7 +7,7 @@ import { getServerList } from '@/api/server'
 import type { EmailInfo, ServerInfo } from '@/types'
 import { Status, EmailType } from '@/types'
 import { STATUS_MAP, EMAIL_TYPE_MAP } from '@/utils/constants'
-import { formatDateTime, maskPassword } from '@/utils/format'
+import { formatDateTime, maskPassword, copyToClipboard } from '@/utils/format'
 import { Dayjs } from 'dayjs'
 import { useUserStore } from '@/store/useUserStore'
 
@@ -38,12 +38,13 @@ export default function MailList() {
   const isAdmin = userInfo?.roles?.some(role => role.code === 'ADMIN') || false
 
   // 复制邮箱地址
-  const handleCopyEmail = (email: string) => {
-    navigator.clipboard.writeText(email).then(() => {
+  const handleCopyEmail = async (email: string) => {
+    const success = await copyToClipboard(email)
+    if (success) {
       message.success('邮箱地址已复制')
-    }).catch(() => {
+    } else {
       message.error('复制失败')
-    })
+    }
   }
 
   const fetchData = async () => {

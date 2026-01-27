@@ -7,7 +7,7 @@ import { getRoleList } from '@/api/user'
 import type { User, Role } from '@/types'
 import { UserStatus } from '@/types'
 import { USER_STATUS_MAP } from '@/utils/constants'
-import { formatDateTime } from '@/utils/format'
+import { formatDateTime, copyToClipboard } from '@/utils/format'
 import { useUserStore } from '@/store/useUserStore'
 import dayjs, { Dayjs } from 'dayjs'
 import { filterEmptyStrings } from '@/utils/form'
@@ -200,12 +200,13 @@ export default function UserList() {
     return null
   }
 
-  const handleCopyId = (id: string) => {
-    navigator.clipboard.writeText(id).then(() => {
+  const handleCopyId = async (id: string) => {
+    const success = await copyToClipboard(id)
+    if (success) {
       message.success('用户ID已复制到剪贴板')
-    }).catch(() => {
+    } else {
       message.error('复制失败')
-    })
+    }
   }
 
   const columns: ColumnsType<User> = [

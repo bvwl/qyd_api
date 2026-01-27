@@ -5,6 +5,7 @@ import type { ProjectAccount, Project } from '@/types'
 import { AccountType, Status } from '@/types'
 import { getProjectAccountList, createProjectAccount, updateProjectAccount, deleteProjectAccount, getProjectList, getProjectAccountStats, exportAllProjectStats, exportTodayProjectStats } from '@/api/project'
 import { useUserStore } from '@/store/useUserStore'
+import { copyToClipboard } from '@/utils/format'
 import { Dayjs } from 'dayjs'
 import type { TableProps } from 'antd'
 
@@ -248,12 +249,13 @@ const ProjectAccountList = () => {
     return typeMap[type] || '未知'
   }
 
-  const handleCopyId = (id: string) => {
-    navigator.clipboard.writeText(id).then(() => {
+  const handleCopyId = async (id: string) => {
+    const success = await copyToClipboard(id)
+    if (success) {
       message.success('ID已复制到剪贴板')
-    }).catch(() => {
+    } else {
       message.error('复制失败')
-    })
+    }
   }
 
   // 获取统计数据（用于弹窗显示）

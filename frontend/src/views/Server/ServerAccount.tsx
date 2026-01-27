@@ -7,6 +7,7 @@ import { getUserList } from '@/api/user'
 import { useUserStore } from '@/store/useUserStore'
 import dayjs, { Dayjs } from 'dayjs'
 import { filterEmptyStrings } from '@/utils/form'
+import { copyToClipboard } from '@/utils/format'
 
 const { RangePicker } = DatePicker
 
@@ -168,7 +169,7 @@ const ServerAccountList = () => {
     })
   }
 
-  const handleCopyAccount = (record: ServerAccount) => {
+  const handleCopyAccount = async (record: ServerAccount) => {
     // 检查是否有入站信息
     if (!record.inbound_host || !record.inbound_port || !record.proxy_type) {
       message.warning('该账号未添加到任何入站，无法生成代理地址')
@@ -180,9 +181,10 @@ const ServerAccountList = () => {
     const protocol = record.proxy_type.includes('HTTP') ? 'http' : 'socks5'
     const proxyUrl = `${protocol}://${record.username}:${record.password}@${record.inbound_host}:${record.inbound_port}`
     
-    navigator.clipboard.writeText(proxyUrl).then(() => {
+    const success = await copyToClipboard(proxyUrl)
+    if (success) {
       message.success(`${record.proxy_type} 代理地址已复制到剪贴板`)
-    }).catch(() => {
+    } else {
       // 如果复制失败，显示代理地址让用户手动复制
       Modal.info({
         title: '代理地址',

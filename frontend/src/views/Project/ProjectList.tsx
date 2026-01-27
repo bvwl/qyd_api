@@ -9,6 +9,7 @@ import { useUserStore } from '@/store/useUserStore'
 import dayjs, { Dayjs } from 'dayjs'
 import type { TableProps } from 'antd'
 import { filterEmptyStrings } from '@/utils/form'
+import { copyToClipboard } from '@/utils/format'
 import type { UploadFile } from 'antd/es/upload/interface'
 
 const { RangePicker } = DatePicker
@@ -273,12 +274,13 @@ const ProjectList = () => {
     return statusMap[status] || { text: '未知', color: 'default' }
   }
 
-  const handleCopyId = (id: string) => {
-    navigator.clipboard.writeText(id).then(() => {
+  const handleCopyId = async (id: string) => {
+    const success = await copyToClipboard(id)
+    if (success) {
       message.success('项目ID已复制到剪贴板')
-    }).catch(() => {
+    } else {
       message.error('复制失败')
-    })
+    }
   }
 
   // 打开文件管理弹窗
