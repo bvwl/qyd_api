@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Card, Row, Col, Statistic, Spin, Alert, Button, App, Modal, Input, Space, Typography, Tag } from 'antd'
 import { UserOutlined, ProjectOutlined, TeamOutlined, DatabaseOutlined, CopyOutlined, ReloadOutlined, EyeOutlined, EyeInvisibleOutlined, CloudServerOutlined, RiseOutlined } from '@ant-design/icons'
 import { getUserList } from '@/api/user'
@@ -43,7 +43,7 @@ export default function Dashboard() {
   const [decryptedPassword, setDecryptedPassword] = useState<string>('')
   const userInfo = useUserStore((state) => state.userInfo)
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true)
       
@@ -125,17 +125,9 @@ export default function Dashboard() {
     } finally {
       setLoading(false)
     }
-  }
-
-  useEffect(() => {
-    fetchData()
-    if (userInfo?.id) {
-      fetchUserToken()
-      fetchServerAccount()
-    }
   }, [userInfo])
 
-  const fetchUserToken = async () => {
+  const fetchUserToken = useCallback(async () => {
     if (!userInfo?.id) return
     
     try {
@@ -153,9 +145,9 @@ export default function Dashboard() {
     } catch (error) {
       setUserToken(null)
     }
-  }
+  }, [userInfo])
 
-  const fetchServerAccount = async () => {
+  const fetchServerAccount = useCallback(async () => {
     if (!userInfo?.id) return
     
     try {
@@ -177,7 +169,15 @@ export default function Dashboard() {
     } catch (error) {
       setServerAccount(null)
     }
-  }
+  }, [userInfo])
+
+  useEffect(() => {
+    fetchData()
+    if (userInfo?.id) {
+      fetchUserToken()
+      fetchServerAccount()
+    }
+  }, [fetchData, fetchUserToken, fetchServerAccount, userInfo?.id])
 
   const handleGenerateToken = () => {
     Modal.confirm({
