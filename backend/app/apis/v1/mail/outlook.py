@@ -111,32 +111,75 @@ async def check_email_status(
 
 # 检测邮箱状态并更新
 async def check_and_update_emails_logic(
-        status: int | None = Query(None, description='状态(1:正常,4:异常)'),
-        email_type: EmailType | None = Query(None, description='邮箱类型'),
-        create_time_start: str | int | None = Query(
-            None, description='创建时间开始 (支持 YYYY-MM-DD / YYYY-MM-DD HH:mm:ss / 13位时间戳)'),
-        create_time_end: str | int | None = Query(
-            None, description='创建时间结束 (支持 YYYY-MM-DD / YYYY-MM-DD HH:mm:ss / 13位时间戳)'),
-        update_time_start: str | int | None = Query(
-            None, description='更新时间开始 (支持 YYYY-MM-DD / YYYY-MM-DD HH:mm:ss / 13位时间戳)'),
-        update_time_end: str | int | None = Query(
-            None, description='更新时间结束 (支持 YYYY-MM-DD / YYYY-MM-DD HH:mm:ss / 13位时间戳)'),
+        status: int | None = None,
+        email_type: EmailType | None = None,
+        create_time_start: str | int | None = None,
+        create_time_end: str | int | None = None,
+        update_time_start: str | int | None = None,
+        update_time_end: str | int | None = None,
 ) -> int:
-    emails = await email_info_crud.get_multi(
-        status=status,
-        limit=10000,
-        email_type=email_type,
-        create_time_start=create_time_start,
-        create_time_end=create_time_end,
-        update_time_start=update_time_start,
-        update_time_end=update_time_end,
-    )
-    for email in emails:
-        manager = AzureAuthManager(email.email)
-        res = await manager.get_emails_main('@', 1, 1)
-        email.status = 4 if res == 0 else 1
-        await email.save()
-    return len(emails)
+    """
+    分批检测邮箱状态并更新
+    使用分页方式避免一次性查询过多数据导致内存问题
+    """
+    batch_size = 100  # 每批处理100条
+    page = 1
+    total_checked = 0
+    
+    logger.info(f"开始检查邮箱状态，条件: status={status}, email_type={email_type}")
+    
+    while True:
+        try:
+            # 分批查询
+            result = await email_info_crud.get_multi(
+                status=status,
+                page=page,
+                limit=batch_size,
+                email_type=email_type,
+                create_time_start=create_time_start,
+                create_time_end=create_time_end,
+                update_time_start=update_time_start,
+                update_time_end=update_time_end,
+            )
+            
+            emails = result.items
+            if not emails:
+                break
+            
+            # 处理当前批次
+            for email in emails:
+                try:
+                    manager = AzureAuthManager(email.email)
+                    res = await manager.get_emails_main('@', 1, 1)
+                    new_status = 4 if res == 0 else 1
+                    
+                    # 只在状态变化时更新
+                    if email.status != new_status:
+                        await EmailInfo.filter(id=email.id).update(status=new_status)
+                        logger.info(f"邮箱 {email.email} 状态更新: {email.status} -> {new_status}")
+                    
+                    total_checked += 1
+                except Exception as e:
+                    logger.error(f"检查邮箱 {email.email} 失败: {str(e)}")
+                    continue
+            
+            # 如果返回的数量少于批次大小，说明已经是最后一批
+            if len(emails) < batch_size:
+                break
+            
+            page += 1
+            
+        except HTTPException as e:
+            # 404 表示没有更多数据
+            if e.status_code == 404:
+                break
+            raise
+        except Exception as e:
+            logger.error(f"批量检查邮箱状态失败: {str(e)}")
+            break
+    
+    logger.info(f"邮箱状态检查完成，共检查 {total_checked} 个邮箱")
+    return total_checked
 
 
 # 自动检查邮箱状态
