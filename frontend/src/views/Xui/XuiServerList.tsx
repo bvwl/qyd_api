@@ -21,6 +21,7 @@ const XuiServerList = () => {
   const [modalVisible, setModalVisible] = useState(false)
   const [editingServer, setEditingServer] = useState<XuiServer | null>(null)
   const [showPassword, setShowPassword] = useState<Record<string, boolean>>({})
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
   const [form] = Form.useForm()
   const { hasPermission } = useUserStore()
 
