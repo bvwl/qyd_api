@@ -210,12 +210,52 @@ const ServerList = () => {
     
     const typeText = proxyType === 'http' ? 'HTTP' : proxyType === 'socks5' ? 'SOCKS5' : ''
     
-    navigator.clipboard.writeText(proxyUrl).then(() => {
-      message.success(`${typeText} 代理信息已复制到剪贴板`)
-    }).catch((err) => {
-      console.error('复制失败:', err)
+    // 检查 clipboard API 是否可用
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(proxyUrl).then(() => {
+        message.success(`${typeText} 代理信息已复制到剪贴板`)
+      }).catch((err) => {
+        console.error('复制失败:', err)
+        // 降级到传统方法
+        fallbackCopyTextToClipboard(proxyUrl, typeText)
+      })
+    } else {
+      // 使用传统方法
+      fallbackCopyTextToClipboard(proxyUrl, typeText)
+    }
+  }
+
+  // 降级复制方法（兼容旧浏览器或 HTTP 环境）
+  const fallbackCopyTextToClipboard = (text: string, typeText: string) => {
+    const textArea = document.createElement('textarea')
+    textArea.value = text
+    textArea.style.position = 'fixed'
+    textArea.style.top = '0'
+    textArea.style.left = '0'
+    textArea.style.width = '2em'
+    textArea.style.height = '2em'
+    textArea.style.padding = '0'
+    textArea.style.border = 'none'
+    textArea.style.outline = 'none'
+    textArea.style.boxShadow = 'none'
+    textArea.style.background = 'transparent'
+    document.body.appendChild(textArea)
+    textArea.focus()
+    textArea.select()
+    
+    try {
+      const successful = document.execCommand('copy')
+      if (successful) {
+        message.success(`${typeText} 代理信息已复制到剪贴板`)
+      } else {
+        message.error('复制失败，请手动复制')
+      }
+    } catch (err) {
+      console.error('降级复制方法失败:', err)
       message.error('复制失败，请手动复制')
-    })
+    }
+    
+    document.body.removeChild(textArea)
   }
 
   const handleTestProxy = async (proxyUrl?: string, serverId?: string) => {
