@@ -387,15 +387,17 @@ const ServerList = () => {
           >
             复制代理
           </Button>
-          <Button
-            type="link"
-            icon={testingProxy === record.id ? <Spin size="small" /> : <ApiOutlined />}
-            onClick={() => handleTestProxy(record.proxy_url, record.id)}
-            disabled={testingProxy === record.id}
-            title="测试代理是否可用（服务器端测试）"
-          >
-            测试代理
-          </Button>
+          {record.proxy_type === 'http' && (
+            <Button
+              type="link"
+              icon={testingProxy === record.id ? <Spin size="small" /> : <ApiOutlined />}
+              onClick={() => handleTestProxy(record.proxy_url, record.id)}
+              disabled={testingProxy === record.id}
+              title="测试代理是否可用（服务器端测试，仅支持HTTP代理）"
+            >
+              测试代理
+            </Button>
+          )}
           {isAdmin && (
             <>
               <Button
