@@ -386,14 +386,25 @@ class XuiOperationCRUD:
                             )
                             logger.info(f'创建服务器分组: {group_name}')
                         
-                        # 查找或创建 ServerInfo
+                        # 从 remark 中提取 host（格式：IP-备注，如 82.21.201.98-socks）
+                        # 如果 remark 包含 '-'，取 '-' 前面的部分作为 host
+                        # 否则使用 listen_host
+                        if remark and '-' in remark:
+                            extracted_host = remark.split('-')[0].strip()
+                            logger.info(f'从备注提取 host: {remark} -> {extracted_host}')
+                        else:
+                            extracted_host = listen_host
+                            logger.info(f'备注无效，使用 listen_host: {extracted_host}')
+                        
+                        # 查找或创建 ServerInfo（使用提取的 host）
                         server_info = await ServerInfo.get_or_none(
-                            host=listen_host,
+                            host=extracted_host,
                             port=port
                         )
                         
                         if server_info:
                             # 更新现有 ServerInfo
+                            server_info.host = extracted_host  # 更新 host
                             server_info.group_id = group.id
                             server_info.status = 1 if enable else 2
                             # 同步域名（如果 XUI 服务器有域名）
@@ -404,11 +415,11 @@ class XuiOperationCRUD:
                                 server_info.ssh_port = 9527
                             await server_info.save()
                             server_info_updated += 1
-                            logger.info(f'更新服务器信息: {listen_host}:{port} -> 分组: {group_name}, 域名: {server.domain or "无"}')
+                            logger.info(f'更新服务器信息: {extracted_host}:{port} -> 分组: {group_name}, 域名: {server.domain or "无"}')
                         else:
                             # 创建新 ServerInfo
                             await ServerInfo.create(
-                                host=listen_host,
+                                host=extracted_host,  # 使用提取的 host
                                 port=port,
                                 ssh_port=9527,  # 默认 SSH 端口
                                 domain=server.domain,  # 同步域名
@@ -417,7 +428,7 @@ class XuiOperationCRUD:
                                 is_sale=1  # 默认为销售
                             )
                             server_info_created += 1
-                            logger.info(f'创建服务器信息: {listen_host}:{port} -> 分组: {group_name}, 域名: {server.domain or "无"}')
+                            logger.info(f'创建服务器信息: {extracted_host}:{port} -> 分组: {group_name}, 域名: {server.domain or "无"}')
                     
                     except Exception as e:
                         error_msg = f'同步 ServerInfo 失败 (port={port}): {str(e)}'
