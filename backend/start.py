@@ -51,7 +51,8 @@ def run_server() -> None:
     port = int(os.getenv("APP_PORT", "6080"))
     # 修复：正确判断 DEBUG 模式
     reload = os.getenv("APP_DEBUG", "0").lower() in ("1", "true", "yes")
-    workers = int(os.getenv("APP_WORKERS", "1"))
+    # 支持 WORKERS 和 APP_WORKERS 两种环境变量（WORKERS 优先）
+    workers = int(os.getenv("WORKERS") or os.getenv("APP_WORKERS", "1"))
     
     # uvicorn 配置
     log_level = os.getenv("LOG_LEVEL", "info").lower()

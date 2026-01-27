@@ -185,9 +185,9 @@ async def sync_inbounds_from_panel(
     background_tasks.add_task(sync_inbounds_task, server_id)
     
     return XuiOperationResponse(
+        success=True,
         message="同步入站配置任务已提交，正在后台执行",
-        status="success",
-        details={"server_id": str(server_id), "task": "sync_inbounds"}
+        data={"server_id": str(server_id), "task": "sync_inbounds"}
     )
 
 
