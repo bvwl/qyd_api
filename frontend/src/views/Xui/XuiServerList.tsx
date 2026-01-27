@@ -83,47 +83,23 @@ const XuiServerList = () => {
     try {
       const res = await syncXuiInbounds(id)
       
-      // 构建详细的同步结果消息
-      const inboundMsg = `入站: 创建 ${res.data.inbound_created} 个，更新 ${res.data.inbound_updated} 个，跳过 ${res.data.inbound_skipped} 个`
-      const serverInfoMsg = `服务器信息: 创建 ${res.data.server_info_created} 个，更新 ${res.data.server_info_updated} 个`
-      
-      let fullMessage = `同步完成！\n${inboundMsg}\n${serverInfoMsg}`
-      
-      // 如果有错误，添加错误信息
-      if (res.data.errors && res.data.errors.length > 0) {
-        fullMessage += `\n错误: ${res.data.errors.length} 个`
-      }
-      
-      // 使用 Modal 显示详细信息
+      // 后台任务已提交，显示提示信息
       Modal.success({
-        title: '同步成功',
+        title: '同步任务已提交',
         content: (
-          <div style={{ whiteSpace: 'pre-line' }}>
-            <p><strong>入站同步：</strong></p>
-            <p>• 创建: {res.data.inbound_created} 个</p>
-            <p>• 更新: {res.data.inbound_updated} 个</p>
-            <p>• 跳过: {res.data.inbound_skipped} 个</p>
-            <p><strong>服务器信息同步：</strong></p>
-            <p>• 创建: {res.data.server_info_created} 个</p>
-            <p>• 更新: {res.data.server_info_updated} 个</p>
-            {res.data.errors && res.data.errors.length > 0 && (
-              <>
-                <p style={{ color: '#ff4d4f', marginTop: 8 }}><strong>错误信息：</strong></p>
-                {res.data.errors.slice(0, 5).map((error: string, index: number) => (
-                  <p key={index} style={{ color: '#ff4d4f', fontSize: '12px' }}>• {error}</p>
-                ))}
-                {res.data.errors.length > 5 && (
-                  <p style={{ color: '#ff4d4f', fontSize: '12px' }}>... 还有 {res.data.errors.length - 5} 个错误</p>
-                )}
-              </>
-            )}
+          <div>
+            <p>{res.message}</p>
+            <p style={{ marginTop: 8, color: '#666' }}>
+              任务正在后台执行，请稍后刷新页面查看结果。
+            </p>
           </div>
         ),
-        width: 500,
       })
       
-      // 刷新列表
-      fetchData()
+      // 3秒后自动刷新列表
+      setTimeout(() => {
+        fetchData()
+      }, 3000)
     } catch (error: any) {
       message.error(error.response?.data?.detail || '同步失败')
     }

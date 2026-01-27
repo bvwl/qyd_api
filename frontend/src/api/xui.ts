@@ -125,19 +125,14 @@ export const removeAccountFromInbound = (inboundId: string, accountId: string) =
 
 // ==================== XUI 操作 API ====================
 
-// 同步入站配置
+// 同步入站配置（后台任务）
 export const syncXuiInbounds = (serverId: string) => {
   return api.post<any, {
-    code: number
+    success: boolean
     message: string
     data: {
       server_id: string
-      server_name: string
-      inbound_count: number
-      server_info_count: number
-      created: number
-      updated: number
-      skipped: number
+      task: string
     }
   }>(`/v1/xui/operation/sync-inbounds/${serverId}`)
 }
