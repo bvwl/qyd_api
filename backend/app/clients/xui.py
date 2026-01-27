@@ -4,6 +4,7 @@ XUI 面板 API 客户端
 """
 import base64
 import json
+import os
 from typing import Optional, Dict, List, Any, Tuple
 
 from aiohttp import ClientSession
@@ -85,7 +86,7 @@ class XuiClient:
             url: 请求 URL
             headers: 请求头
             cookies: Cookies
-            proxy_url: 代理 URL (http/socks5)
+            proxy_url: 代理 URL (http/socks5)，如果为 None 则尝试从环境变量读取
             **kwargs: 其他参数 (data, json, ssl 等)
             
         Returns:
@@ -98,6 +99,16 @@ class XuiClient:
             }
         """
         connector = None
+        
+        # 如果没有指定代理，尝试从环境变量读取
+        if proxy_url is None:
+            # 优先使用 HTTPS_PROXY，其次 HTTP_PROXY
+            env_proxy = os.getenv('HTTPS_PROXY') or os.getenv('https_proxy') or \
+                       os.getenv('HTTP_PROXY') or os.getenv('http_proxy')
+            if env_proxy:
+                proxy_url = env_proxy
+                logger.debug(f'使用环境变量代理: {proxy_url}')
+        
         if proxy_url:
             connector = ProxyConnector.from_url(proxy_url)
         
