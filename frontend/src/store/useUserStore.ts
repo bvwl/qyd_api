@@ -108,6 +108,11 @@ export const useUserStore = create<UserState>()(
           return true
         }
         
+        // 如果 permissions 未初始化，返回 false
+        if (!permissions || !Array.isArray(permissions)) {
+          return false
+        }
+        
         // 支持单个权限或权限数组
         if (Array.isArray(permission)) {
           // 检查是否有任何一个权限或角色匹配
@@ -137,6 +142,11 @@ export const useUserStore = create<UserState>()(
           return true
         }
         
+        // 如果 permissions 未初始化，返回 false
+        if (!permissions || !Array.isArray(permissions)) {
+          return false
+        }
+        
         return permissionList.some(p => permissions.includes(p))
       },
 
@@ -146,6 +156,11 @@ export const useUserStore = create<UserState>()(
         // 管理员拥有所有权限
         if (userInfo?.roles?.some(role => role.code === 'ADMIN')) {
           return true
+        }
+        
+        // 如果 permissions 未初始化，返回 false
+        if (!permissions || !Array.isArray(permissions)) {
+          return false
         }
         
         return permissionList.every(p => permissions.includes(p))
