@@ -4,7 +4,7 @@ import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, CopyOutline
 import type { ServerInfo, ServerGroup } from '@/types'
 import { Status } from '@/types'
 import { getServerList, createServer, updateServer, deleteServer, getGroupList } from '@/api/server'
-import { checkProxyDirect } from '@/api/system'
+import { checkProxy } from '@/api/system'
 import { useUserStore } from '@/store/useUserStore'
 import { Dayjs } from 'dayjs'
 import { filterEmptyStrings } from '@/utils/form'
@@ -260,7 +260,8 @@ const ServerList = () => {
     setTestingProxy(serverId || null)
     
     try {
-      const result = await checkProxyDirect(proxyUrl)
+      // 使用后端 API 测试代理（在服务器上测试）
+      const result = await checkProxy(proxyUrl)
       
       if (result.status === 'success') {
         Modal.success({
@@ -270,7 +271,7 @@ const ServerList = () => {
               <p><strong>代理地址：</strong>{proxyUrl}</p>
               <p><strong>检测IP：</strong>{result.ip}</p>
               <p><strong>检测来源：</strong>{result.source}</p>
-              <p style={{ color: '#52c41a', marginTop: 8 }}>✅ 代理可用</p>
+              <p style={{ color: '#52c41a', marginTop: 8 }}>✅ 代理可用（服务器端测试）</p>
             </div>
           ),
         })
@@ -280,7 +281,7 @@ const ServerList = () => {
           content: (
             <div>
               <p><strong>代理地址：</strong>{proxyUrl}</p>
-              <p style={{ color: '#ff4d4f', marginTop: 8 }}>❌ 代理不可用</p>
+              <p style={{ color: '#ff4d4f', marginTop: 8 }}>❌ 代理不可用（服务器端测试）</p>
               <p><strong>原因：</strong>{result.details?.error || result.message}</p>
             </div>
           ),
@@ -386,17 +387,15 @@ const ServerList = () => {
           >
             复制代理
           </Button>
-          {record.proxy_type === 'http' && (
-            <Button
-              type="link"
-              icon={testingProxy === record.id ? <Spin size="small" /> : <ApiOutlined />}
-              onClick={() => handleTestProxy(record.proxy_url, record.id)}
-              disabled={testingProxy === record.id}
-              title="测试代理是否可用"
-            >
-              测试代理
-            </Button>
-          )}
+          <Button
+            type="link"
+            icon={testingProxy === record.id ? <Spin size="small" /> : <ApiOutlined />}
+            onClick={() => handleTestProxy(record.proxy_url, record.id)}
+            disabled={testingProxy === record.id}
+            title="测试代理是否可用（服务器端测试）"
+          >
+            测试代理
+          </Button>
           {isAdmin && (
             <>
               <Button
