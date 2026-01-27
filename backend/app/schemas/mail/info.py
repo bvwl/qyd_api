@@ -100,9 +100,9 @@ class Out(Base):
             return ""
         host = server.domain or server.host
         if self.proxy_type == "http":
-            return f"http://username:password@{host}:{server.port}"
+            return f"http://cqrxy:Zpaily88@{host}:{server.port}"
         if self.proxy_type == "socks5":
-            return f"socks5://username:password@{host}:{server.port}"
+            return f"socks5://cqrxy:Zpaily88@{host}:{server.port}"
         return ""
 
     @field_serializer('create_time', 'update_time')

@@ -57,15 +57,11 @@ const ServerList = () => {
         update_time_end: updateTimeRange?.[1]?.format('YYYY-MM-DD'),
       })
       
-      console.log('服务器列表数据:', res)
-      console.log('第一条数据:', res.items?.[0])
-      
       const items = res.items || []
       
       setData(items)
       setTotal(res.count || 0)
     } catch (error) {
-      console.error('获取服务器列表失败:', error)
       // 404 表示无数据，静默处理
       setData([])
       setTotal(0)
@@ -200,11 +196,8 @@ const ServerList = () => {
   }
 
   const handleCopyProxyUrl = (proxyUrl?: string, proxyType?: string) => {
-    console.log('复制代理 - proxyUrl:', proxyUrl, 'proxyType:', proxyType)
-    
     if (!proxyUrl || proxyUrl === '') {
       message.warning('代理信息不可用，请检查服务器配置')
-      console.error('代理URL为空')
       return
     }
     
@@ -259,11 +252,8 @@ const ServerList = () => {
   }
 
   const handleTestProxy = async (proxyUrl?: string, serverId?: string) => {
-    console.log('测试代理 - proxyUrl:', proxyUrl, 'serverId:', serverId)
-    
     if (!proxyUrl || proxyUrl === '') {
       message.warning('代理信息不可用，请检查服务器配置')
-      console.error('代理URL为空')
       return
     }
 
@@ -297,7 +287,6 @@ const ServerList = () => {
         })
       }
     } catch (error: any) {
-      console.error('测试代理失败:', error)
       Modal.error({
         title: '代理检测失败',
         content: (

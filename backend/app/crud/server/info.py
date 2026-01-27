@@ -44,11 +44,6 @@ class CRUD:
         if current_user:
             user_id = current_user.get('user_id') or current_user.get('id')
             
-            # 添加日志
-            from app.utils.logs import getLogger
-            logger = getLogger('api')
-            logger.info(f"生成代理URL - 用户ID: {user_id}, 用户信息: {current_user}")
-            
             if user_id:
                 from app.models.server import ServerAccount
                 
@@ -58,26 +53,17 @@ class CRUD:
                     
                     if account:
                         username = account.username
-                        logger.info(f"找到服务器账号 - 用户名: {username}")
                         
                         # 解密密码（使用 user_id 作为密钥）
                         try:
                             password = aes_decrypt(account.password, str(user_id))
-                            logger.info(f"密码解密成功")
-                        except Exception as e:
+                        except Exception:
                             # 解密失败，使用默认密码
-                            logger.error(f"密码解密失败: {e}")
                             password = "password"
-                    else:
-                        logger.warning(f"未找到用户 {user_id} 的服务器账号，使用默认账号密码")
                         
-                except Exception as e:
+                except Exception:
                     # 查询失败，使用默认账号密码
-                    logger.error(f"查询服务器账号失败: {e}")
-        else:
-            from app.utils.logs import getLogger
-            logger = getLogger('api')
-            logger.warning("未提供用户信息，使用默认账号密码")
+                    pass
         
         # 生成代理URL
         host = server.domain if server.domain else server.host
