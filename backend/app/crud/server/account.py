@@ -40,9 +40,8 @@ class CRUD:
     # 获取账号并解密密码
     async def get_with_password(self, id: UUID) -> Out:
         """
-        获取服务器账号并解密密码
-        - 仅用于需要查看密码的场景
-        - 直接在 password 字段返回解密后的明文
+        获取服务器账号，返回固定密码
+        - 统一使用固定账号密码：cqrxy:Zpaily88
         """
         res = await ServerAccount.get_or_none(id=id)
         if not res:
@@ -51,13 +50,8 @@ class CRUD:
         
         result = Out.model_validate(res)
         
-        # 解密密码并直接替换 password 字段
-        if res.user_id:
-            try:
-                decrypted_password = aes_decrypt(res.password, str(res.user_id))
-                result.password = decrypted_password  # 直接替换 password 字段
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=f'密码解密失败: {str(e)}')
+        # 使用固定密码
+        result.password = "Zpaily88"
         
         return result
 
@@ -167,16 +161,12 @@ class CRUD:
                     'server': inbound.server
                 })
         
-        # 如果是管理员，自动解密所有密码并替换 password 字段
+        # 如果是管理员，返回固定密码
         for obj in res:
             item = Out.model_validate(obj)
-            if is_admin and obj.user_id:
-                try:
-                    decrypted_password = aes_decrypt(obj.password, str(obj.user_id))
-                    item.password = decrypted_password  # 直接替换 password 字段
-                except Exception:
-                    # 解密失败，保持原密文
-                    pass
+            if is_admin:
+                # 使用固定密码
+                item.password = "Zpaily88"
             
             # 添加代理类型和入站信息
             account_id = str(obj.id)
@@ -256,11 +246,10 @@ class CRUD:
     async def generate_account(self, user_id: UUID) -> Out:
         """
         为用户生成服务器账号（SOCKS5代理账号）
-        - 如果用户已有账号，返回现有账号（包含解密后的密码）
+        - 如果用户已有账号，返回现有账号（使用固定密码）
         - 如果没有，创建新账号
         - 用户名格式：user_{user_id前8位}，如果重复则添加随机后缀
-        - 密码：随机生成12位强密码
-        - 加密方式：AES-CBC，key=MD5(user_id+"9527")，iv=MD5("9527"+user_id)前16位
+        - 密码：统一使用固定密码 Zpaily88
         """
         # 检查用户是否存在
         user = await UserInfo.get_or_none(id=user_id)
@@ -272,13 +261,8 @@ class CRUD:
         if existing_account:
             await existing_account.fetch_related('user')
             result = Out.model_validate(existing_account)
-            # 解密密码并直接替换 password 字段
-            try:
-                decrypted_password = aes_decrypt(existing_account.password, str(user_id))
-                result.password = decrypted_password  # 直接替换 password 字段
-            except Exception:
-                # 解密失败，保持原密文
-                pass
+            # 使用固定密码
+            result.password = "Zpaily88"
             return result
         
         # 生成用户名：user_{user_id前8位}
@@ -297,9 +281,8 @@ class CRUD:
             if attempt > 10:
                 raise HTTPException(status_code=500, detail='生成用户名失败，请重试')
         
-        # 生成随机密码：12位，包含大小写字母和数字
-        password_chars = string.ascii_letters + string.digits
-        raw_password = ''.join(secrets.choice(password_chars) for _ in range(12))
+        # 使用固定密码
+        raw_password = "Zpaily88"
         
         # 使用AES加密密码（每个用户不同的密钥）
         encrypted_password = aes_encrypt(raw_password, str(user_id))
@@ -315,7 +298,7 @@ class CRUD:
         
         # 返回时直接在 password 字段返回明文密码
         result = Out.model_validate(account)
-        result.password = raw_password  # 直接替换 password 字段为明文
+        result.password = raw_password  # 固定密码
         
         return result
 

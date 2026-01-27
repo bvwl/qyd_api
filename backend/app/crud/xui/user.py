@@ -130,27 +130,16 @@ class XuiInboundAccountCRUD:
         
         inbound_info = f"{inbound.listen_host}:{inbound.listen_port}"
         
-        # 解密账号密码
-        try:
-            password = aes_decrypt(account.password, str(account.user_id) if account.user_id else account.username)
-        except Exception as e:
-            logger.warning(f'解密账号密码失败: {e}')
-            # 记录失败日志
-            await XuiOperationLog.create(
-                inbound_id=inbound_id,
-                inbound_info=inbound_info,
-                account_id=account_id,
-                account_username=account.username,
-                error_message=f'解密密码失败: {str(e)}'
-            )
-            raise HTTPException(status_code=500, detail='解密账号密码失败')
+        # 使用固定账号密码
+        username = "cqrxy"
+        password = "Zpaily88"
         
         # 在 XUI 面板中添加用户
         try:
             success = await client.add_user_to_inbound(
                 host=inbound.listen_host,
                 port=inbound.listen_port,
-                username=account.username,
+                username=username,
                 password=password
             )
             
@@ -211,19 +200,16 @@ class XuiInboundAccountCRUD:
         # 获取 XUI 客户端
         client, inbound = await self._get_xui_client_for_inbound(inbound_id)
         
-        # 解密账号密码
-        try:
-            password = aes_decrypt(account.password, str(account.user_id) if account.user_id else account.username)
-        except Exception as e:
-            logger.warning(f'解密账号密码失败: {e}')
-            password = 'unknown'
+        # 使用固定账号密码
+        username = "cqrxy"
+        password = "Zpaily88"
         
         # 从 XUI 面板中删除用户
         try:
             await client.remove_user_from_inbound(
                 host=inbound.listen_host,
                 port=inbound.listen_port,
-                username=account.username,
+                username=username,
                 password=password
             )
         except Exception as e:

@@ -11,11 +11,11 @@ from app.core.tools import aes_encrypt, aes_decrypt
 class CRUD:
     async def _generate_proxy_url(self, server: ServerInfo, current_user: dict | None = None) -> tuple[str, str]:
         """
-        生成代理URL和代理类型，使用JWT用户对应的服务器账号
+        生成代理URL和代理类型，使用固定的服务器账号密码
         
         Args:
             server: 服务器信息对象
-            current_user: JWT 用户信息字典，包含 user_id
+            current_user: JWT 用户信息字典（已不使用，保留参数以兼容）
         
         Returns:
             tuple[str, str]: (proxy_url, proxy_type)
@@ -36,34 +36,9 @@ class CRUD:
             proxy_type = "socks5"
             protocol = "socks5"
         
-        # 默认账号密码
-        username = "username"
-        password = "password"
-        
-        # 如果有用户信息，获取用户对应的服务器账号
-        if current_user:
-            user_id = current_user.get('user_id') or current_user.get('id')
-            
-            if user_id:
-                from app.models.server import ServerAccount
-                
-                try:
-                    # 通过 user_id 查询服务器账号
-                    account = await ServerAccount.get_or_none(user_id=UUID(user_id))
-                    
-                    if account:
-                        username = account.username
-                        
-                        # 解密密码（使用 user_id 作为密钥）
-                        try:
-                            password = aes_decrypt(account.password, str(user_id))
-                        except Exception:
-                            # 解密失败，使用默认密码
-                            password = "password"
-                        
-                except Exception:
-                    # 查询失败，使用默认账号密码
-                    pass
+        # 使用固定账号密码
+        username = "cqrxy"
+        password = "Zpaily88"
         
         # 生成代理URL
         host = server.domain if server.domain else server.host
