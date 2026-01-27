@@ -1,6 +1,7 @@
 # 后端服务器专用 Docker Compose 配置
 # 用于部署 Backend API + Queue Worker
 # 注意：Redis 使用外部已部署的服务器，不在此启动
+# 使用 host 网络模式以便直接访问宿主机代理
 
 version: '3.8'
 
@@ -12,18 +13,17 @@ services:
       target: backend-api
     container_name: qyd-backend-api
     restart: unless-stopped
-    ports:
-      - "6080:6080"
+    network_mode: "host"  # 使用 host 网络模式，直接访问宿主机代理
     environment:
-      # 代理配置（使用宿主机代理）
-      - HTTP_PROXY=http://host.docker.internal:7890
-      - HTTPS_PROXY=http://host.docker.internal:7890
-      - ALL_PROXY=socks5h://host.docker.internal:7891
-      - NO_PROXY=localhost,127.0.0.1,::1,host.docker.internal
-      - http_proxy=http://host.docker.internal:7890
-      - https_proxy=http://host.docker.internal:7890
-      - all_proxy=socks5h://host.docker.internal:7891
-      - no_proxy=localhost,127.0.0.1,::1,host.docker.internal
+      # 代理配置（host 网络模式下直接使用 127.0.0.1）
+      - HTTP_PROXY=http://127.0.0.1:7890
+      - HTTPS_PROXY=http://127.0.0.1:7890
+      - ALL_PROXY=socks5h://127.0.0.1:7891
+      - NO_PROXY=localhost,127.0.0.1,::1
+      - http_proxy=http://127.0.0.1:7890
+      - https_proxy=http://127.0.0.1:7890
+      - all_proxy=socks5h://127.0.0.1:7891
+      - no_proxy=localhost,127.0.0.1,::1
       
       # 数据库配置
       - DB_HOST=${DB_HOST:-192.168.1.30}
@@ -76,11 +76,6 @@ services:
       # 日志映射到宿主机
       - ./logs:/app/logs
       - ./backend/status:/app/status
-    extra_hosts:
-      # 允许容器访问宿主机代理
-      - "host.docker.internal:host-gateway"
-    networks:
-      - qyd-network
     healthcheck:
       test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:6080/docs', timeout=5)"]
       interval: 30s
@@ -95,16 +90,17 @@ services:
       target: queue-worker
     container_name: qyd-queue-worker
     restart: unless-stopped
+    network_mode: "host"  # 使用 host 网络模式，直接访问宿主机代理
     environment:
-      # 代理配置（使用宿主机代理）
-      - HTTP_PROXY=http://host.docker.internal:7890
-      - HTTPS_PROXY=http://host.docker.internal:7890
-      - ALL_PROXY=socks5h://host.docker.internal:7891
-      - NO_PROXY=localhost,127.0.0.1,::1,host.docker.internal
-      - http_proxy=http://host.docker.internal:7890
-      - https_proxy=http://host.docker.internal:7890
-      - all_proxy=socks5h://host.docker.internal:7891
-      - no_proxy=localhost,127.0.0.1,::1,host.docker.internal
+      # 代理配置（host 网络模式下直接使用 127.0.0.1）
+      - HTTP_PROXY=http://127.0.0.1:7890
+      - HTTPS_PROXY=http://127.0.0.1:7890
+      - ALL_PROXY=socks5h://127.0.0.1:7891
+      - NO_PROXY=localhost,127.0.0.1,::1
+      - http_proxy=http://127.0.0.1:7890
+      - https_proxy=http://127.0.0.1:7890
+      - all_proxy=socks5h://127.0.0.1:7891
+      - no_proxy=localhost,127.0.0.1,::1
       
       # 数据库配置
       - DB_HOST=${DB_HOST:-192.168.1.30}
@@ -144,12 +140,4 @@ services:
       # 日志映射到宿主机
       - ./logs:/app/logs
       - ./backend/status:/app/status
-    extra_hosts:
-      # 允许容器访问宿主机代理
-      - "host.docker.internal:host-gateway"
-    networks:
-      - qyd-network
 
-networks:
-  qyd-network:
-    driver: bridge
