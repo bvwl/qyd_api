@@ -79,6 +79,66 @@ const XuiServerList = () => {
     }
   }
 
+  const handleBatchDelete = async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要删除的服务器')
+      return
+    }
+
+    Modal.confirm({
+      title: '批量删除确认',
+      content: `确定要删除选中的 ${selectedRowKeys.length} 个服务器吗？`,
+      okText: '确定',
+      cancelText: '取消',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        let successCount = 0
+        let failCount = 0
+        const errors: string[] = []
+
+        for (const id of selectedRowKeys) {
+          try {
+            await deleteXuiServer(id as string)
+            successCount++
+          } catch (error: any) {
+            failCount++
+            const server = data.find(item => item.id === id)
+            errors.push(`${server?.name} - ${error.response?.data?.detail || '删除失败'}`)
+          }
+        }
+
+        if (failCount === 0) {
+          message.success(`成功删除 ${successCount} 个服务器`)
+        } else {
+          Modal.warning({
+            title: '批量删除完成',
+            content: (
+              <div>
+                <p>成功: {successCount} 个</p>
+                <p>失败: {failCount} 个</p>
+                {errors.length > 0 && (
+                  <>
+                    <p style={{ marginTop: 8, fontWeight: 'bold' }}>失败详情:</p>
+                    {errors.slice(0, 5).map((error, index) => (
+                      <p key={index} style={{ fontSize: '12px', color: '#ff4d4f' }}>• {error}</p>
+                    ))}
+                    {errors.length > 5 && (
+                      <p style={{ fontSize: '12px', color: '#ff4d4f' }}>... 还有 {errors.length - 5} 个错误</p>
+                    )}
+                  </>
+                )}
+              </div>
+            ),
+            width: 500,
+          })
+        }
+
+        setSelectedRowKeys([])
+        fetchData()
+      },
+    })
+  }
+
   const handleSync = async (id: string) => {
     try {
       const res = await syncXuiInbounds(id)
@@ -292,12 +352,34 @@ const XuiServerList = () => {
         )}
       </div>
 
+      {isAdmin && selectedRowKeys.length > 0 && (
+        <div style={{ marginBottom: 16, padding: '12px', background: '#f0f2f5', borderRadius: '4px' }}>
+          <Space>
+            <span>已选择 {selectedRowKeys.length} 项</span>
+            <Button
+              danger
+              icon={<DeleteOutlined />}
+              onClick={handleBatchDelete}
+            >
+              批量删除
+            </Button>
+            <Button onClick={() => setSelectedRowKeys([])}>
+              取消选择
+            </Button>
+          </Space>
+        </div>
+      )}
+
       <Table
         columns={columns}
         dataSource={data}
         rowKey="id"
         loading={loading}
         scroll={{ x: 1500 }}
+        rowSelection={isAdmin ? {
+          selectedRowKeys,
+          onChange: (selectedRowKeys) => setSelectedRowKeys(selectedRowKeys),
+        } : undefined}
         pagination={{
           current: page,
           pageSize: pageSize,
