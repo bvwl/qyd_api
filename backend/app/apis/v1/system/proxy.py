@@ -20,105 +20,80 @@ class ProxyCheckOut(BaseModel):
 
 @app.get("/check", response_model=ProxyCheckOut, description="检测代理是否可用", summary="代理检测")
 async def check_proxy(
-    proxy_url: str | None = Query(None, description="代理地址（http://ip:port 或 socks5h://ip:port）"),
+    proxy_url: str | None = Query(None, description="代理地址（http://ip:port 或 socks5://ip:port）"),
     current_user: dict = Depends(get_current_user)
 ):
     """
     检测代理是否可用
     
     功能说明：
-    - 依次访问 3 个 IP 检测网站
-    - 如果任一网站返回 200，则认为代理可用
-    - 如果 3 个网站都访问失败，则认为代理不可用
-    - 不提供代理地址时，检测本机网络
-    
-    检测网站列表：
-    1. https://api.ipify.org/ - 返回纯文本 IP
-    2. https://api.myip.com/ - 返回 JSON 格式
-    3. https://iprust.io/ip.json - 返回 JSON 格式
+    - 依次测试多个网站，任意一个返回 200 即为成功
+    - 支持 HTTP 和 SOCKS5 代理
     
     参数说明：
     - proxy_url: 代理地址（可选）
-      - HTTP 代理：http://ip:port 或 http://user:pass@ip:port
-      - SOCKS5 代理：socks5h://ip:port 或 socks5h://user:pass@ip:port
+      - HTTP 代理：http://user:pass@ip:port
+      - SOCKS5 代理：socks5://user:pass@ip:port
     
     返回说明：
     - status: success（可用）/ failed（不可用）
     - ip: 检测到的 IP 地址
     - source: 检测来源网站
-    - details: 详细信息（包含响应内容）
     """
     
-    # 检测网站列表
-    check_urls = [
-        {
-            "url": "https://api.ipify.org/",
-            "name": "ipify",
-            "type": "text"
-        },
-        {
-            "url": "https://api.myip.com/",
-            "name": "myip",
-            "type": "json"
-        },
-        {
-            "url": "https://iprust.io/ip.json",
-            "name": "iprust",
-            "type": "json"
-        }
+    import httpx
+    
+    # 测试网站列表（按优先级排序）
+    test_sites = [
+        {"url": "https://api.ipify.org/?format=json", "name": "ipify"},
+        {"url": "https://api.myip.com/", "name": "myip"},
+        {"url": "https://ifconfig.me/ip", "name": "ifconfig"},
+        {"url": "https://icanhazip.com/", "name": "icanhazip"},
     ]
     
-    # 依次检测
-    for check_site in check_urls:
+    # 构建代理配置
+    proxies = None
+    if proxy_url:
+        proxies = {
+            "http://": proxy_url,
+            "https://": proxy_url,
+        }
+    
+    # 依次测试每个网站
+    for site in test_sites:
         try:
-            # 使用 _req2 方法进行异步请求
-            result = await Req._req2(
-                method="GET",
-                url=check_site["url"],
-                proxy_url=proxy_url,
-                ran_env="chrome124"
-            )
-            
-            # 检查状态码
-            if result["code"] == 200:
-                content = result["content"]
+            async with httpx.AsyncClient(proxies=proxies, timeout=10.0, verify=False) as client:
+                response = await client.get(site["url"])
                 
-                # 解析 IP 地址
-                ip = None
-                details = {}
-                
-                if check_site["type"] == "text":
-                    # 纯文本格式，直接就是 IP
-                    ip = content.strip() if isinstance(content, str) else None
-                    details = {"raw": content}
-                elif check_site["type"] == "json":
-                    # JSON 格式，提取 IP
-                    if isinstance(content, dict):
-                        ip = content.get("ip") or content.get("IP") or content.get("query")
-                        details = content
-                    else:
-                        details = {"raw": content}
-                
-                # 返回成功结果
-                return ProxyCheckOut(
-                    message="代理检测成功" if proxy_url else "网络连接正常",
-                    status="success",
-                    proxy_url=proxy_url,
-                    ip=ip,
-                    source=check_site["name"],
-                    details=details
-                )
-                
+                if response.status_code == 200:
+                    # 解析 IP 地址
+                    ip = None
+                    try:
+                        # 尝试解析 JSON
+                        data = response.json()
+                        ip = data.get("ip") or data.get("IP") or data.get("query")
+                    except:
+                        # 纯文本格式
+                        ip = response.text.strip()
+                    
+                    return ProxyCheckOut(
+                        message="代理检测成功" if proxy_url else "网络连接正常",
+                        status="success",
+                        proxy_url=proxy_url,
+                        ip=ip,
+                        source=site["name"],
+                        details={"status_code": response.status_code}
+                    )
         except Exception as e:
-            # 当前网站检测失败，继续下一个
+            # 当前网站失败，继续测试下一个
             continue
     
-    # 所有网站都检测失败
+    # 所有网站都失败
     return ProxyCheckOut(
-        message="代理检测失败，所有检测网站均无法访问" if proxy_url else "网络连接失败，所有检测网站均无法访问",
+        message="代理检测失败，所有测试网站均无法访问" if proxy_url else "网络连接失败",
         status="failed",
         proxy_url=proxy_url,
         ip=None,
         source=None,
-        details={"error": "所有检测网站均返回非 200 状态码或请求超时"}
+        details={"error": "所有测试网站均返回非 200 状态码或请求超时"}
     )
