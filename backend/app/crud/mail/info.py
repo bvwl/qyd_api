@@ -1,5 +1,6 @@
 from uuid import UUID
 from fastapi import HTTPException
+from tortoise.expressions import Q
 
 from app.models.mail import EmailInfo
 from app.schemas.mail.info import Create, Update, Out, OutList, EmailType
@@ -73,10 +74,24 @@ class CRUD:
         # 应用邮件类型过滤
         if email_type:
             ip_is_null, token_is_null = EMAIL_TYPE_CONDITIONS.get(email_type, (None, None))
+            
+            # 过滤 server_id（IP）
             if ip_is_null is not None:
-                query = query.filter(server_id__isnull=ip_is_null)
+                if ip_is_null:
+                    # IP_NOT: server_id 为 NULL
+                    query = query.filter(server_id__isnull=True)
+                else:
+                    # IP_OK: server_id 不为 NULL
+                    query = query.filter(server_id__isnull=False)
+            
+            # 过滤 access_token（Token）
             if token_is_null is not None:
-                query = query.filter(access_token__isnull=token_is_null)
+                if token_is_null:
+                    # TOKEN_NOT: access_token 为 NULL 或空字符串
+                    query = query.filter(Q(access_token__isnull=True) | Q(access_token=''))
+                else:
+                    # TOKEN_OK: access_token 不为 NULL 且不为空字符串
+                    query = query.filter(access_token__isnull=False).exclude(access_token='')
         
         if create_time_start:
             query = query.filter(create_time__gte=parse_time(create_time_start))
