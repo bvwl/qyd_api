@@ -194,7 +194,7 @@ export default function MailList() {
       title: '邮箱',
       dataIndex: 'email',
       key: 'email',
-      width: 280,
+      width: 300,
       render: (text: string) => (
         <Space size={4}>
           <span>{text}</span>
@@ -213,12 +213,13 @@ export default function MailList() {
       title: '辅助邮箱',
       dataIndex: 'auxiliary_email',
       key: 'auxiliary_email',
-      width: 220,
+      width: 280,
     },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
+      width: 80,
       render: (status: Status) => {
         const config = STATUS_MAP[status]
         return <Tag color={config.color}>{config.text}</Tag>
@@ -228,6 +229,7 @@ export default function MailList() {
       title: 'Token状态',
       dataIndex: 'access_token',
       key: 'token_status',
+      width: 100,
       render: (token: string) => (
         <Tag color={token ? 'success' : 'default'}>
           {token ? '已授权' : '未授权'}
