@@ -112,7 +112,7 @@ const DEFAULT_MENU_ITEMS: MenuProps['items'] = [
 export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(false)
   const [profileModalVisible, setProfileModalVisible] = useState(false)
-  const [menuItems, setMenuItems] = useState<MenuProps['items']>([])
+  const [menuItems, setMenuItems] = useState<MenuProps['items']>(DEFAULT_MENU_ITEMS) // 使用默认菜单作为初始值
   const [form] = Form.useForm()
   const navigate = useNavigate()
   const location = useLocation()
