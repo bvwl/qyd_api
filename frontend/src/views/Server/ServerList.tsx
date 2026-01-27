@@ -56,6 +56,9 @@ const ServerList = () => {
         update_time_end: updateTimeRange?.[1]?.format('YYYY-MM-DD'),
       })
       
+      console.log('服务器列表数据:', res)
+      console.log('第一条数据:', res.items?.[0])
+      
       let items = res.items || []
       
       // 客户端筛选：根据代理类型过滤
@@ -67,6 +70,7 @@ const ServerList = () => {
       // 如果有代理类型筛选，总数需要重新计算
       setTotal(searchProxyType ? items.length : (res.count || 0))
     } catch (error) {
+      console.error('获取服务器列表失败:', error)
       // 404 表示无数据，静默处理
       setData([])
       setTotal(0)
@@ -201,8 +205,11 @@ const ServerList = () => {
   }
 
   const handleCopyProxyUrl = (proxyUrl?: string, proxyType?: string) => {
-    if (!proxyUrl) {
-      message.warning('代理信息不可用')
+    console.log('复制代理 - proxyUrl:', proxyUrl, 'proxyType:', proxyType)
+    
+    if (!proxyUrl || proxyUrl === '') {
+      message.warning('代理信息不可用，请检查服务器配置')
+      console.error('代理URL为空')
       return
     }
     
@@ -210,14 +217,18 @@ const ServerList = () => {
     
     navigator.clipboard.writeText(proxyUrl).then(() => {
       message.success(`${typeText} 代理信息已复制到剪贴板`)
-    }).catch(() => {
+    }).catch((err) => {
+      console.error('复制失败:', err)
       message.error('复制失败，请手动复制')
     })
   }
 
   const handleTestProxy = async (proxyUrl?: string, serverId?: string) => {
-    if (!proxyUrl) {
-      message.warning('代理信息不可用')
+    console.log('测试代理 - proxyUrl:', proxyUrl, 'serverId:', serverId)
+    
+    if (!proxyUrl || proxyUrl === '') {
+      message.warning('代理信息不可用，请检查服务器配置')
+      console.error('代理URL为空')
       return
     }
 
@@ -251,6 +262,7 @@ const ServerList = () => {
         })
       }
     } catch (error: any) {
+      console.error('测试代理失败:', error)
       Modal.error({
         title: '代理检测失败',
         content: (
