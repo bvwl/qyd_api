@@ -137,6 +137,7 @@ class CRUD:
                         host: str | None = None,
                         domain: str | None = None,
                         port: int | None = None,
+                        proxy_type: str | None = None,
                         page: int = 1,
                         limit: int = 10,
                         res_count: bool = False,
@@ -155,6 +156,16 @@ class CRUD:
             query = query.filter(domain__icontains=domain)
         if port is not None:
             query = query.filter(port=port)
+        
+        # 根据代理类型过滤
+        if proxy_type:
+            if proxy_type.lower() == 'http':
+                # HTTP 代理端口范围：22000-29999
+                query = query.filter(port__gte=22000, port__lt=30000)
+            elif proxy_type.lower() == 'socks5':
+                # SOCKS5 代理端口范围：32000-39999
+                query = query.filter(port__gte=32000, port__lt=40000)
+        
         if create_time_start:
             query = query.filter(create_time__gte=parse_time(create_time_start))
         if create_time_end:

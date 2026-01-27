@@ -63,6 +63,7 @@ export const getServerList = (params?: PaginationParams & {
   host?: string
   domain?: string
   port?: number
+  proxy_type?: string  // 添加代理类型过滤
   group_id?: string
   status?: number
   is_sale?: number

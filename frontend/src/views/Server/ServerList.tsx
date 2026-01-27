@@ -47,6 +47,7 @@ const ServerList = () => {
         host: searchHost || undefined,
         domain: searchDomain || undefined,
         port: searchPort,
+        proxy_type: searchProxyType,  // 发送到后端
         group_id: searchGroupId,
         status: searchStatus,
         is_sale: searchIsSale,
@@ -59,16 +60,10 @@ const ServerList = () => {
       console.log('服务器列表数据:', res)
       console.log('第一条数据:', res.items?.[0])
       
-      let items = res.items || []
-      
-      // 客户端筛选：根据代理类型过滤
-      if (searchProxyType) {
-        items = items.filter(item => item.proxy_type === searchProxyType)
-      }
+      const items = res.items || []
       
       setData(items)
-      // 如果有代理类型筛选，总数需要重新计算
-      setTotal(searchProxyType ? items.length : (res.count || 0))
+      setTotal(res.count || 0)
     } catch (error) {
       console.error('获取服务器列表失败:', error)
       // 404 表示无数据，静默处理
