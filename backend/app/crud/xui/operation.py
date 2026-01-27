@@ -429,6 +429,23 @@ class XuiOperationCRUD:
                     logger.error(error_msg)
                     errors.append(error_msg)
             
+            # 同步完成后，更新所有账号的入站状态
+            try:
+                from app.models.server import ServerAccount
+                from app.crud.xui.user import xui_user_crud
+                
+                # 获取所有账号
+                all_accounts = await ServerAccount.all()
+                for account in all_accounts:
+                    try:
+                        await xui_user_crud._update_account_inbound_status(account.id)
+                    except Exception as e:
+                        logger.warning(f'更新账号 {account.username} 入站状态失败: {e}')
+                
+                logger.info(f'已更新 {len(all_accounts)} 个账号的入站状态')
+            except Exception as e:
+                logger.error(f'批量更新账号入站状态失败: {e}')
+            
             # 构建响应消息
             message = f'同步完成: 创建 {created_count} 个入站，更新 {updated_count} 个入站，跳过 {skipped_count} 个'
             message += f' | 服务器信息: 创建 {server_info_created} 个，更新 {server_info_updated} 个'
