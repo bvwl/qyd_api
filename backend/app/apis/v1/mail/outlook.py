@@ -6,6 +6,7 @@ from app.schemas.mail.info import EmailType
 from app.schemas.mail.outlook import AuthUrlOut, GetTokenIn, SendMailIn, GetEmailsIn, GetEmailsOut
 from app.schemas.base import BaseOut
 from app.crud.mail.info import email_info_crud
+from app.models.mail import EmailInfo
 from app.utils.time_tool import parse_time, CN_TZ
 from app.apis.deps import get_current_user
 
