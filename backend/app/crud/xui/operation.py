@@ -432,13 +432,13 @@ class XuiOperationCRUD:
             # 同步完成后，更新所有账号的入站状态
             try:
                 from app.models.server import ServerAccount
-                from app.crud.xui.user import xui_user_crud
+                from app.crud.xui.user import xui_inbound_account_crud
                 
                 # 获取所有账号
                 all_accounts = await ServerAccount.all()
                 for account in all_accounts:
                     try:
-                        await xui_user_crud._update_account_inbound_status(account.id)
+                        await xui_inbound_account_crud._update_account_inbound_status(account.id)
                     except Exception as e:
                         logger.warning(f'更新账号 {account.username} 入站状态失败: {e}')
                 
