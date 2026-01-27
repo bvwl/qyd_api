@@ -132,6 +132,7 @@ async def check_and_update_emails_logic(
     while True:
         try:
             # 分批查询
+            logger.info(f"正在查询第 {page} 页，每页 {batch_size} 条...")
             result = await email_info_crud.get_multi(
                 status=status,
                 page=page,
@@ -145,7 +146,10 @@ async def check_and_update_emails_logic(
             
             emails = result.items
             if not emails:
+                logger.info(f"第 {page} 页没有数据，结束检查")
                 break
+            
+            logger.info(f"第 {page} 页获取到 {len(emails)} 个邮箱，开始检查...")
             
             # 处理当前批次
             for email in emails:
@@ -166,13 +170,16 @@ async def check_and_update_emails_logic(
             
             # 如果返回的数量少于批次大小，说明已经是最后一批
             if len(emails) < batch_size:
+                logger.info(f"第 {page} 页返回 {len(emails)} 条（少于 {batch_size}），这是最后一批")
                 break
             
+            logger.info(f"第 {page} 页处理完成，继续下一页...")
             page += 1
             
         except HTTPException as e:
             # 404 表示没有更多数据
             if e.status_code == 404:
+                logger.info(f"第 {page} 页查询返回404，没有更多数据")
                 break
             raise
         except Exception as e:
