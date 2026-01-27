@@ -203,11 +203,50 @@ export default function Dashboard() {
   const handleCopyToken = () => {
     if (!userToken?.token) return
     
-    navigator.clipboard.writeText(userToken.token).then(() => {
-      message.success('Token已复制到剪贴板')
-    }).catch(() => {
+    // 尝试使用现代 API
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(userToken.token).then(() => {
+        message.success('Token已复制到剪贴板')
+      }).catch(() => {
+        // 降级到传统方法
+        fallbackCopyTextToClipboard(userToken.token)
+      })
+    } else {
+      // 降级到传统方法
+      fallbackCopyTextToClipboard(userToken.token)
+    }
+  }
+  
+  // 降级复制方法（兼容旧浏览器和非 HTTPS 环境）
+  const fallbackCopyTextToClipboard = (text: string) => {
+    const textArea = document.createElement('textarea')
+    textArea.value = text
+    textArea.style.position = 'fixed'
+    textArea.style.top = '0'
+    textArea.style.left = '0'
+    textArea.style.width = '2em'
+    textArea.style.height = '2em'
+    textArea.style.padding = '0'
+    textArea.style.border = 'none'
+    textArea.style.outline = 'none'
+    textArea.style.boxShadow = 'none'
+    textArea.style.background = 'transparent'
+    document.body.appendChild(textArea)
+    textArea.focus()
+    textArea.select()
+    
+    try {
+      const successful = document.execCommand('copy')
+      if (successful) {
+        message.success('已复制到剪贴板')
+      } else {
+        message.error('复制失败，请手动复制')
+      }
+    } catch (err) {
       message.error('复制失败，请手动复制')
-    })
+    }
+    
+    document.body.removeChild(textArea)
   }
 
   const handleGenerateServerAccount = () => {
@@ -266,11 +305,15 @@ export default function Dashboard() {
   const handleCopyUsername = () => {
     if (!serverAccount?.username) return
     
-    navigator.clipboard.writeText(serverAccount.username).then(() => {
-      message.success('用户名已复制到剪贴板')
-    }).catch(() => {
-      message.error('复制失败，请手动复制')
-    })
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(serverAccount.username).then(() => {
+        message.success('用户名已复制到剪贴板')
+      }).catch(() => {
+        fallbackCopyTextToClipboard(serverAccount.username)
+      })
+    } else {
+      fallbackCopyTextToClipboard(serverAccount.username)
+    }
   }
 
   const handleViewPassword = async () => {
@@ -293,11 +336,15 @@ export default function Dashboard() {
   const handleCopyPassword = () => {
     if (!decryptedPassword) return
     
-    navigator.clipboard.writeText(decryptedPassword).then(() => {
-      message.success('密码已复制到剪贴板')
-    }).catch(() => {
-      message.error('复制失败，请手动复制')
-    })
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(decryptedPassword).then(() => {
+        message.success('密码已复制到剪贴板')
+      }).catch(() => {
+        fallbackCopyTextToClipboard(decryptedPassword)
+      })
+    } else {
+      fallbackCopyTextToClipboard(decryptedPassword)
+    }
   }
 
   if (loading) {
