@@ -240,6 +240,7 @@ export default function MailList() {
       title: '更新时间',
       dataIndex: 'update_time',
       key: 'update_time',
+      width: 160,
       render: (text: string) => formatDateTime(text),
     },
     {
