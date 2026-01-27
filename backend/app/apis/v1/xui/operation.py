@@ -2,7 +2,7 @@
 XUI 操作 API（初始化、重启等）
 """
 from uuid import UUID
-from fastapi import APIRouter, Query, Body, HTTPException, Path, Depends
+from fastapi import APIRouter, Query, Body, HTTPException, Path, Depends, BackgroundTasks
 from typing import List
 
 from app.schemas.xui.user import XuiInitializeRequest, XuiOperationResponse
@@ -151,27 +151,44 @@ async def get_server_status(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/sync-inbounds/{server_id}", response_model=XuiOperationResponse, summary='同步入站配置')
+# 后台任务：同步入站配置
+async def sync_inbounds_task(server_id: UUID):
+    """
+    后台任务：从 XUI 面板同步入站配置到数据库
+    """
+    try:
+        await xui_operation_crud.sync_inbounds_from_panel(server_id)
+    except Exception as e:
+        # 记录错误日志
+        from app.utils.logs import getLogger
+        logger = getLogger('app')
+        logger.error(f"同步入站配置失败 - 服务器ID: {server_id}, 错误: {str(e)}")
+
+
+@app.post("/sync-inbounds/{server_id}", response_model=XuiOperationResponse, summary='同步入站配置（后台任务）')
 async def sync_inbounds_from_panel(
+    background_tasks: BackgroundTasks,
     server_id: UUID = Path(..., description='服务器 ID'),
     admin_user: dict = Depends(get_admin_user)
 ):
     """
-    从 XUI 面板同步入站配置到数据库
+    从 XUI 面板同步入站配置到数据库（后台任务）
     
     读取 XUI 面板中已配置的所有入站，并同步到数据库中。
     - 如果入站已存在，则更新信息
     - 如果入站不存在，则创建新记录
+    - 任务在后台执行，立即返回响应
     
     权限要求：ADMIN
     """
-    try:
-        result = await xui_operation_crud.sync_inbounds_from_panel(server_id)
-        return result
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    # 添加后台任务
+    background_tasks.add_task(sync_inbounds_task, server_id)
+    
+    return XuiOperationResponse(
+        message="同步入站配置任务已提交，正在后台执行",
+        status="success",
+        details={"server_id": str(server_id), "task": "sync_inbounds"}
+    )
 
 
 @app.get("/xray-config/{server_id}", response_model=XuiOperationResponse, summary='获取 Xray 配置')
