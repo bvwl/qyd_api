@@ -229,7 +229,8 @@ class AzureAuthManager(Req):
         status_code = res['code']
         content = res.get("content")
         
-        if status_code >= 500:
+        # 5xx 服务器错误或 408 超时：触发重试
+        if status_code >= 500 or status_code == 408:
             raise Exception(f"请求失败: {status_code}")
         elif status_code != 200:
             logger.error(f"[{self.email}] ❌ 响应状态码: {status_code}")
@@ -279,7 +280,8 @@ class AzureAuthManager(Req):
         status_code = res['code']
         content = res.get("content")
         
-        if status_code >= 500:
+        # 5xx 服务器错误或 408 超时：触发重试
+        if status_code >= 500 or status_code == 408:
             # 重试次数超过2次时，设置邮箱状态为5
             if retry_count >= 2:
                 logger.error(f"[{self.email}] 刷新 Token 连续{retry_count+1}次失败，设置状态为5")
@@ -289,7 +291,7 @@ class AzureAuthManager(Req):
                     await email_info.save()
             raise Exception(f"[{self.email}] 请求失败: {status_code}")
         elif status_code != 200:
-            # 响应状态码不是2xx或5xx，设置邮箱状态为2（异常）
+            # 响应状态码不是2xx、408或5xx，设置邮箱状态为2（异常）
             logger.error(f"[{self.email}] ❌ 响应状态码: {status_code}，设置邮箱状态为异常")
             email_info = await EmailInfo.get_or_none(email=self.email)
             if email_info:
@@ -329,7 +331,8 @@ class AzureAuthManager(Req):
         res = await self._req("GET", url, headers=self._get_headers(), proxy_url=self.proxy)
         status_code = res['code']
         content = res.get("content")
-        if status_code >= 500:
+        # 5xx 服务器错误或 408 超时：触发重试
+        if status_code >= 500 or status_code == 408:
             raise Exception(f"请求失败: {status_code}")
         if status_code != 200:
             logger.error(f"[{self.email}] ❌ 响应状态码: {status_code}")
@@ -355,7 +358,8 @@ class AzureAuthManager(Req):
         res = await self._req("GET", url, headers=self._get_headers(), params=params, proxy_url=self.proxy)
         status_code = res['code']
         content = res.get("content")
-        if status_code >= 500:
+        # 5xx 服务器错误或 408 超时：触发重试
+        if status_code >= 500 or status_code == 408:
             raise Exception(f"请求失败: {status_code}")
         if status_code != 200:
             logger.error(f"[{self.email}] ❌ 响应状态码: {status_code}")
@@ -376,7 +380,8 @@ class AzureAuthManager(Req):
         data = {"destinationId": destination_id}
         res = await self._req("POST", url, headers=self._get_headers(), json=data, proxy_url=self.proxy)
         status_code = res['code']
-        if status_code >= 500:
+        # 5xx 服务器错误或 408 超时：触发重试
+        if status_code >= 500 or status_code == 408:
             raise Exception(f"请求失败: {status_code}")
         elif status_code != 201:
             logger.error(f"[{self.email}] ❌ 响应状态码: {status_code}")
@@ -421,7 +426,8 @@ class AzureAuthManager(Req):
         }
         res = await self._req("POST", url, headers=self._get_headers(), json=data, proxy_url=self.proxy)
         status_code = res['code']
-        if status_code >= 500:
+        # 5xx 服务器错误或 408 超时：触发重试
+        if status_code >= 500 or status_code == 408:
             raise Exception(f"请求失败: {status_code}")
         elif status_code != 202:
             logger.error(f"[{self.email}] ❌ 响应状态码: {status_code}")

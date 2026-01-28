@@ -8,38 +8,50 @@
 
 ### 文件：`backend/app/clients/outlook.py`
 
-修改了 `refresh_token()` 方法，增加了状态码判断逻辑：
+修改了所有 HTTP 请求的状态码判断逻辑，将 408 超时错误加入重试机制：
 
+**修改的方法：**
+1. `get_token_from_url()` - 使用授权码换取 Token
+2. `refresh_token()` - 刷新访问令牌（核心方法）
+3. `get_user_info()` - 获取用户信息
+4. `get_messages()` - 获取邮件列表
+5. `move_message()` - 移动邮件
+6. `send_message()` - 发送邮件
+
+**统一的状态码处理逻辑：**
 ```python
-elif status_code != 200:
-    # 响应状态码不是2xx或5xx，设置邮箱状态为2（异常）
-    logger.error(f"[{self.email}] ❌ 响应状态码: {status_code}，设置邮箱状态为异常")
-    email_info = await EmailInfo.get_or_none(email=self.email)
-    if email_info:
-        email_info.status = 2
-        await email_info.save()
+# 5xx 服务器错误或 408 超时：触发重试
+if status_code >= 500 or status_code == 408:
+    raise Exception(f"请求失败: {status_code}")
+elif status_code != 200:  # 或 201, 202，取决于接口
+    logger.error(f"[{self.email}] ❌ 响应状态码: {status_code}")
     return 0
 ```
 
 ## 状态码处理逻辑
 
-### 1. 5xx 服务器错误（保持原有逻辑）
+### 1. 5xx 服务器错误 + 408 超时（触发重试）
+- **状态码**：500-599 和 408 Request Timeout
 - **行为**：触发重试机制
 - **重试次数**：最多 3 次（由 `@async_retry()` 装饰器控制）
 - **失败后**：如果重试 3 次后仍失败，设置邮箱状态为 5
+- **原因**：这些错误通常是临时性的，值得重试
 
 ### 2. 2xx 成功
+- **状态码**：200-299
 - **行为**：Token 刷新成功
 - **状态**：不修改邮箱状态（保持正常）
 - **操作**：更新 access_token 和 refresh_token
 
-### 3. 其他状态码（3xx, 4xx 等）
+### 3. 其他状态码（3xx, 4xx 等，排除 408）
+- **状态码**：300-399, 400-407, 409-499
 - **行为**：立即设置邮箱状态为 2（异常）
 - **原因**：这些状态码通常表示：
   - 401: Token 已失效或被撤销
   - 403: 权限不足
   - 400: 请求参数错误
   - 3xx: 重定向（不应该出现在 Token 刷新中）
+  - 其他 4xx: 客户端错误，重试无意义
 
 ## 影响范围
 
@@ -112,8 +124,8 @@ class Status(IntEnum):
 - Token 刷新返回 403 Forbidden
 - 系统自动将邮箱状态设为 2
 
-### 场景 3：服务器临时故障
-- Microsoft 服务器返回 503 Service Unavailable
+### 场景 3：服务器临时故障或超时
+- Microsoft 服务器返回 503 Service Unavailable 或 408 Request Timeout
 - 系统触发重试机制（最多 3 次）
 - 如果 3 次都失败，设置状态为 5
 
@@ -132,13 +144,13 @@ class Status(IntEnum):
 [user@example.com] ✅ Token 刷新成功！
 ```
 
-### 非 2xx/5xx 失败
+### 非 2xx/408/5xx 失败
 ```
 [user@example.com] Token 即将过期或已过期，正在刷新...
 [user@example.com] ❌ 响应状态码: 401，设置邮箱状态为异常
 ```
 
-### 5xx 重试失败
+### 408/5xx 重试失败
 ```
 [user@example.com] Token 即将过期或已过期，正在刷新...
 [user@example.com] 刷新 Token 连续3次失败，设置状态为5
