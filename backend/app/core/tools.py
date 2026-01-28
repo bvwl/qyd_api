@@ -169,23 +169,23 @@ def aes_decrypt_project(ciphertext: str, account: str) -> str:
     return plaintext.decode('utf-8')
 
 
-def aes_encrypt_wallet(plaintext: str, project_name: str) -> str:
+def aes_encrypt_wallet(plaintext: str, public_key: str) -> str:
     """
     使用AES加密钱包敏感数据（用于项目钱包的 private_key 和 mnemonic）
-    - 每个项目使用不同的密钥和IV
-    - key: MD5(项目名称 + "9527")
-    - iv: MD5("9527" + 项目名称) 取前16位
+    - 每个钱包使用不同的密钥和IV（基于公钥）
+    - key: MD5(公钥 + "9527")
+    - iv: MD5("9527" + 公钥) 取前16位
     
     :param plaintext: 原始数据（私钥或助记词）
-    :param project_name: 项目名称
+    :param public_key: 钱包公钥
     :return: Base64编码的加密密文
     """
-    # 生成密钥：MD5(项目名称 + "9527")
-    key_string = f"{project_name}9527"
+    # 生成密钥：MD5(公钥 + "9527")
+    key_string = f"{public_key}9527"
     key = hashlib.md5(key_string.encode('utf-8')).digest()  # 16字节
     
-    # 生成IV：MD5("9527" + 项目名称) 取前16位
-    iv_string = f"9527{project_name}"
+    # 生成IV：MD5("9527" + 公钥) 取前16位
+    iv_string = f"9527{public_key}"
     iv = hashlib.md5(iv_string.encode('utf-8')).digest()[:16]  # 16字节
     
     # 创建AES加密器（CBC模式）
@@ -201,23 +201,23 @@ def aes_encrypt_wallet(plaintext: str, project_name: str) -> str:
     return base64.b64encode(ciphertext).decode('utf-8')
 
 
-def aes_decrypt_wallet(ciphertext: str, project_name: str) -> str:
+def aes_decrypt_wallet(ciphertext: str, public_key: str) -> str:
     """
     使用AES解密钱包敏感数据（用于项目钱包的 private_key 和 mnemonic）
-    - 每个项目使用不同的密钥和IV
-    - key: MD5(项目名称 + "9527")
-    - iv: MD5("9527" + 项目名称) 取前16位
+    - 每个钱包使用不同的密钥和IV（基于公钥）
+    - key: MD5(公钥 + "9527")
+    - iv: MD5("9527" + 公钥) 取前16位
     
     :param ciphertext: Base64编码的加密密文
-    :param project_name: 项目名称
+    :param public_key: 钱包公钥
     :return: 原始数据（私钥或助记词）
     """
-    # 生成密钥：MD5(项目名称 + "9527")
-    key_string = f"{project_name}9527"
+    # 生成密钥：MD5(公钥 + "9527")
+    key_string = f"{public_key}9527"
     key = hashlib.md5(key_string.encode('utf-8')).digest()  # 16字节
     
-    # 生成IV：MD5("9527" + 项目名称) 取前16位
-    iv_string = f"9527{project_name}"
+    # 生成IV：MD5("9527" + 公钥) 取前16位
+    iv_string = f"9527{public_key}"
     iv = hashlib.md5(iv_string.encode('utf-8')).digest()[:16]  # 16字节
     
     # Base64解码

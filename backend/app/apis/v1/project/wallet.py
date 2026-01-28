@@ -52,19 +52,16 @@ async def get(
         is_admin = 'ADMIN' in user_roles
         
         # 如果是管理员，自动解密私钥和助记词
-        if is_admin and obj.project:
+        if is_admin:
             try:
-                # 获取项目名称用于解密
-                project = await ProjectInfo.get_or_none(id=obj.project.id)
-                if project:
-                    # 解密私钥
-                    decrypted_private_key = aes_decrypt_wallet(obj.private_key, project.name)
-                    obj.private_key = decrypted_private_key
-                    
-                    # 解密助记词（如果存在）
-                    if obj.mnemonic:
-                        decrypted_mnemonic = aes_decrypt_wallet(obj.mnemonic, project.name)
-                        obj.mnemonic = decrypted_mnemonic
+                # 使用公钥解密（每个钱包都有唯一的公钥）
+                decrypted_private_key = aes_decrypt_wallet(obj.private_key, obj.public_key)
+                obj.private_key = decrypted_private_key
+                
+                # 解密助记词（如果存在）
+                if obj.mnemonic:
+                    decrypted_mnemonic = aes_decrypt_wallet(obj.mnemonic, obj.public_key)
+                    obj.mnemonic = decrypted_mnemonic
             except Exception as e:
                 # 解密失败，返回加密数据
                 print(f"解密失败: {str(e)}")
@@ -148,40 +145,27 @@ async def gets(
         
         # 如果是管理员，自动解密所有钱包的私钥和助记词
         if is_admin:
-            # 获取所有相关项目的名称（用于解密）
-            project_ids = [item.project_id for item in result.items if item.project_id]
-            if project_ids:
-                projects = await ProjectInfo.filter(id__in=project_ids).all()
-                project_name_map = {str(p.id): p.name for p in projects}
-                
-                # 解密每个钱包
-                decrypted_items = []
-                for item in result.items:
-                    if item.project_id and str(item.project_id) in project_name_map:
-                        try:
-                            project_name = project_name_map[str(item.project_id)]
-                            # 解密私钥
-                            decrypted_private_key = aes_decrypt_wallet(item.private_key, project_name)
-                            # 解密助记词（如果存在）
-                            decrypted_mnemonic = None
-                            if item.mnemonic:
-                                decrypted_mnemonic = aes_decrypt_wallet(item.mnemonic, project_name)
-                            
-                            # 创建新的对象，包含解密后的数据
-                            item_dict = item.model_dump()
-                            item_dict['private_key'] = decrypted_private_key
-                            if decrypted_mnemonic:
-                                item_dict['mnemonic'] = decrypted_mnemonic
-                            decrypted_items.append(Out(**item_dict))
-                        except Exception as e:
-                            # 解密失败，保持加密状态
-                            print(f"解密钱包 {item.id} 失败: {str(e)}")
-                            decrypted_items.append(item)
-                    else:
-                        # 没有关联项目，保持原样
-                        decrypted_items.append(item)
-                
-                result.items = decrypted_items
+            decrypted_items = []
+            for item in result.items:
+                try:
+                    # 使用公钥解密（每个钱包都有唯一的公钥）
+                    decrypted_private_key = aes_decrypt_wallet(item.private_key, item.public_key)
+                    decrypted_mnemonic = None
+                    if item.mnemonic:
+                        decrypted_mnemonic = aes_decrypt_wallet(item.mnemonic, item.public_key)
+                    
+                    # 创建新的对象，包含解密后的数据
+                    item_dict = item.model_dump()
+                    item_dict['private_key'] = decrypted_private_key
+                    if decrypted_mnemonic:
+                        item_dict['mnemonic'] = decrypted_mnemonic
+                    decrypted_items.append(Out(**item_dict))
+                except Exception as e:
+                    # 解密失败，保持加密状态
+                    print(f"解密钱包 {item.id} 失败: {str(e)}")
+                    decrypted_items.append(item)
+            
+            result.items = decrypted_items
         
         return result
     except ValueError as e:

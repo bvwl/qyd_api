@@ -156,9 +156,9 @@ class CRUD:
                 else:  # SOL
                     private_key, public_key, mnemonic = await wallet_client.solana_create()
                 
-                # 使用项目名称加密私钥和助记词
-                encrypted_private_key = aes_encrypt_wallet(private_key, item.project_name)
-                encrypted_mnemonic = aes_encrypt_wallet(mnemonic, item.project_name) if mnemonic else None
+                # 使用公钥加密私钥和助记词
+                encrypted_private_key = aes_encrypt_wallet(private_key, public_key)
+                encrypted_mnemonic = aes_encrypt_wallet(mnemonic, public_key) if mnemonic else None
                 
                 # 创建钱包记录（使用大写链类型）
                 wallet = await ProjectWallet.create(
@@ -182,16 +182,16 @@ class CRUD:
         # 手动构建输出数据（避免Pydantic验证关联字段）
         items = []
         for wallet in created_wallets:
-            # 使用项目名称解密（因为前端需要明文显示）
+            # 使用公钥解密（因为前端需要明文显示）
             from app.core.tools import aes_decrypt_wallet
             
             # 构建字典，排除 project 字段
             wallet_dict = {
                 'message': '成功',
                 'id': wallet.id,
-                'private_key': aes_decrypt_wallet(wallet.private_key, item.project_name),
+                'private_key': aes_decrypt_wallet(wallet.private_key, wallet.public_key),
                 'public_key': wallet.public_key,
-                'mnemonic': aes_decrypt_wallet(wallet.mnemonic, item.project_name) if wallet.mnemonic else None,
+                'mnemonic': aes_decrypt_wallet(wallet.mnemonic, wallet.public_key) if wallet.mnemonic else None,
                 'chain': wallet.chain,
                 'remark': wallet.remark,
                 'project_id': None,
