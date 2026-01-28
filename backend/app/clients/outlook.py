@@ -289,7 +289,12 @@ class AzureAuthManager(Req):
                     await email_info.save()
             raise Exception(f"[{self.email}] 请求失败: {status_code}")
         elif status_code != 200:
-            logger.error(f"[{self.email}] ❌ 响应状态码: {status_code}")
+            # 响应状态码不是2xx或5xx，设置邮箱状态为2（异常）
+            logger.error(f"[{self.email}] ❌ 响应状态码: {status_code}，设置邮箱状态为异常")
+            email_info = await EmailInfo.get_or_none(email=self.email)
+            if email_info:
+                email_info.status = 2
+                await email_info.save()
             return 0
             
         logger.success(f"[{self.email}] ✅ Token 刷新成功！")
