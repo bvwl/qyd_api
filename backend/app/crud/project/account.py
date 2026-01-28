@@ -17,19 +17,22 @@ from app.utils.project_crypto import (
 class CRUD:
     # 创建
     async def create(self, item: Create) -> Out:
-        # 如果提供了 host，查询对应的 server_id
+        # 如果提供了 host，查询对应的 server_id（优先选择端口大于30000的）
         if item.host:
             from app.models.server import ServerInfo
-            server = await ServerInfo.get_or_none(host=item.host)
+            # 查询 host 匹配且端口大于 30000 的服务器
+            server = await ServerInfo.filter(host=item.host, port__gt=30000).first()
             if server:
                 # 找到服务器，使用其 ID
                 item.server_id = server.id
             else:
-                # 未找到服务器，可以选择：
-                # 1. 抛出错误（严格模式）
-                # 2. 忽略（宽松模式）
-                # 这里使用宽松模式，记录日志但不中断
-                print(f"⚠️  未找到 host={item.host} 的服务器，server_id 将为空")
+                # 未找到端口>30000的服务器，尝试查找任意匹配的服务器
+                server = await ServerInfo.filter(host=item.host).first()
+                if server:
+                    item.server_id = server.id
+                    print(f"⚠️  未找到 host={item.host} 且端口>30000 的服务器，使用端口={server.port} 的服务器")
+                else:
+                    print(f"⚠️  未找到 host={item.host} 的服务器，server_id 将为空")
         
         # 过滤掉None值和需要自动计算的字段，以及 host（不存储到数据库）
         filtered_item = {
@@ -222,16 +225,22 @@ class CRUD:
         if not res:
             raise HTTPException(status_code=404, detail='数据不存在')
         
-        # 如果提供了 host，查询对应的 server_id
+        # 如果提供了 host，查询对应的 server_id（优先选择端口大于30000的）
         if item.host:
             from app.models.server import ServerInfo
-            server = await ServerInfo.get_or_none(host=item.host)
+            # 查询 host 匹配且端口大于 30000 的服务器
+            server = await ServerInfo.filter(host=item.host, port__gt=30000).first()
             if server:
                 # 找到服务器，使用其 ID
                 item.server_id = server.id
             else:
-                # 未找到服务器
-                print(f"⚠️  未找到 host={item.host} 的服务器，server_id 将保持不变")
+                # 未找到端口>30000的服务器，尝试查找任意匹配的服务器
+                server = await ServerInfo.filter(host=item.host).first()
+                if server:
+                    item.server_id = server.id
+                    print(f"⚠️  未找到 host={item.host} 且端口>30000 的服务器，使用端口={server.port} 的服务器")
+                else:
+                    print(f"⚠️  未找到 host={item.host} 的服务器，server_id 将保持不变")
         
         # 获取账号（用于加密）
         account = res.account
@@ -299,16 +308,22 @@ class CRUD:
         - 如果记录存在，只更新传入的非空字段（类似PUT）
         - 如果记录不存在，创建新记录
         """
-        # 如果提供了 host，查询对应的 server_id
+        # 如果提供了 host，查询对应的 server_id（优先选择端口大于30000的）
         if item.host:
             from app.models.server import ServerInfo
-            server = await ServerInfo.get_or_none(host=item.host)
+            # 查询 host 匹配且端口大于 30000 的服务器
+            server = await ServerInfo.filter(host=item.host, port__gt=30000).first()
             if server:
                 # 找到服务器，使用其 ID
                 item.server_id = server.id
             else:
-                # 未找到服务器
-                print(f"⚠️  未找到 host={item.host} 的服务器，server_id 将为空")
+                # 未找到端口>30000的服务器，尝试查找任意匹配的服务器
+                server = await ServerInfo.filter(host=item.host).first()
+                if server:
+                    item.server_id = server.id
+                    print(f"⚠️  未找到 host={item.host} 且端口>30000 的服务器，使用端口={server.port} 的服务器")
+                else:
+                    print(f"⚠️  未找到 host={item.host} 的服务器，server_id 将为空")
         
         # 获取项目信息（验证项目是否存在）
         project = await ProjectInfo.get_or_none(id=item.project_id)
