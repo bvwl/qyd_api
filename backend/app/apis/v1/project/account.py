@@ -573,9 +573,19 @@ async def put(
 ):
     """
     部分更新项目账号，只更新传入的非空字段
+    - 敏感字段（private_key、mnemonic）根据权限决定是否解密
+    - 项目所属人和ADMIN可以看到解密后的数据
     """
     try:
-        return await project_account_crud.update(id, item)
+        # 获取用户ID和角色
+        user_id = current_user.get('user_id') or current_user.get('id')
+        user_roles = current_user.get('roles', [])
+        
+        # 调用更新方法
+        result = await project_account_crud.update(id, item)
+        
+        # 更新后重新获取数据（带解密）
+        return await project_account_crud.get(result.id, user_id=str(user_id), user_roles=user_roles)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
