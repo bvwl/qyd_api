@@ -103,35 +103,57 @@ export const useUserStore = create<UserState>()(
       hasPermission: (permission: string | string[]) => {
         const { permissions, userInfo } = get()
         
+        // 调试日志
+        console.log('hasPermission 调用:', {
+          permission,
+          userInfo,
+          roles: userInfo?.roles?.map(r => ({ code: r.code, name: r.name })),
+          permissions
+        })
+        
         // 管理员拥有所有权限
         if (userInfo?.roles?.some(role => role.code === 'ADMIN')) {
+          console.log('hasPermission: 用户是 ADMIN，返回 true')
           return true
         }
         
         // 如果 permissions 未初始化，返回 false
         if (!permissions || !Array.isArray(permissions)) {
+          console.log('hasPermission: permissions 未初始化，返回 false')
           return false
         }
         
         // 支持单个权限或权限数组
         if (Array.isArray(permission)) {
           // 检查是否有任何一个权限或角色匹配
-          return permission.some(p => {
+          const result = permission.some(p => {
             // 先检查是否是角色代码
-            if (userInfo?.roles?.some(role => role.code === p)) {
+            const hasRole = userInfo?.roles?.some(role => role.code === p)
+            if (hasRole) {
+              console.log(`hasPermission: 用户有角色 ${p}`)
               return true
             }
             // 再检查是否是权限字符串
-            return permissions.includes(p)
+            const hasPerm = permissions.includes(p)
+            if (hasPerm) {
+              console.log(`hasPermission: 用户有权限 ${p}`)
+            }
+            return hasPerm
           })
+          console.log(`hasPermission: 数组检查结果 = ${result}`)
+          return result
         }
         
         // 单个权限：先检查角色，再检查权限
-        if (userInfo?.roles?.some(role => role.code === permission)) {
+        const hasRole = userInfo?.roles?.some(role => role.code === permission)
+        if (hasRole) {
+          console.log(`hasPermission: 用户有角色 ${permission}，返回 true`)
           return true
         }
         
-        return permissions.includes(permission)
+        const hasPerm = permissions.includes(permission)
+        console.log(`hasPermission: 权限检查 ${permission} = ${hasPerm}`)
+        return hasPerm
       },
 
       hasAnyPermission: (permissionList: string[]) => {

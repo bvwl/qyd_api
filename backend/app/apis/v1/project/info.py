@@ -15,10 +15,10 @@ app = APIRouter()
 @app.post("", response_model=Out, description="创建项目信息", summary="创建项目信息")
 async def post(
     item: Create = Body(..., description="创建数据"),
-    current_user: dict = Depends(get_current_user)
+    gm_user: dict = Depends(get_gm_user)
 ):
     """
-    创建项目记录
+    创建项目记录（需要GM或管理员权限）
     """
     try:
         return await project_info_crud.create(item)
@@ -153,10 +153,10 @@ async def gets(
 async def put(
     id: UUID = Path(..., description="主键ID"),
     item: Update = Body(..., description="更新数据"),
-    current_user: dict = Depends(get_current_user)
+    gm_user: dict = Depends(get_gm_user)
 ):
     """
-    部分更新项目信息，只更新传入的非空字段
+    部分更新项目信息，只更新传入的非空字段（需要GM或管理员权限）
     """
     try:
         return await project_info_crud.update(id, item)
@@ -192,10 +192,10 @@ async def delete(
 @app.post("/upsert", response_model=Out, description="创建或更新项目信息", summary="创建或更新项目信息")
 async def post_or_put(
     item: Create = Body(..., description="创建或更新数据"),
-    current_user: dict = Depends(get_current_user)
+    gm_user: dict = Depends(get_gm_user)
 ):
     """
-    创建或更新项目信息
+    创建或更新项目信息（需要GM或管理员权限）
     """
     try:
         return await project_info_crud.upsert(item)

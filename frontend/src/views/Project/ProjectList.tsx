@@ -39,7 +39,7 @@ const ProjectList = () => {
   const [orderBy, setOrderBy] = useState<string>('-create_time')
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([])
   const [form] = Form.useForm()
-  const { hasPermission } = useUserStore()
+  const { hasPermission, userInfo } = useUserStore()
 
   // 人员管理相关状态
   const [userModalVisible, setUserModalVisible] = useState(false)
@@ -58,8 +58,17 @@ const ProjectList = () => {
   const [fileLoading, setFileLoading] = useState(false)
   const [uploadingFile, setUploadingFile] = useState(false)
 
-  const isAdmin = hasPermission('ADMIN')
-  const isGM = hasPermission('GM')
+  // 权限判断 - 使用数组方式更可靠
+  const canManageProject = hasPermission(['ADMIN', 'GM'])
+  
+  // 监控权限变化
+  useEffect(() => {
+    console.log('ProjectList 权限更新:', {
+      userInfo,
+      roles: userInfo?.roles?.map(r => r.code),
+      canManageProject,
+    })
+  }, [userInfo, canManageProject])
 
   const fetchData = async () => {
     setLoading(true)
@@ -90,7 +99,7 @@ const ProjectList = () => {
 
   // 加载用户列表（用于筛选）
   const fetchFilterUsers = async () => {
-    if (!isAdmin && !isGM) return // 只有管理员和GM可以按用户筛选
+    if (!canManageProject) return // 只有管理员和GM可以按用户筛选
     
     try {
       const res = await getUserList({ page: 1, limit: 1000 })
@@ -505,7 +514,7 @@ const ProjectList = () => {
           >
             文件
           </Button>
-          {(isAdmin || isGM) && (
+          {canManageProject && (
             <>
               <Button
                 type="link"
@@ -567,7 +576,7 @@ const ProjectList = () => {
               <Select.Option value={ProjectStatus.ACCOUNT_UNSUPPORTED}>账号不支持</Select.Option>
               <Select.Option value={ProjectStatus.IP_UNSUPPORTED}>IP不支持</Select.Option>
             </Select>
-            {(isAdmin || isGM) && (
+            {canManageProject && (
               <Select
                 placeholder="关联用户"
                 value={searchUserId}
@@ -604,7 +613,7 @@ const ProjectList = () => {
             <Button onClick={handleReset}>重置</Button>
           </Space>
           <Space>
-            {selectedRowKeys.length > 0 && (isAdmin || isGM) && (
+            {selectedRowKeys.length > 0 && canManageProject && (
               <Button 
                 danger 
                 icon={<DeleteOutlined />} 
@@ -613,7 +622,7 @@ const ProjectList = () => {
                 批量删除 ({selectedRowKeys.length})
               </Button>
             )}
-            {(isAdmin || isGM) && (
+            {canManageProject && (
               <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
                 新增项目
               </Button>
@@ -743,7 +752,7 @@ const ProjectList = () => {
         width={700}
       >
         <div style={{ marginBottom: 16 }}>
-          {(isAdmin || isGM) && (
+          {canManageProject && (
             <Upload
               beforeUpload={handleUpload}
               showUploadList={false}
@@ -773,7 +782,7 @@ const ProjectList = () => {
                 >
                   下载
                 </Button>,
-                (isAdmin || isGM) && (
+                canManageProject && (
                   <Popconfirm
                     title="确定删除该文件吗？"
                     onConfirm={() => handleDeleteFile(file.name)}
