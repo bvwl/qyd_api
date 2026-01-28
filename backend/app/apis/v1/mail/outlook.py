@@ -13,6 +13,45 @@ from app.apis.deps import get_current_user
 app = APIRouter()
 
 
+async def check_rate_limit(email: str, operation: str = "操作") -> None:
+    """
+    检查邮箱操作频率限制
+    30秒内只能执行一次操作
+    
+    Args:
+        email: 邮箱地址
+        operation: 操作名称（用于错误提示）
+        
+    Raises:
+        HTTPException: 如果操作过于频繁
+    """
+    email_info = await EmailInfo.get_or_none(email=email)
+    if not email_info:
+        raise HTTPException(status_code=404, detail=f"邮箱 {email} 不存在")
+    
+    # 检查更新时间
+    now = datetime.now(CN_TZ)
+    if email_info.update_time:
+        # 确保 update_time 有时区信息
+        update_time = email_info.update_time
+        if update_time.tzinfo is None:
+            update_time = update_time.replace(tzinfo=CN_TZ)
+        else:
+            update_time = update_time.astimezone(CN_TZ)
+        
+        time_diff = (now - update_time).total_seconds()
+        
+        if time_diff < 30:
+            remaining = 30 - int(time_diff)
+            raise HTTPException(
+                status_code=400, 
+                detail=f"{operation}过于频繁，请在 {remaining} 秒后重试"
+            )
+    
+    # 更新时间戳
+    await EmailInfo.filter(email=email).update(update_time=now)
+
+
 @app.get("/auth/url", response_model=AuthUrlOut, summary="获取授权URL", description="生成微软OAuth2授权URL和PKCE验证码")
 async def get_auth_url(
     email: str = Query(..., description="邮箱地址"),
@@ -56,8 +95,12 @@ async def send_mail(
 ):
     """
     发送邮件
+    30秒内只能发送一次
     """
     try:
+        # 检查频率限制
+        await check_rate_limit(item.email, "发送邮件")
+        
         manager = AzureAuthManager(item.email)
         res = await manager.send_email_main(item.to_email, item.subject, item.content, item.content_type)
         if res:
@@ -76,13 +119,19 @@ async def get_emails(
 ):
     """
     获取邮件列表
+    30秒内只能获取一次
     """
     try:
+        # 检查频率限制
+        await check_rate_limit(item.email, "获取邮件")
+        
         manager = AzureAuthManager(item.email)
         res = await manager.get_emails_main(item.from_email, item.num, item.top)
         if res == 0:
             return GetEmailsOut(code=0, message="获取失败或无邮件", data=[])
         return GetEmailsOut(code=1, message="获取成功", data=res)
+    except HTTPException as e:
+        raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
