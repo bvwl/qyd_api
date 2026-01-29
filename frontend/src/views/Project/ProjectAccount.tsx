@@ -260,23 +260,25 @@ const ProjectAccountList = () => {
     console.log('handleTableChange called:', { 
       pagination, 
       sorter,
-      sorterField: sorter?.field,
-      sorterOrder: sorter?.order,
-      sorterColumn: sorter?.column
+      currentOrderBy: orderBy
     })
     
-    // 只处理排序变化（必须同时有 field 和 order，且 column 存在表示用户点击了列头）
-    // 如果只是分页变化，sorter 会是空对象或者只有旧的排序信息
-    if (sorter?.column && sorter?.field && sorter?.order) {
-      console.log('Sorting changed, resetting page to 1')
-      const order = sorter.order === 'ascend' ? '' : '-'
-      setOrderBy(`${order}${sorter.field}`)
-      setPage(1)
-      setTimeout(() => {
-        fetchData()
-      }, 0)
-    } else {
-      console.log('Not a sorting change, ignoring')
+    // 计算新的排序
+    if (sorter?.field && sorter?.order) {
+      const newOrder = sorter.order === 'ascend' ? '' : '-'
+      const newOrderBy = `${newOrder}${sorter.field}`
+      
+      // 只有在排序真正改变时才重置页码
+      if (newOrderBy !== orderBy) {
+        console.log('Sorting changed from', orderBy, 'to', newOrderBy, ', resetting page to 1')
+        setOrderBy(newOrderBy)
+        setPage(1)
+        setTimeout(() => {
+          fetchData()
+        }, 0)
+      } else {
+        console.log('Sorting unchanged, not resetting page')
+      }
     }
   }
 
