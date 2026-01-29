@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Table, Button, Modal, Form, Input, InputNumber, App, Space, Popconfirm, Tag, Select, DatePicker, Tooltip, Descriptions, Card, Statistic, Row, Col } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, HistoryOutlined, CopyOutlined, BarChartOutlined, DownloadOutlined } from '@ant-design/icons'
 import type { ProjectAccount, Project } from '@/types'
@@ -80,7 +80,7 @@ const ProjectAccountList = () => {
     }
 
     loadData()
-  }, [page, pageSize, searchProjectId, orderBy])
+  }, [page, pageSize, searchProjectId, orderBy, searchAccount, searchAccountType, searchStatus, createTimeRange, updateTimeRange])
 
   // fetchData 函数用于手动触发（如搜索按钮）
   const fetchData = async () => {
@@ -662,9 +662,13 @@ const ProjectAccountList = () => {
           showSizeChanger: true,
           showTotal: (total) => `共 ${total} 条`,
           onChange: (newPage, newPageSize) => {
-            console.log('Pagination onChange:', newPage, newPageSize)
+            console.log('Pagination onChange called:', newPage, newPageSize)
+            console.log('Current page before setState:', page)
             setPage(newPage)
-            setPageSize(newPageSize)
+            if (newPageSize !== pageSize) {
+              setPageSize(newPageSize)
+            }
+            console.log('setState called, waiting for useEffect...')
           },
         }}
       />
