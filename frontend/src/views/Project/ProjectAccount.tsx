@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { flushSync } from 'react-dom'
 import { Table, Button, Modal, Form, Input, InputNumber, App, Space, Popconfirm, Tag, Select, DatePicker, Tooltip, Descriptions, Card, Statistic, Row, Col } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, HistoryOutlined, CopyOutlined, BarChartOutlined, DownloadOutlined } from '@ant-design/icons'
 import type { ProjectAccount, Project } from '@/types'
@@ -664,11 +665,16 @@ const ProjectAccountList = () => {
           onChange: (newPage, newPageSize) => {
             console.log('Pagination onChange called:', newPage, newPageSize)
             console.log('Current page before setState:', page)
-            setPage(newPage)
-            if (newPageSize !== pageSize) {
-              setPageSize(newPageSize)
-            }
-            console.log('setState called, waiting for useEffect...')
+            
+            // 使用 flushSync 强制同步更新状态
+            flushSync(() => {
+              setPage(newPage)
+              if (newPageSize !== pageSize) {
+                setPageSize(newPageSize)
+              }
+            })
+            
+            console.log('setState called with flushSync, page should be updated now')
           },
         }}
       />
