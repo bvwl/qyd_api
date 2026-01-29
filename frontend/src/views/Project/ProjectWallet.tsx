@@ -86,7 +86,7 @@ const ProjectWalletList = () => {
       }
     }
     loadData()
-  }, [page, pageSize])
+  }, [page, pageSize, orderBy])
 
   const handleSearch = () => {
     setPage(1)

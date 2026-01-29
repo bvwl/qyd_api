@@ -95,7 +95,7 @@ const ProjectAccountList = () => {
     if (searchProjectId) {
       fetchData()
     }
-  }, [page, pageSize, searchProjectId])
+  }, [page, pageSize, searchProjectId, orderBy])
 
   useEffect(() => {
     const loadData = async () => {

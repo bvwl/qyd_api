@@ -111,7 +111,7 @@ const ProjectList = () => {
 
   useEffect(() => {
     fetchData()
-  }, [page, pageSize])
+  }, [page, pageSize, orderBy])
   
   useEffect(() => {
     fetchFilterUsers()

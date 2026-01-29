@@ -74,7 +74,7 @@ export default function UserList() {
 
   useEffect(() => {
     fetchData()
-  }, [page, pageSize, searchEmail, searchStatus])
+  }, [page, pageSize, searchEmail, searchStatus, orderBy])
 
   useEffect(() => {
     fetchRoles()

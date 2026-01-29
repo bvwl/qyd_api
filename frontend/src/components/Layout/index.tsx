@@ -12,6 +12,7 @@ import {
   ApiOutlined,
   EditOutlined,
   DownloadOutlined,
+  FileTextOutlined,
 } from '@ant-design/icons'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useUserStore } from '@/store/useUserStore'
@@ -241,6 +242,14 @@ export default function AppLayout() {
           nickname: userInfo?.nickname,
           email: userInfo?.email,
         })
+      },
+    },
+    {
+      key: 'docs',
+      icon: <FileTextOutlined />,
+      label: '打开文档',
+      onClick: () => {
+        window.open('http://192.168.13.6:6080/docs', '_blank')
       },
     },
     {
