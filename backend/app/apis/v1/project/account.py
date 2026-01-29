@@ -658,8 +658,28 @@ async def post_or_put(
         if not REDIS_ENABLED:
             raise HTTPException(status_code=503, detail="Redis未启用，无法使用队列处理功能")
         
+        # 如果提供了 host，查询对应的 server_id（优先选择端口大于30000的）
+        if item.host:
+            from app.models.server import ServerInfo
+            # 查询 host 匹配且端口大于 30000 的服务器
+            server = await ServerInfo.filter(host=item.host, port__gt=30000).first()
+            
+            if server:
+                # 找到服务器，使用其 ID
+                item.server_id = server.id
+            else:
+                # 未找到端口>30000的服务器，尝试查找任意匹配的服务器
+                server = await ServerInfo.filter(host=item.host).first()
+                
+                if server:
+                    item.server_id = server.id
+                    print(f"⚠️  未找到 host={item.host} 且端口>30000 的服务器，使用端口={server.port} 的服务器")
+                else:
+                    print(f"⚠️  未找到 host={item.host} 的服务器，server_id 将为空")
+        
         # 转换为字典，使用mode='json'确保UUID和Enum都能被序列化
-        data = item.model_dump(mode='json')
+        # 排除 host 字段，因为已经转换为 server_id
+        data = item.model_dump(mode='json', exclude={'host'})
         
         # 添加到队列
         if await project_account_queue.add_to_queue(data):
@@ -698,8 +718,27 @@ async def batch_upsert(
         fail_count = 0
         
         for item in items:
+            # 如果提供了 host，查询对应的 server_id（优先选择端口大于30000的）
+            if item.host:
+                from app.models.server import ServerInfo
+                # 查询 host 匹配且端口大于 30000 的服务器
+                server = await ServerInfo.filter(host=item.host, port__gt=30000).first()
+                
+                if server:
+                    # 找到服务器，使用其 ID
+                    item.server_id = server.id
+                else:
+                    # 未找到端口>30000的服务器，尝试查找任意匹配的服务器
+                    server = await ServerInfo.filter(host=item.host).first()
+                    
+                    if server:
+                        item.server_id = server.id
+                    # 如果找不到服务器，server_id 保持为 None
+            
             # 转换为字典，使用mode='json'确保UUID和Enum都能被序列化
-            data = item.model_dump(mode='json')
+            # 排除 host 字段，因为已经转换为 server_id
+            data = item.model_dump(mode='json', exclude={'host'})
+            
             # 添加到队列
             if await project_account_queue.add_to_queue(data):
                 success_count += 1
