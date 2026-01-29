@@ -256,8 +256,11 @@ const ProjectAccountList = () => {
     }
   }
 
-  const handleTableChange: TableProps<ProjectAccount>['onChange'] = (_pagination, _filters, sorter: any) => {
-    if (sorter.field) {
+  const handleTableChange: TableProps<ProjectAccount>['onChange'] = (pagination, _filters, sorter: any) => {
+    console.log('handleTableChange called:', { pagination, sorter })
+    
+    // 只处理排序变化，分页变化由 pagination.onChange 处理
+    if (sorter.field && sorter.order !== undefined) {
       const order = sorter.order === 'ascend' ? '' : '-'
       setOrderBy(`${order}${sorter.field}`)
       setPage(1)
