@@ -40,8 +40,50 @@ const ProjectAccountList = () => {
   const isAdmin = hasPermission('ADMIN')
   const isGM = hasPermission('GM')
 
-  const fetchData = useCallback(async () => {
+  // 使用 useEffect 直接监听 page 和 pageSize 的变化
+  useEffect(() => {
     // 如果没有选择项目，不查询账号列表
+    if (!searchProjectId) {
+      setData([])
+      setTotal(0)
+      return
+    }
+
+    console.log('useEffect triggered with page:', page, 'pageSize:', pageSize)
+    
+    const loadData = async () => {
+      setLoading(true)
+      try {
+        const res = await getProjectAccountList({
+          page,
+          limit: pageSize,
+          res_count: true,
+          project_id: searchProjectId,
+          account: searchAccount || undefined,
+          account_type: searchAccountType,
+          status: searchStatus,
+          order_by: orderBy,
+          create_time_start: createTimeRange?.[0]?.format('YYYY-MM-DD'),
+          create_time_end: createTimeRange?.[1]?.format('YYYY-MM-DD'),
+          update_time_start: updateTimeRange?.[0]?.format('YYYY-MM-DD'),
+          update_time_end: updateTimeRange?.[1]?.format('YYYY-MM-DD'),
+        })
+        setData(res.items || [])
+        setTotal(res.count || 0)
+      } catch (error) {
+        // 404 表示无数据，静默处理
+        setData([])
+        setTotal(0)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadData()
+  }, [page, pageSize, searchProjectId, orderBy])
+
+  // fetchData 函数用于手动触发（如搜索按钮）
+  const fetchData = async () => {
     if (!searchProjectId) {
       setData([])
       setTotal(0)
@@ -67,13 +109,12 @@ const ProjectAccountList = () => {
       setData(res.items || [])
       setTotal(res.count || 0)
     } catch (error) {
-      // 404 表示无数据，静默处理
       setData([])
       setTotal(0)
     } finally {
       setLoading(false)
     }
-  }, [page, pageSize, searchProjectId, searchAccount, searchAccountType, searchStatus, orderBy, createTimeRange, updateTimeRange])
+  }
 
   const fetchProjectList = async () => {
     try {
@@ -89,10 +130,6 @@ const ProjectAccountList = () => {
       return false  // 返回失败状态
     }
   }
-
-  useEffect(() => {
-    fetchData()
-  }, [fetchData])
 
   useEffect(() => {
     const loadData = async () => {
@@ -625,6 +662,7 @@ const ProjectAccountList = () => {
           showSizeChanger: true,
           showTotal: (total) => `共 ${total} 条`,
           onChange: (newPage, newPageSize) => {
+            console.log('Pagination onChange:', newPage, newPageSize)
             setPage(newPage)
             setPageSize(newPageSize)
           },
