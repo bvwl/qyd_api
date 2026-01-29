@@ -394,11 +394,18 @@ class RedisQueueHandler:
                 # 4. 批量执行数据库操作（使用主库，在事务中）
                 async with in_transaction(connection_name="default"):
                     if updates:
-                        # 获取需要更新的字段（排除唯一字段）
+                        # 获取模型的所有字段名（排除唯一字段和自动字段）
+                        model_fields = set(self.model_class._meta.fields_map.keys())
+                        # 从第一个item获取实际要更新的字段，并确保它们存在于模型中
                         update_fields = [
                             field for field in items[0].keys() 
-                            if field not in self.unique_fields
+                            if field not in self.unique_fields 
+                            and field in model_fields
+                            and field not in ['id', 'create_time', 'update_time']  # 排除自动管理的字段
                         ]
+                        
+                        logger.debug(f"[Worker-{worker_id}] 批量更新字段: {update_fields}")
+                        
                         # 分批更新
                         batch_size = 50
                         for i in range(0, len(updates), batch_size):
