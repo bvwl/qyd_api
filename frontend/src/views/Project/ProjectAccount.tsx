@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Table, Button, Modal, Form, Input, InputNumber, App, Space, Popconfirm, Tag, Select, DatePicker, Tooltip, Descriptions, Card, Statistic, Row, Col } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, HistoryOutlined, CopyOutlined, BarChartOutlined, DownloadOutlined } from '@ant-design/icons'
 import type { ProjectAccount, Project } from '@/types'
@@ -40,7 +40,7 @@ const ProjectAccountList = () => {
   const isAdmin = hasPermission('ADMIN')
   const isGM = hasPermission('GM')
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     // 如果没有选择项目，不查询账号列表
     if (!searchProjectId) {
       setData([])
@@ -73,7 +73,7 @@ const ProjectAccountList = () => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [page, pageSize, searchProjectId, searchAccount, searchAccountType, searchStatus, orderBy, createTimeRange, updateTimeRange])
 
   const fetchProjectList = async () => {
     try {
@@ -91,43 +91,8 @@ const ProjectAccountList = () => {
   }
 
   useEffect(() => {
-    // 只有选择了项目才查询账号列表
-    if (!searchProjectId) {
-      setData([])
-      setTotal(0)
-      return
-    }
-
-    const loadData = async () => {
-      setLoading(true)
-      try {
-        const res = await getProjectAccountList({
-          page,
-          limit: pageSize,
-          res_count: true,
-          project_id: searchProjectId,
-          account: searchAccount || undefined,
-          account_type: searchAccountType,
-          status: searchStatus,
-          order_by: orderBy,
-          create_time_start: createTimeRange?.[0]?.format('YYYY-MM-DD'),
-          create_time_end: createTimeRange?.[1]?.format('YYYY-MM-DD'),
-          update_time_start: updateTimeRange?.[0]?.format('YYYY-MM-DD'),
-          update_time_end: updateTimeRange?.[1]?.format('YYYY-MM-DD'),
-        })
-        setData(res.items || [])
-        setTotal(res.count || 0)
-      } catch (error) {
-        // 404 表示无数据，静默处理
-        setData([])
-        setTotal(0)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    loadData()
-  }, [page, pageSize, searchProjectId, orderBy])
+    fetchData()
+  }, [fetchData])
 
   useEffect(() => {
     const loadData = async () => {
