@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import List
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_serializer
+from pydantic import BaseModel, Field, field_serializer, computed_field
 from app.models.project import Status, AccountType
 from app.utils.time_tool import CN_TZ
 from app.schemas.server.info import Base as ServerInfoBase
@@ -90,6 +90,34 @@ class Out(Base):
     # 关联的项目和服务器基础信息
     project: ProjectInfoBase = Field(..., description="项目信息")
     server: ServerInfoBase | None = Field(None, description="服务器信息")
+
+    @computed_field
+    @property
+    def server_url(self) -> str | None:
+        """
+        根据服务器信息生成代理URL
+        - 20000 <= port < 30000: http://username:password@host:port
+        - 30000 <= port < 40000: socks5://username:password@host:port
+        - 其他端口: 返回 None
+        """
+        if not self.server:
+            return None
+        
+        # 使用 domain 优先，如果没有则使用 host
+        host = self.server.domain or self.server.host
+        port = self.server.port
+        
+        # 固定的用户名和密码
+        username = "cqrxy"
+        password = "Zpaily88"
+        
+        # 根据端口范围判断协议
+        if 20000 <= port < 30000:
+            return f"http://{username}:{password}@{host}:{port}"
+        elif 30000 <= port < 40000:
+            return f"socks5://{username}:{password}@{host}:{port}"
+        else:
+            return None
 
     @field_serializer("create_time", "update_time")
     def format_datetime(self, dt: datetime) -> str:
