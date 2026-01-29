@@ -93,7 +93,7 @@ class Out(Base):
 
     @computed_field
     @property
-    def server_url(self) -> str | None:
+    def proxy_url(self) -> str | None:
         """
         根据服务器信息生成代理URL
         - 20000 <= port < 30000: http://username:password@host:port
@@ -116,6 +116,27 @@ class Out(Base):
             return f"http://{username}:{password}@{host}:{port}"
         elif 30000 <= port < 40000:
             return f"socks5://{username}:{password}@{host}:{port}"
+        else:
+            return None
+
+    @computed_field
+    @property
+    def proxy_type(self) -> str | None:
+        """
+        根据服务器端口判断代理类型
+        - 20000 <= port < 30000: http
+        - 30000 <= port < 40000: socks5
+        - 其他端口: None
+        """
+        if not self.server:
+            return None
+        
+        port = self.server.port
+        
+        if 20000 <= port < 30000:
+            return "http"
+        elif 30000 <= port < 40000:
+            return "socks5"
         else:
             return None
 
