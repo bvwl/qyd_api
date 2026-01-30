@@ -492,7 +492,7 @@ async def gets(
     order_by: str | None = Query(
         "-create_time",
         description="排序字段",
-        pattern="^(?:-)?(?:id|account|status|create_time|update_time)$",
+        pattern="^(?:-)?(?:id|account|status|balance|variable|create_time|update_time)$",
     ),
     res_count: bool = Query(False, description="是否返回总数"),
     create_time_start: str | int | None = Query(
