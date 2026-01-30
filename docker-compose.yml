@@ -97,6 +97,7 @@ services:
     volumes:
       - ./backend/logs:/app/logs
       - ./backend/status:/app/status
+      - ./backend/static:/app/static
     networks:
       - qyd-network
     healthcheck:
@@ -171,6 +172,7 @@ services:
     volumes:
       - ./backend/logs:/app/logs
       - ./backend/status:/app/status
+      - ./backend/static:/app/static
     networks:
       - qyd-network
     depends_on:
