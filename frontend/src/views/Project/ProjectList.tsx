@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Table, Button, Modal, Form, Input, App, Space, Popconfirm, Tag, Select, DatePicker, Transfer, Tooltip, Upload, List } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, TeamOutlined, CopyOutlined, UploadOutlined, DownloadOutlined, FileOutlined, EyeOutlined } from '@ant-design/icons'
+import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, TeamOutlined, CopyOutlined, UploadOutlined, DownloadOutlined, FileOutlined } from '@ant-design/icons'
 import type { Project, User } from '@/types'
 import { ProjectStatus } from '@/types'
 import { getProjectList, createProject, updateProject, deleteProject, uploadProjectFile, getProjectFiles, downloadProjectFile, deleteProjectFile } from '@/api/project'
@@ -57,10 +57,6 @@ const ProjectList = () => {
   const [projectFiles, setProjectFiles] = useState<Array<{ name: string; size: number; modified_time: number }>>([])
   const [fileLoading, setFileLoading] = useState(false)
   const [uploadingFile, setUploadingFile] = useState(false)
-  
-  // 预览相关状态
-  const [previewModalVisible, setPreviewModalVisible] = useState(false)
-  const [previewFile, setPreviewFile] = useState<{ name: string; url: string } | null>(null)
 
   // 权限判断 - 使用数组方式更可靠
   const canManageProject = hasPermission(['ADMIN', 'GM'])
@@ -368,29 +364,6 @@ const ProjectList = () => {
     } catch (error) {
       message.error('文件下载失败')
     }
-  }
-
-  // 预览文件
-  const handlePreview = async (filename: string) => {
-    if (!managingFileProject) return
-
-    try {
-      const blob = await downloadProjectFile(managingFileProject.id, filename)
-      const url = window.URL.createObjectURL(blob)
-      setPreviewFile({ name: filename, url })
-      setPreviewModalVisible(true)
-    } catch (error) {
-      message.error('文件预览失败')
-    }
-  }
-
-  // 关闭预览时清理URL
-  const handleClosePreview = () => {
-    if (previewFile?.url) {
-      window.URL.revokeObjectURL(previewFile.url)
-    }
-    setPreviewFile(null)
-    setPreviewModalVisible(false)
   }
 
   // 删除文件
@@ -809,13 +782,6 @@ const ProjectList = () => {
                 >
                   下载
                 </Button>,
-                <Button
-                  type="link"
-                  icon={<EyeOutlined />}
-                  onClick={() => handlePreview(file.name)}
-                >
-                  预览
-                </Button>,
                 canManageProject && (
                   <Popconfirm
                     title="确定删除该文件吗？"
@@ -843,83 +809,6 @@ const ProjectList = () => {
             </List.Item>
           )}
         />
-      </Modal>
-
-      {/* 文件预览模态框 */}
-      <Modal
-        title={`文件预览 - ${previewFile?.name || ''}`}
-        open={previewModalVisible}
-        onCancel={handleClosePreview}
-        footer={[
-          <Button key="download" icon={<DownloadOutlined />} onClick={() => previewFile && handleDownload(previewFile.name)}>
-            下载
-          </Button>,
-          <Button key="close" onClick={handleClosePreview}>
-            关闭
-          </Button>
-        ]}
-        width={900}
-        style={{ top: 20 }}
-      >
-        {previewFile && (
-          <div style={{ maxHeight: '70vh', overflow: 'auto' }}>
-            {/* PDF 预览 */}
-            {previewFile.name.toLowerCase().endsWith('.pdf') && (
-              <iframe
-                src={previewFile.url}
-                style={{ width: '100%', height: '70vh', border: 'none' }}
-                title="PDF预览"
-              />
-            )}
-            
-            {/* 图片预览 */}
-            {/\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(previewFile.name) && (
-              <img
-                src={previewFile.url}
-                alt={previewFile.name}
-                style={{ width: '100%', maxHeight: '70vh', objectFit: 'contain' }}
-              />
-            )}
-            
-            {/* 文本文件预览 */}
-            {/\.(txt|md|json|xml|csv)$/i.test(previewFile.name) && (
-              <iframe
-                src={previewFile.url}
-                style={{ width: '100%', height: '70vh', border: '1px solid #d9d9d9', borderRadius: '4px' }}
-                title="文本预览"
-              />
-            )}
-            
-            {/* Office 文件预览 - 使用 iframe 直接加载 */}
-            {/\.(doc|docx|xls|xlsx|ppt|pptx)$/i.test(previewFile.name) && (
-              <div>
-                <div style={{ marginBottom: 16, padding: '12px', background: '#f0f0f0', borderRadius: '4px' }}>
-                  <p style={{ margin: 0, color: '#666', fontSize: 14 }}>
-                    <FileOutlined style={{ marginRight: 8 }} />
-                    Office 文件预览（如果无法显示，请点击下载按钮）
-                  </p>
-                </div>
-                <iframe
-                  src={previewFile.url}
-                  style={{ width: '100%', height: '65vh', border: '1px solid #d9d9d9', borderRadius: '4px' }}
-                  title="Office文件预览"
-                />
-              </div>
-            )}
-            
-            {/* 其他不支持预览的文件 */}
-            {!/\.(pdf|jpg|jpeg|png|gif|bmp|webp|txt|md|json|xml|csv|doc|docx|xls|xlsx|ppt|pptx)$/i.test(previewFile.name) && (
-              <div style={{ textAlign: 'center', padding: '40px' }}>
-                <FileOutlined style={{ fontSize: 64, color: '#999', marginBottom: 16 }} />
-                <p style={{ fontSize: 16, marginBottom: 8 }}>该文件类型暂不支持预览</p>
-                <p style={{ color: '#999', marginBottom: 24 }}>请下载后查看</p>
-                <Button type="primary" icon={<DownloadOutlined />} onClick={() => handleDownload(previewFile.name)}>
-                  下载文件
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
       </Modal>
     </div>
   )
