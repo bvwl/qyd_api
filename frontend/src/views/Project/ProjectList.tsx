@@ -890,15 +890,20 @@ const ProjectList = () => {
               />
             )}
             
-            {/* Office 文件提示 */}
+            {/* Office 文件预览 - 使用 iframe 直接加载 */}
             {/\.(doc|docx|xls|xlsx|ppt|pptx)$/i.test(previewFile.name) && (
-              <div style={{ textAlign: 'center', padding: '40px' }}>
-                <FileOutlined style={{ fontSize: 64, color: '#1890ff', marginBottom: 16 }} />
-                <p style={{ fontSize: 16, marginBottom: 8 }}>Office 文件暂不支持在线预览</p>
-                <p style={{ color: '#999', marginBottom: 24 }}>请下载后使用相应软件打开</p>
-                <Button type="primary" icon={<DownloadOutlined />} onClick={() => handleDownload(previewFile.name)}>
-                  下载文件
-                </Button>
+              <div>
+                <div style={{ marginBottom: 16, padding: '12px', background: '#f0f0f0', borderRadius: '4px' }}>
+                  <p style={{ margin: 0, color: '#666', fontSize: 14 }}>
+                    <FileOutlined style={{ marginRight: 8 }} />
+                    Office 文件预览（如果无法显示，请点击下载按钮）
+                  </p>
+                </div>
+                <iframe
+                  src={previewFile.url}
+                  style={{ width: '100%', height: '65vh', border: '1px solid #d9d9d9', borderRadius: '4px' }}
+                  title="Office文件预览"
+                />
               </div>
             )}
             
