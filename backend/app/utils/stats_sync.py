@@ -11,6 +11,10 @@ from app.models.project import ProjectAccount
 from app.models.stats import ProjectDailyStats
 from app.core.database import db_read, db_write
 from app.crud.project.stats import project_stats_crud
+from app.utils.logs import getLogger
+
+# 使用 scheduler 日志记录器
+scheduler_logger = getLogger('scheduler')
 
 
 async def sync_today_stats():
@@ -18,7 +22,7 @@ async def sync_today_stats():
     同步今天的统计数据
     从账号表统计今天更新的数量，写入统计表
     """
-    print(f"开始同步今天的统计数据: {datetime.now()}")
+    scheduler_logger.info(f"开始同步今天的统计数据: {datetime.now()}")
     
     today = datetime.now().date()
     start_time = datetime.combine(today, datetime.min.time())
@@ -43,7 +47,7 @@ async def sync_today_stats():
         await project_stats_crud.upsert_daily_stats(project_id, today, count)
         synced_count += 1
     
-    print(f"✅ 同步完成: {synced_count} 个项目，共 {len(accounts)} 个账号更新")
+    scheduler_logger.info(f"同步完成: {synced_count} 个项目，共 {len(accounts)} 个账号更新")
     return synced_count
 
 
@@ -54,7 +58,7 @@ async def sync_historical_stats(days: int = 30):
     
     :param days: 同步最近N天的数据
     """
-    print(f"开始同步最近 {days} 天的统计数据...")
+    scheduler_logger.info(f"开始同步最近 {days} 天的统计数据...")
     
     end_date = datetime.now().date()
     start_date = end_date - timedelta(days=days-1)
@@ -64,7 +68,7 @@ async def sync_historical_stats(days: int = 30):
     # 逐天同步
     current_date = start_date
     while current_date <= end_date:
-        print(f"\n同步 {current_date} 的数据...")
+        scheduler_logger.debug(f"同步 {current_date} 的数据...")
         
         start_time = datetime.combine(current_date, datetime.min.time())
         end_time = datetime.combine(current_date, datetime.max.time())
@@ -87,11 +91,11 @@ async def sync_historical_stats(days: int = 30):
             await project_stats_crud.upsert_daily_stats(project_id, current_date, count)
             total_synced += 1
         
-        print(f"  {current_date}: {len(project_counts)} 个项目，{len(accounts)} 个账号更新")
+        scheduler_logger.debug(f"{current_date}: {len(project_counts)} 个项目，{len(accounts)} 个账号更新")
         
         current_date += timedelta(days=1)
     
-    print(f"\n✅ 历史数据同步完成: 共同步 {total_synced} 条记录")
+    scheduler_logger.info(f"历史数据同步完成: 共同步 {total_synced} 条记录")
     return total_synced
 
 
@@ -101,7 +105,7 @@ async def cleanup_old_stats(keep_days: int = 90):
     
     :param keep_days: 保留最近N天的数据
     """
-    print(f"开始清理 {keep_days} 天前的统计数据...")
+    scheduler_logger.info(f"开始清理 {keep_days} 天前的统计数据...")
     
     cutoff_date = datetime.now().date() - timedelta(days=keep_days)
     
@@ -110,7 +114,7 @@ async def cleanup_old_stats(keep_days: int = 90):
         date__lt=cutoff_date
     ).delete()
     
-    print(f"✅ 清理完成: 删除了 {deleted_count} 条旧记录")
+    scheduler_logger.info(f"清理完成: 删除了 {deleted_count} 条旧记录")
     return deleted_count
 
 
@@ -122,6 +126,4 @@ async def scheduled_sync_stats():
     try:
         await sync_today_stats()
     except Exception as e:
-        print(f"❌ 定时同步失败: {e}")
-        import traceback
-        traceback.print_exc()
+        scheduler_logger.error(f"定时同步失败: {e}", exc_info=True)

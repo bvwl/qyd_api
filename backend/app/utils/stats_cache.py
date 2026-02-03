@@ -93,17 +93,21 @@ class StatsCache:
     
     async def get_project_stats_time_series(
         self,
-        project_ids: List[str],
+        project_ids: List[str] | None,
         days: int
     ) -> Optional[List[Dict]]:
         """
         获取项目统计时间序列缓存
         
-        :param project_ids: 项目ID列表
+        :param project_ids: 项目ID列表，None表示不使用缓存
         :param days: 天数
         :return: 时间序列数据，None表示缓存不存在
         """
         if not self.enabled or not self.redis_client:
+            return None
+        
+        # 如果 project_ids 为 None 或空列表，不使用缓存
+        if not project_ids:
             return None
         
         try:
@@ -121,7 +125,7 @@ class StatsCache:
     
     async def set_project_stats_time_series(
         self,
-        project_ids: List[str],
+        project_ids: List[str] | None,
         days: int,
         data: List[Dict],
         expire: int = 300  # 默认缓存5分钟
@@ -129,13 +133,17 @@ class StatsCache:
         """
         设置项目统计时间序列缓存
         
-        :param project_ids: 项目ID列表
+        :param project_ids: 项目ID列表，None表示不使用缓存
         :param days: 天数
         :param data: 时间序列数据
         :param expire: 过期时间（秒）
         :return: 是否成功
         """
         if not self.enabled or not self.redis_client:
+            return False
+        
+        # 如果 project_ids 为 None 或空列表，不使用缓存
+        if not project_ids:
             return False
         
         try:

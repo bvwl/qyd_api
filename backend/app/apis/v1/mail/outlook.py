@@ -9,6 +9,10 @@ from app.crud.mail.info import email_info_crud
 from app.models.mail import EmailInfo
 from app.utils.time_tool import parse_time, CN_TZ
 from app.apis.deps import get_current_user
+from app.utils.logs import getLogger
+
+# 使用 scheduler 日志记录器用于定时任务
+scheduler_logger = getLogger('scheduler')
 
 app = APIRouter()
 
@@ -176,14 +180,14 @@ async def check_and_update_emails_logic(
     page = 1
     total_checked = 0
     
-    logger.info(f"开始检查邮箱状态，条件: status={status}, email_type={email_type}, "
+    scheduler_logger.info(f"开始检查邮箱状态，条件: status={status}, email_type={email_type}, "
                 f"create_time: {create_time_start} ~ {create_time_end}, "
                 f"update_time: {update_time_start} ~ {update_time_end}")
     
     while True:
         try:
             # 分批查询
-            logger.info(f"正在查询第 {page} 页，每页 {batch_size} 条...")
+            scheduler_logger.debug(f"正在查询第 {page} 页，每页 {batch_size} 条...")
             result = await email_info_crud.get_multi(
                 status=status,
                 page=page,
@@ -197,10 +201,10 @@ async def check_and_update_emails_logic(
             
             emails = result.items
             if not emails:
-                logger.info(f"第 {page} 页没有数据，结束检查")
+                scheduler_logger.debug(f"第 {page} 页没有数据，结束检查")
                 break
             
-            logger.info(f"第 {page} 页获取到 {len(emails)} 个邮箱，开始检查...")
+            scheduler_logger.debug(f"第 {page} 页获取到 {len(emails)} 个邮箱，开始检查...")
             
             # 处理当前批次
             for email in emails:
@@ -208,7 +212,7 @@ async def check_and_update_emails_logic(
                     # 记录邮箱的 IP 和 Token 状态
                     has_ip = email.server_id is not None
                     has_token = email.access_token is not None
-                    logger.debug(f"检查邮箱 {email.email}: has_ip={has_ip}, has_token={has_token}")
+                    scheduler_logger.debug(f"检查邮箱 {email.email}: has_ip={has_ip}, has_token={has_token}")
                     
                     manager = AzureAuthManager(email.email)
                     res = await manager.get_emails_main('@', 1, 1)
@@ -217,32 +221,32 @@ async def check_and_update_emails_logic(
                     # 只在状态变化时更新
                     if email.status != new_status:
                         await EmailInfo.filter(id=email.id).update(status=new_status)
-                        logger.info(f"邮箱 {email.email} 状态更新: {email.status} -> {new_status}")
+                        scheduler_logger.info(f"邮箱 {email.email} 状态更新: {email.status} -> {new_status}")
                     
                     total_checked += 1
                 except Exception as e:
-                    logger.error(f"检查邮箱 {email.email} 失败: {str(e)}")
+                    scheduler_logger.warning(f"检查邮箱 {email.email} 失败: {str(e)}")
                     continue
             
             # 如果返回的数量少于批次大小，说明已经是最后一批
             if len(emails) < batch_size:
-                logger.info(f"第 {page} 页返回 {len(emails)} 条（少于 {batch_size}），这是最后一批")
+                scheduler_logger.debug(f"第 {page} 页返回 {len(emails)} 条（少于 {batch_size}），这是最后一批")
                 break
             
-            logger.info(f"第 {page} 页处理完成，继续下一页...")
+            scheduler_logger.debug(f"第 {page} 页处理完成，继续下一页...")
             page += 1
             
         except HTTPException as e:
             # 404 表示没有更多数据
             if e.status_code == 404:
-                logger.info(f"第 {page} 页查询返回404，没有更多数据")
+                scheduler_logger.debug(f"第 {page} 页查询返回404，没有更多数据")
                 break
             raise
         except Exception as e:
-            logger.error(f"批量检查邮箱状态失败: {str(e)}")
+            scheduler_logger.error(f"批量检查邮箱状态失败: {str(e)}", exc_info=True)
             break
     
-    logger.info(f"邮箱状态检查完成，共检查 {total_checked} 个邮箱")
+    scheduler_logger.info(f"邮箱状态检查完成，共检查 {total_checked} 个邮箱")
     return total_checked
 
 
@@ -251,12 +255,23 @@ async def auto_check_email_status(days: int = 15):
     """
     自动检查 N 天前未更新的正常邮箱状态
     """
-    logger.info(f"开始自动检查邮箱状态，检查 {days} 天前未更新的邮箱")
+    import time
+    start_time = time.time()
+    
+    scheduler_logger.info(f"开始自动检查邮箱状态，检查 {days} 天前未更新的邮箱")
+    
     # 计算 N 天前的时间点，并转换为 13 位时间戳，便于统一解析
     check_time = datetime.now(CN_TZ) - timedelta(days=days)
     check_ts = int(check_time.timestamp() * 1000)
-    await check_and_update_emails_logic(
+    
+    total_checked = await check_and_update_emails_logic(
         status=1,
         email_type=EmailType.IP_OK_TOKEN_OK,
         update_time_end=check_ts,
+    )
+    
+    elapsed = time.time() - start_time
+    scheduler_logger.info(
+        f"邮箱状态检查完成，共检查 {total_checked} 个邮箱，"
+        f"耗时 {elapsed:.2f} 秒"
     )
