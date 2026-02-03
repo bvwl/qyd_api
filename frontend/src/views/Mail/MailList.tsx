@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Table, Button, Space, Tag, Input, Select, Modal, Form, DatePicker, App } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, SyncOutlined, CopyOutlined } from '@ant-design/icons'
-import type { ColumnsType } from 'antd/es/table'
+import type { ColumnsType, TableProps } from 'antd/es/table'
 import { getEmailList, createEmail, updateEmail, deleteEmail, batchUpdateEmailStatus } from '@/api/mail'
 import { getServerList } from '@/api/server'
 import type { EmailInfo, ServerInfo } from '@/types'
@@ -12,6 +12,8 @@ import { Dayjs } from 'dayjs'
 import { useUserStore } from '@/store/useUserStore'
 
 const { RangePicker } = DatePicker
+
+type SortOrder = 'ascend' | 'descend' | null
 
 export default function MailList() {
   const { message } = App.useApp()
@@ -25,6 +27,7 @@ export default function MailList() {
   const [searchEmailType, setSearchEmailType] = useState<EmailType>()
   const [createTimeRange, setCreateTimeRange] = useState<[Dayjs, Dayjs] | null>(null)
   const [updateTimeRange, setUpdateTimeRange] = useState<[Dayjs, Dayjs] | null>(null)
+  const [orderBy, setOrderBy] = useState<string>('-update_time')
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([])
   const [modalVisible, setModalVisible] = useState(false)
   const [batchModalVisible, setBatchModalVisible] = useState(false)
@@ -61,6 +64,7 @@ export default function MailList() {
         create_time_end: createTimeRange?.[1]?.format('YYYY-MM-DD'),
         update_time_start: updateTimeRange?.[0]?.format('YYYY-MM-DD'),
         update_time_end: updateTimeRange?.[1]?.format('YYYY-MM-DD'),
+        order_by: orderBy,
       })
       setDataSource(res.items || [])
       setTotal(res.count || 0)
@@ -85,7 +89,7 @@ export default function MailList() {
 
   useEffect(() => {
     fetchData()
-  }, [page, pageSize, searchEmail, searchStatus, searchEmailType])
+  }, [page, pageSize, orderBy])
 
   useEffect(() => {
     const loadData = async () => {
@@ -93,6 +97,39 @@ export default function MailList() {
     }
     loadData()
   }, [])
+
+  const handleSearch = () => {
+    setPage(1)
+    fetchData()
+  }
+
+  const handleReset = () => {
+    setSearchEmail('')
+    setSearchStatus(undefined)
+    setSearchEmailType(undefined)
+    setCreateTimeRange(null)
+    setUpdateTimeRange(null)
+    setOrderBy('-update_time')
+    setSelectedRowKeys([])
+    setPage(1)
+    setTimeout(() => {
+      fetchData()
+    }, 0)
+  }
+
+  const handleTableChange: TableProps<EmailInfo>['onChange'] = (_pagination, _filters, sorter: any) => {
+    if (sorter.field) {
+      const order = sorter.order === 'ascend' ? '' : '-'
+      setOrderBy(`${order}${sorter.field}`)
+      setPage(1)
+    }
+  }
+
+  const getSortOrder = (field: string): SortOrder => {
+    if (orderBy === field) return 'ascend'
+    if (orderBy === `-${field}`) return 'descend'
+    return null
+  }
 
   const handleAdd = () => {
     setEditingEmail(null)
@@ -195,6 +232,8 @@ export default function MailList() {
       dataIndex: 'email',
       key: 'email',
       width: 300,
+      sorter: true,
+      sortOrder: getSortOrder('email'),
       render: (text: string) => (
         <Space size={4}>
           <span>{text}</span>
@@ -220,6 +259,8 @@ export default function MailList() {
       dataIndex: 'status',
       key: 'status',
       width: 80,
+      sorter: true,
+      sortOrder: getSortOrder('status'),
       render: (status: Status) => {
         const config = STATUS_MAP[status]
         return <Tag color={config.color}>{config.text}</Tag>
@@ -237,10 +278,21 @@ export default function MailList() {
       ),
     },
     {
+      title: '创建时间',
+      dataIndex: 'create_time',
+      key: 'create_time',
+      width: 160,
+      sorter: true,
+      sortOrder: getSortOrder('create_time'),
+      render: (text: string) => formatDateTime(text),
+    },
+    {
       title: '更新时间',
       dataIndex: 'update_time',
       key: 'update_time',
       width: 160,
+      sorter: true,
+      sortOrder: getSortOrder('update_time'),
       render: (text: string) => formatDateTime(text),
     },
     {
@@ -328,10 +380,10 @@ export default function MailList() {
             format="YYYY-MM-DD"
             style={{ width: 260 }}
           />
-          <Button type="primary" icon={<SearchOutlined />} onClick={() => { setPage(1); fetchData(); }}>
+          <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>
             搜索
           </Button>
-          <Button onClick={() => { setSearchEmail(''); setSearchStatus(undefined); setSearchEmailType(undefined); setCreateTimeRange(null); setUpdateTimeRange(null); setSelectedRowKeys([]); setPage(1); setTimeout(fetchData, 0); }}>
+          <Button onClick={handleReset}>
             重置
           </Button>
           <Button icon={<SyncOutlined />} onClick={handleBatchUpdate}>
@@ -362,6 +414,7 @@ export default function MailList() {
         columns={columns}
         rowKey="id"
         scroll={{ x: 1200 }}
+        onChange={handleTableChange}
         rowSelection={isAdmin ? {
           selectedRowKeys,
           onChange: (selectedKeys) => setSelectedRowKeys(selectedKeys as string[]),

@@ -11,6 +11,7 @@ export const getEmailList = (params?: PaginationParams & {
   create_time_end?: string
   update_time_start?: string
   update_time_end?: string
+  order_by?: string
 }) => {
   return api.get<any, ApiResponse<EmailInfo>>('/v1/mail/info', { params })
 }
