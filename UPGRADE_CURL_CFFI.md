@@ -14,7 +14,7 @@ Outlook 邮件功能使用 `curl_cffi` 库支持 `socks5h://` 代理协议，但
 
 ```diff
 - curl_cffi==0.6.2
-+ curl_cffi>=0.7.0
++ curl_cffi~=0.14.0  # 最新稳定版本
 ```
 
 ### 改进点
@@ -23,6 +23,8 @@ Outlook 邮件功能使用 `curl_cffi` 库支持 `socks5h://` 代理协议，但
 - ✅ 完整支持 `socks5h://` 协议
 - ✅ 更好的代理支持
 - ✅ 性能优化
+- ✅ 更多浏览器指纹支持
+- ✅ 修复了大量已知问题
 
 ## 升级步骤
 
@@ -71,7 +73,7 @@ docker compose exec backend-api python -c "import curl_cffi; print(curl_cffi.__v
 python -c "import curl_cffi; print(curl_cffi.__version__)"
 ```
 
-应该显示 `0.7.0` 或更高版本。
+应该显示 `0.14.0` 或更高版本。
 
 ### 测试 Outlook 功能
 
@@ -129,6 +131,6 @@ bash restart-backend-clean.sh
 
 ## 更新日志
 
-- **2026-02-06**：升级 curl_cffi 从 0.6.2 到 >=0.7.0
+- **2026-02-06**：升级 curl_cffi 从 0.6.2 到 ~=0.14.0（最新稳定版）
 - **2026-02-06**：优化异常处理，兼容新旧版本
 - **2026-02-06**：Outlook 客户端改用 _req2() 方法
