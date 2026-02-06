@@ -87,16 +87,19 @@ export default function MailList() {
     }
   }
 
-  useEffect(() => {
-    fetchData()
-  }, [page, pageSize, orderBy])
-
+  // 初始化加载服务器列表
   useEffect(() => {
     const loadData = async () => {
       await fetchServers()
     }
     loadData()
   }, [])
+
+  // 当分页、排序变化时重新加载数据
+  useEffect(() => {
+    fetchData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, pageSize, orderBy])
 
   const handleSearch = () => {
     setPage(1)
@@ -426,9 +429,12 @@ export default function MailList() {
           total,
           showSizeChanger: true,
           showTotal: (total) => `共 ${total} 条`,
-          onChange: (page, pageSize) => {
-            setPage(page)
-            setPageSize(pageSize)
+          onChange: (newPage, newPageSize) => {
+            console.log('分页变化:', newPage, newPageSize)
+            setPage(newPage)
+            if (newPageSize !== pageSize) {
+              setPageSize(newPageSize)
+            }
           },
         }}
       />

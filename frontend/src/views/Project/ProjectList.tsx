@@ -109,8 +109,10 @@ const ProjectList = () => {
     }
   }
 
+  // 当分页、排序变化时重新加载数据
   useEffect(() => {
     fetchData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, pageSize, orderBy])
   
   useEffect(() => {
@@ -218,7 +220,8 @@ const ProjectList = () => {
         message.success('创建成功')
       }
       setModalVisible(false)
-      fetchData()
+      // 确保数据刷新
+      await fetchData()
     } catch (error) {
       message.error('操作失败')
     }
@@ -260,7 +263,8 @@ const ProjectList = () => {
       })
       message.success('人员关联更新成功')
       setUserModalVisible(false)
-      fetchData()
+      // 确保数据刷新
+      await fetchData()
     } catch (error) {
       message.error('更新失败')
     } finally {
@@ -648,9 +652,12 @@ const ProjectList = () => {
           total: total,
           showSizeChanger: true,
           showTotal: (total) => `共 ${total} 条`,
-          onChange: (page, pageSize) => {
-            setPage(page)
-            setPageSize(pageSize)
+          onChange: (newPage, newPageSize) => {
+            console.log('项目列表分页变化:', newPage, newPageSize)
+            setPage(newPage)
+            if (newPageSize !== pageSize) {
+              setPageSize(newPageSize)
+            }
           },
         }}
       />
