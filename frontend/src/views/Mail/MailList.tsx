@@ -97,6 +97,7 @@ export default function MailList() {
 
   // 当分页、排序变化时重新加载数据
   useEffect(() => {
+    console.log('useEffect 触发 - 准备加载数据:', { page, pageSize, orderBy })
     fetchData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, pageSize, orderBy])
@@ -121,26 +122,42 @@ export default function MailList() {
   }
 
   const handleTableChange: TableProps<EmailInfo>['onChange'] = (pagination, _filters, sorter: any) => {
-    console.log('Table onChange 触发:', { pagination, sorter })
+    console.log('Table onChange 触发:', { 
+      pagination, 
+      sorter,
+      currentPage: page,
+      currentPageSize: pageSize,
+      currentOrderBy: orderBy
+    })
+    
+    let needRefresh = false
     
     // 处理分页变化
-    if (pagination.current !== page) {
+    if (pagination.current && pagination.current !== page) {
       console.log('页码变化:', page, '->', pagination.current)
-      setPage(pagination.current || 1)
+      setPage(pagination.current)
+      needRefresh = true
     }
-    if (pagination.pageSize !== pageSize) {
+    if (pagination.pageSize && pagination.pageSize !== pageSize) {
       console.log('每页数量变化:', pageSize, '->', pagination.pageSize)
-      setPageSize(pagination.pageSize || 10)
+      setPageSize(pagination.pageSize)
+      setPage(1) // 改变每页数量时重置到第一页
+      needRefresh = true
     }
     
-    // 处理排序变化
-    if (sorter.field) {
+    // 处理排序变化（只有当用户点击排序时才处理）
+    if (sorter && sorter.field && sorter.order !== undefined) {
       const order = sorter.order === 'ascend' ? '' : '-'
       const newOrderBy = `${order}${sorter.field}`
-      console.log('排序变化:', orderBy, '->', newOrderBy)
-      setOrderBy(newOrderBy)
-      setPage(1)
+      if (newOrderBy !== orderBy) {
+        console.log('排序变化:', orderBy, '->', newOrderBy)
+        setOrderBy(newOrderBy)
+        setPage(1)
+        needRefresh = true
+      }
     }
+    
+    console.log('是否需要刷新:', needRefresh)
   }
 
   const getSortOrder = (field: string): SortOrder => {
