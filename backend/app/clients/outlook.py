@@ -108,7 +108,7 @@ class AzureAuthManager(Req):
                 username = "cqrxy"
                 password = "Zpaily88"
                 
-                # 统一使用 SOCKS5H 协议（更安全，DNS 也走代理）
+                # 统一使用 SOCKS5H 协议（curl_cffi 支持，DNS 也走代理）
                 if 20000 <= port < 30000:
                     # HTTP 端口范围：转换为对应的 SOCKS5 端口（+10000）
                     socks5_port = port + 10000
@@ -234,8 +234,8 @@ class AzureAuthManager(Req):
         }
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         
-        # 发送请求 (带代理)
-        res = await self._req("POST", token_url, data=data, headers=headers, proxy_url=self.proxy)
+        # 发送请求 (带代理) - 使用 _req2 (curl_cffi) 支持 socks5h
+        res = await self._req2("POST", token_url, data=data, headers=headers, proxy_url=self.proxy)
         status_code = res['code']
         content = res.get("content")
         
@@ -286,7 +286,7 @@ class AzureAuthManager(Req):
         }
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         
-        res = await self._req("POST", token_url, data=data, headers=headers, proxy_url=self.proxy)
+        res = await self._req2("POST", token_url, data=data, headers=headers, proxy_url=self.proxy)
         status_code = res['code']
         content = res.get("content")
         
@@ -338,7 +338,7 @@ class AzureAuthManager(Req):
         用于验证 Token 有效性和获取用户 Profile
         """
         url = f"{self.GRAPH_API_URL}/me"
-        res = await self._req("GET", url, headers=self._get_headers(), proxy_url=self.proxy)
+        res = await self._req2("GET", url, headers=self._get_headers(), proxy_url=self.proxy)
         status_code = res['code']
         content = res.get("content")
         # 5xx 服务器错误或 408 超时：触发重试
@@ -365,7 +365,7 @@ class AzureAuthManager(Req):
             "$select": "id,subject,from,receivedDateTime,bodyPreview,body", # 只查询必要字段
             "$orderby": "receivedDateTime desc" # 按时间倒序
         }
-        res = await self._req("GET", url, headers=self._get_headers(), params=params, proxy_url=self.proxy)
+        res = await self._req2("GET", url, headers=self._get_headers(), params=params, proxy_url=self.proxy)
         status_code = res['code']
         content = res.get("content")
         # 5xx 服务器错误或 408 超时：触发重试
@@ -388,7 +388,7 @@ class AzureAuthManager(Req):
         """
         url = f"{self.GRAPH_API_URL}/me/messages/{message_id}/move"
         data = {"destinationId": destination_id}
-        res = await self._req("POST", url, headers=self._get_headers(), json=data, proxy_url=self.proxy)
+        res = await self._req2("POST", url, headers=self._get_headers(), json=data, proxy_url=self.proxy)
         status_code = res['code']
         # 5xx 服务器错误或 408 超时：触发重试
         if status_code >= 500 or status_code == 408:
@@ -434,7 +434,7 @@ class AzureAuthManager(Req):
             },
             "saveToSentItems": "true" # 保存到已发送文件夹
         }
-        res = await self._req("POST", url, headers=self._get_headers(), json=data, proxy_url=self.proxy)
+        res = await self._req2("POST", url, headers=self._get_headers(), json=data, proxy_url=self.proxy)
         status_code = res['code']
         # 5xx 服务器错误或 408 超时：触发重试
         if status_code >= 500 or status_code == 408:
