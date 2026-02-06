@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Table, Button, Modal, Form, Input, App, Space, Popconfirm, Tag, Select, DatePicker, Transfer, Tooltip, Upload, List } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, TeamOutlined, CopyOutlined, UploadOutlined, DownloadOutlined, FileOutlined } from '@ant-design/icons'
 import type { Project, User } from '@/types'
@@ -117,6 +117,7 @@ const ProjectList = () => {
   
   useEffect(() => {
     fetchFilterUsers()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleSearch = () => {
@@ -191,14 +192,26 @@ const ProjectList = () => {
     })
   }
 
-  const handleTableChange: TableProps<Project>['onChange'] = (_pagination, _filters, sorter: any) => {
+  const handleTableChange: TableProps<Project>['onChange'] = (pagination, _filters, sorter: any) => {
+    console.log('Table onChange 触发:', { pagination, sorter })
+    
+    // 处理分页变化
+    if (pagination.current !== page) {
+      console.log('页码变化:', page, '->', pagination.current)
+      setPage(pagination.current || 1)
+    }
+    if (pagination.pageSize !== pageSize) {
+      console.log('每页数量变化:', pageSize, '->', pagination.pageSize)
+      setPageSize(pagination.pageSize || 10)
+    }
+    
+    // 处理排序变化
     if (sorter.field) {
       const order = sorter.order === 'ascend' ? '' : '-'
-      setOrderBy(`${order}${sorter.field}`)
+      const newOrderBy = `${order}${sorter.field}`
+      console.log('排序变化:', orderBy, '->', newOrderBy)
+      setOrderBy(newOrderBy)
       setPage(1)
-      setTimeout(() => {
-        fetchData()
-      }, 0)
     }
   }
 
@@ -652,13 +665,6 @@ const ProjectList = () => {
           total: total,
           showSizeChanger: true,
           showTotal: (total) => `共 ${total} 条`,
-          onChange: (newPage, newPageSize) => {
-            console.log('项目列表分页变化:', newPage, newPageSize)
-            setPage(newPage)
-            if (newPageSize !== pageSize) {
-              setPageSize(newPageSize)
-            }
-          },
         }}
       />
 

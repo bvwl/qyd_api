@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Table, Button, Space, Tag, Input, Select, Modal, Form, DatePicker, App } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, SyncOutlined, CopyOutlined } from '@ant-design/icons'
 import type { ColumnsType, TableProps } from 'antd/es/table'
@@ -120,10 +120,25 @@ export default function MailList() {
     }, 0)
   }
 
-  const handleTableChange: TableProps<EmailInfo>['onChange'] = (_pagination, _filters, sorter: any) => {
+  const handleTableChange: TableProps<EmailInfo>['onChange'] = (pagination, _filters, sorter: any) => {
+    console.log('Table onChange 触发:', { pagination, sorter })
+    
+    // 处理分页变化
+    if (pagination.current !== page) {
+      console.log('页码变化:', page, '->', pagination.current)
+      setPage(pagination.current || 1)
+    }
+    if (pagination.pageSize !== pageSize) {
+      console.log('每页数量变化:', pageSize, '->', pagination.pageSize)
+      setPageSize(pagination.pageSize || 10)
+    }
+    
+    // 处理排序变化
     if (sorter.field) {
       const order = sorter.order === 'ascend' ? '' : '-'
-      setOrderBy(`${order}${sorter.field}`)
+      const newOrderBy = `${order}${sorter.field}`
+      console.log('排序变化:', orderBy, '->', newOrderBy)
+      setOrderBy(newOrderBy)
       setPage(1)
     }
   }
@@ -429,13 +444,6 @@ export default function MailList() {
           total,
           showSizeChanger: true,
           showTotal: (total) => `共 ${total} 条`,
-          onChange: (newPage, newPageSize) => {
-            console.log('分页变化:', newPage, newPageSize)
-            setPage(newPage)
-            if (newPageSize !== pageSize) {
-              setPageSize(newPageSize)
-            }
-          },
         }}
       />
 
