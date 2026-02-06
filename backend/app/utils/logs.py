@@ -60,9 +60,8 @@ def getLogger(name: str = 'root') -> Logger:
         logger.addHandler(console_handler)
         logger.addHandler(file_handler)
 
-        # 添加压缩功能和清理旧日志（在第一次创建 logger 时执行一次）
-        _compress_and_organize_logs(log_dir, name)
-        delete_old_compressed_logs(log_dir, days=90)  # 改为90天（3个月）
+        # 注意：日志压缩由 main.py 中的启动任务和定时任务统一处理
+        # 不在这里执行，避免每次创建 logger 都重复压缩
 
     return logger
 
@@ -163,11 +162,24 @@ def compress_all_logs(log_dir: str = None):
     
     # 压缩每个模块的旧日志
     compressed_count = 0
+    processed_files = set()  # 记录已处理的文件，避免重复
+    
     for logger_name in logger_names:
         pattern = os.path.join(log_dir, f"{logger_name}.log.*")
         for filepath in glob.glob(pattern):
+            # 跳过已压缩的文件
             if filepath.endswith('.gz'):
                 continue
+            
+            # 跳过已处理的文件（避免重复）
+            if filepath in processed_files:
+                continue
+            
+            # 检查文件是否存在（避免并发问题）
+            if not os.path.exists(filepath):
+                continue
+            
+            processed_files.add(filepath)
             
             try:
                 # 从文件名中提取日期时间信息
@@ -198,12 +210,18 @@ def compress_all_logs(log_dir: str = None):
                     gz_filename = filename + '.gz'
                     target_path = os.path.join(target_dir, gz_filename)
                     
+                    # 如果目标文件已存在，跳过
+                    if os.path.exists(target_path):
+                        os.remove(filepath)  # 删除源文件
+                        continue
+                    
                     with open(filepath, 'rb') as f_in:
                         with gzip.open(target_path, 'wb') as f_out:
                             shutil.copyfileobj(f_in, f_out)
                     
                     os.remove(filepath)
                     compressed_count += 1
+                    print(f"日志已压缩并移动: {filepath} -> {target_path}")
                 else:
                     # 格式不对，直接压缩
                     with open(filepath, 'rb') as f_in:
@@ -212,6 +230,9 @@ def compress_all_logs(log_dir: str = None):
                     os.remove(filepath)
                     compressed_count += 1
                     
+            except FileNotFoundError:
+                # 文件已被其他进程处理，跳过
+                continue
             except Exception as e:
                 print(f"日志压缩失败: {filepath}, 原因: {e}")
     
