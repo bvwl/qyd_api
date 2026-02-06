@@ -82,9 +82,13 @@ class AzureAuthManager(Req):
         逻辑说明：
         1. 查询 EmailInfo 模型，预加载 server 关联表。
         2. 如果存在 server，根据端口号范围配置代理类型：
-           - 20000 <= port < 30000: 使用 HTTP 代理
-           - 30000 <= port < 40000: 使用 SOCKS5 代理
+           - 20000 <= port < 30000: 使用 HTTP 代理（转换为 SOCKS5H 更安全）
+           - 30000 <= port < 40000: 使用 SOCKS5H 代理（DNS 也走代理，防止泄露）
         3. 加载 client_id, access_token, refresh_token 到内存。
+        
+        安全性说明：
+        - SOCKS5H 比 SOCKS5 更安全：DNS 解析在代理服务器端完成，防止 DNS 泄露
+        - SOCKS5H 比 HTTP 代理更安全：完整的流量保护，更难被检测
         
         :return: 
             0: 未配置 (无 client_id 且无 token)
@@ -101,11 +105,17 @@ class AzureAuthManager(Req):
                 server = mail_info.server
                 host = server.domain or server.host
                 port = server.port
-                # 根据端口范围区分代理协议
+                username = "cqrxy"
+                password = "Zpaily88"
+                
+                # 统一使用 SOCKS5H 协议（更安全，DNS 也走代理）
                 if 20000 <= port < 30000:
-                    self.proxy = f"http://cqrxy:Zpaily88@{host}:{port}"
+                    # HTTP 端口范围：转换为对应的 SOCKS5 端口（+10000）
+                    socks5_port = port + 10000
+                    self.proxy = f"socks5h://{username}:{password}@{host}:{socks5_port}"
                 elif 30000 <= port < 40000:
-                    self.proxy = f"socks5://cqrxy:Zpaily88@{host}:{port}"
+                    # SOCKS5 端口范围：直接使用 SOCKS5H
+                    self.proxy = f"socks5h://{username}:{password}@{host}:{port}"
 
         if self.client_id and not self.access_token and not self.refresh_token_value:
             return 2
