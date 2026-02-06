@@ -39,10 +39,11 @@ export default function MailList() {
   // 获取用户信息，判断是否为管理员
   const { userInfo } = useUserStore()
   const isAdmin = useMemo(() => {
-    const result = userInfo?.roles?.some(role => role.code === 'ADMIN') || false
+    const roles = userInfo?.roles?.map(r => r.code) || []
+    const result = roles.includes('ADMIN')
     console.log('isAdmin 重新计算:', {
       userInfo,
-      roles: userInfo?.roles?.map(r => r.code),
+      roles,
       result
     })
     return result

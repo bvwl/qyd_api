@@ -60,14 +60,16 @@ const ProjectList = () => {
 
   // 权限判断 - 使用 useMemo 确保响应 userInfo 变化
   const canManageProject = useMemo(() => {
-    const result = hasPermission(['ADMIN', 'GM'])
+    // 直接检查角色，不依赖 hasPermission 函数
+    const roles = userInfo?.roles?.map(r => r.code) || []
+    const result = roles.includes('ADMIN') || roles.includes('GM')
     console.log('canManageProject 重新计算:', {
       userInfo,
-      roles: userInfo?.roles?.map(r => r.code),
+      roles,
       result
     })
     return result
-  }, [userInfo, hasPermission])
+  }, [userInfo])
   
   // 监控权限变化
   useEffect(() => {
