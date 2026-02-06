@@ -127,12 +127,14 @@ class Req:
             status_code = response.status_code
             cookies = {key: value for key, value in response.cookies.items()}
             headers = dict(response.headers)
-        except exceptions.Timeout:
-            status_code = 408  # 请求超时
-            content = "Request Timeout"
         except Exception as e:
-            status_code = 500  # 网络错误
-            content = f'{e}'
+            # 处理超时异常
+            if 'timeout' in str(e).lower() or 'timed out' in str(e).lower():
+                status_code = 408  # 请求超时
+                content = "Request Timeout"
+            else:
+                status_code = 500  # 网络错误
+                content = f'{e}'
         return {"code": status_code, "content": content, "cookies": cookies, "headers": headers}
 
     def ses_create(self, headers: dict = None, cookies: dict = None, proxy_url: str = None):
@@ -296,12 +298,16 @@ class Req:
             status_code = response.status_code
             cookies = {key: value for key, value in response.cookies.items()}
             headers = dict(response.headers)
-        except exceptions.Timeout:
-            status_code = 408  # 请求超时
-            content = "Request Timeout"
         except Exception as e:
-            status_code = 500  # 网络错误
-            content = str(e)
+            # 处理超时异常
+            if 'timeout' in str(e).lower() or 'timed out' in str(e).lower():
+                status_code = 408  # 请求超时
+                content = "Request Timeout"
+            else:
+                status_code = 500  # 网络错误
+                content = str(e)
+            cookies = {}
+            headers = {}
         return {"code": status_code, "content": content, "cookies": cookies, "headers": headers}
 
     async def _ses_create(self, headers: dict = None, cookies: dict = None, proxy_url: str = None,
