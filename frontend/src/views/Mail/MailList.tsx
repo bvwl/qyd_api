@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Table, Button, Space, Tag, Input, Select, Modal, Form, DatePicker, App } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, SyncOutlined, CopyOutlined } from '@ant-design/icons'
 import type { ColumnsType, TableProps } from 'antd/es/table'
@@ -38,7 +38,15 @@ export default function MailList() {
   
   // 获取用户信息，判断是否为管理员
   const { userInfo } = useUserStore()
-  const isAdmin = userInfo?.roles?.some(role => role.code === 'ADMIN') || false
+  const isAdmin = useMemo(() => {
+    const result = userInfo?.roles?.some(role => role.code === 'ADMIN') || false
+    console.log('isAdmin 重新计算:', {
+      userInfo,
+      roles: userInfo?.roles?.map(r => r.code),
+      result
+    })
+    return result
+  }, [userInfo])
 
   // 复制邮箱地址
   const handleCopyEmail = async (email: string) => {

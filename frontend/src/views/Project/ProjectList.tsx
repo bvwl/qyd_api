@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Table, Button, Modal, Form, Input, App, Space, Popconfirm, Tag, Select, DatePicker, Transfer, Tooltip, Upload, List } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, TeamOutlined, CopyOutlined, UploadOutlined, DownloadOutlined, FileOutlined } from '@ant-design/icons'
 import type { Project, User } from '@/types'
@@ -58,8 +58,16 @@ const ProjectList = () => {
   const [fileLoading, setFileLoading] = useState(false)
   const [uploadingFile, setUploadingFile] = useState(false)
 
-  // 权限判断 - 使用数组方式更可靠
-  const canManageProject = hasPermission(['ADMIN', 'GM'])
+  // 权限判断 - 使用 useMemo 确保响应 userInfo 变化
+  const canManageProject = useMemo(() => {
+    const result = hasPermission(['ADMIN', 'GM'])
+    console.log('canManageProject 重新计算:', {
+      userInfo,
+      roles: userInfo?.roles?.map(r => r.code),
+      result
+    })
+    return result
+  }, [userInfo, hasPermission])
   
   // 监控权限变化
   useEffect(() => {
