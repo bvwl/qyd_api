@@ -340,11 +340,9 @@ class RedisQueueHandler:
                         try:
                             # 如果 data 是字符串，尝试解析为 JSON
                             if isinstance(item['data'], str):
-                                import json
                                 item['data'] = json.loads(item['data'])
                             # 如果 data 是字典，验证可以序列化
                             elif isinstance(item['data'], dict):
-                                import json
                                 json.dumps(item['data'])  # 验证可以序列化
                         except (json.JSONDecodeError, TypeError) as e:
                             logger.warning(
