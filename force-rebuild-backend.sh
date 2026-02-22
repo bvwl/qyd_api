@@ -21,42 +21,49 @@ fi
 
 echo ""
 echo "1. 停止后端服务..."
-docker compose -f docker-compose.backend.yml stop backend-api
+docker compose -f docker-compose.backend.yml stop backend-api queue-worker
 
 echo ""
 echo "2. 删除旧镜像..."
-docker rmi qyd_api-backend-api:latest 2>/dev/null || echo "  (镜像不存在，跳过)"
+docker rmi qyd_api-backend-api:latest 2>/dev/null || echo "  (backend-api 镜像不存在，跳过)"
+docker rmi qyd_api-queue-worker:latest 2>/dev/null || echo "  (queue-worker 镜像不存在，跳过)"
 
 echo ""
 echo "3. 强制重新构建镜像（不使用缓存）..."
-docker compose -f docker-compose.backend.yml build --no-cache backend-api
+docker compose -f docker-compose.backend.yml build --no-cache backend-api queue-worker
 
 echo ""
 echo "4. 启动后端服务..."
-docker compose -f docker-compose.backend.yml up -d backend-api
+docker compose -f docker-compose.backend.yml up -d backend-api queue-worker
 
 echo ""
 echo "5. 等待服务启动..."
 sleep 5
 
 echo ""
-echo "6. 验证代码已更新..."
-echo "容器内代码:"
-docker compose -f docker-compose.backend.yml exec backend-api grep -A 2 "return XuiOperationResponse" /app/app/apis/v1/xui/operation.py | tail -3
+echo "6. 查看服务状态..."
+docker compose -f docker-compose.backend.yml ps
 
 echo ""
-echo "7. 查看服务状态..."
-docker compose -f docker-compose.backend.yml ps backend-api
+echo "7. 查看 backend-api 日志..."
+echo "--- Backend API ---"
+docker compose -f docker-compose.backend.yml logs --tail=20 backend-api
 
 echo ""
-echo "8. 查看最近的日志..."
-docker compose -f docker-compose.backend.yml logs --tail=30 backend-api
+echo "8. 查看 queue-worker 日志..."
+echo "--- Queue Worker ---"
+docker compose -f docker-compose.backend.yml logs --tail=20 queue-worker
 
 echo ""
 echo "=== 完成 ==="
-echo "查看实时日志: docker compose -f docker-compose.backend.yml logs -f backend-api"
+echo ""
+echo "查看实时日志:"
+echo "  Backend API:    docker compose -f docker-compose.backend.yml logs -f backend-api"
+echo "  Queue Worker:   docker compose -f docker-compose.backend.yml logs -f queue-worker"
+echo "  所有服务:       docker compose -f docker-compose.backend.yml logs -f"
+echo ""
 echo "访问 API 文档: http://192.168.13.6:6080/docs"
 echo ""
-echo "测试同步入站 API:"
-echo "curl -X POST 'http://192.168.13.6:6080/v1/xui/operation/sync-inbounds/YOUR_SERVER_ID' \\"
-echo "  -H 'Authorization: Bearer YOUR_TOKEN'"
+echo "检查服务状态:"
+echo "  docker compose -f docker-compose.backend.yml ps"
+
