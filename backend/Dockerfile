@@ -68,11 +68,8 @@ CMD ["python", "start_queue_worker.py"]
 # 日志压缩服务（独立运行）
 FROM backend-base as log-compressor
 
-# 复制应用代码（只需要日志工具）
-COPY app/utils/logs.py app/utils/logs.py
-COPY app/utils/__init__.py app/utils/__init__.py
-COPY app/__init__.py app/__init__.py
-COPY start_log_compressor.py .
+# 复制完整应用代码（避免导入错误）
+COPY . .
 
 # 创建日志目录
 RUN mkdir -p logs
