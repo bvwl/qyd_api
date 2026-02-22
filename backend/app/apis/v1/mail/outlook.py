@@ -175,14 +175,31 @@ async def check_and_update_emails_logic(
     """
     分批检测邮箱状态并更新
     使用分页方式避免一次性查询过多数据导致内存问题
+    
+    防封号策略：
+    1. 打乱邮箱处理顺序（避免按固定顺序访问）
+    2. 添加随机延迟（模拟人工操作）
+    3. 批量处理（减少数据库查询）
     """
+    import random
+    import asyncio
+    import os
+    
     batch_size = 10  # 每批处理10条，避免一次性处理过多
     page = 1
     total_checked = 0
     
+    # 从环境变量读取延迟配置（防封号）
+    email_check_delay_min = float(os.getenv("EMAIL_CHECK_DELAY_MIN", "2.0"))  # 最小延迟（秒）
+    email_check_delay_max = float(os.getenv("EMAIL_CHECK_DELAY_MAX", "5.0"))  # 最大延迟（秒）
+    batch_delay_min = float(os.getenv("EMAIL_BATCH_DELAY_MIN", "5.0"))  # 批次间最小延迟（秒）
+    batch_delay_max = float(os.getenv("EMAIL_BATCH_DELAY_MAX", "10.0"))  # 批次间最大延迟（秒）
+    
     scheduler_logger.info(f"开始检查邮箱状态，条件: status={status}, email_type={email_type}, "
                 f"create_time: {create_time_start} ~ {create_time_end}, "
                 f"update_time: {update_time_start} ~ {update_time_end}")
+    scheduler_logger.info(f"防封号配置: 邮箱间延迟 {email_check_delay_min}-{email_check_delay_max}秒, "
+                f"批次间延迟 {batch_delay_min}-{batch_delay_max}秒")
     
     while True:
         try:
@@ -206,13 +223,18 @@ async def check_and_update_emails_logic(
             
             scheduler_logger.debug(f"第 {page} 页获取到 {len(emails)} 个邮箱，开始检查...")
             
+            # 🔥 防封号优化1: 打乱邮箱处理顺序
+            emails_list = list(emails)
+            random.shuffle(emails_list)
+            scheduler_logger.debug(f"已打乱邮箱处理顺序（防止按固定顺序访问）")
+            
             # 处理当前批次
-            for email in emails:
+            for idx, email in enumerate(emails_list, 1):
                 try:
                     # 记录邮箱的 IP 和 Token 状态
                     has_ip = email.server_id is not None
                     has_token = email.access_token is not None
-                    scheduler_logger.debug(f"检查邮箱 {email.email}: has_ip={has_ip}, has_token={has_token}")
+                    scheduler_logger.debug(f"检查邮箱 {email.email} ({idx}/{len(emails_list)}): has_ip={has_ip}, has_token={has_token}")
                     
                     manager = AzureAuthManager(email.email)
                     res = await manager.get_emails_main('@', 1, 1)
@@ -224,6 +246,13 @@ async def check_and_update_emails_logic(
                         scheduler_logger.info(f"邮箱 {email.email} 状态更新: {email.status} -> {new_status}")
                     
                     total_checked += 1
+                    
+                    # 🔥 防封号优化2: 添加随机延迟（模拟人工操作）
+                    if idx < len(emails_list):  # 最后一个不需要延迟
+                        delay = random.uniform(email_check_delay_min, email_check_delay_max)
+                        scheduler_logger.debug(f"随机延迟 {delay:.2f} 秒（防止频繁请求）")
+                        await asyncio.sleep(delay)
+                    
                 except Exception as e:
                     scheduler_logger.warning(f"检查邮箱 {email.email} 失败: {str(e)}")
                     continue
@@ -233,7 +262,11 @@ async def check_and_update_emails_logic(
                 scheduler_logger.debug(f"第 {page} 页返回 {len(emails)} 条（少于 {batch_size}），这是最后一批")
                 break
             
-            scheduler_logger.debug(f"第 {page} 页处理完成，继续下一页...")
+            # 🔥 防封号优化3: 批次之间添加更长的随机延迟
+            batch_delay = random.uniform(batch_delay_min, batch_delay_max)
+            scheduler_logger.debug(f"第 {page} 页处理完成，批次间延迟 {batch_delay:.2f} 秒...")
+            await asyncio.sleep(batch_delay)
+            
             page += 1
             
         except HTTPException as e:
