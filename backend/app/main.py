@@ -51,6 +51,11 @@ async def compress_logs_task() -> None:
     """
     压缩旧日志文件的定时任务
     每2小时执行一次，压缩所有未压缩的旧日志
+    
+    日志策略：
+    - 单个日志文件最大200MB，达到后自动分割
+    - 旧日志自动压缩为.gz格式并按日期组织
+    - 只保留最近7天的日志，超过7天自动删除
     """
     try:
         scheduler_logger.info("开始执行日志压缩任务...")
@@ -139,6 +144,7 @@ async def lifespan(app: FastAPI):
     scheduler_logger.info(f"已注册定时任务: 每 {db_check_interval} 分钟检查数据库连接")
 
     # 日志压缩定时任务：每2小时执行一次
+    # 压缩旧日志并删除超过7天的日志文件
     scheduler.add_job(
         compress_logs_task,
         IntervalTrigger(hours=2),
@@ -147,7 +153,7 @@ async def lifespan(app: FastAPI):
         coalesce=True,
         misfire_grace_time=300,  # 5分钟容错
     )
-    scheduler_logger.info("已注册定时任务: 每 2 小时压缩旧日志文件")
+    scheduler_logger.info("已注册定时任务: 每 2 小时压缩旧日志文件（保留7天）")
 
     # 可选：自动检查邮箱状态
     enable_email_check = os.getenv("ENABLE_EMAIL_CHECK", "0").lower() in ("1", "true", "yes")

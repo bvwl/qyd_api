@@ -16,6 +16,7 @@ from app.core.settings import (
     REDIS_MAX_CONNECTIONS, REDIS_TIMEOUT, REDIS_KEY_PREFIX, REDIS_ENABLED
 )
 from app.utils.logs import getLogger
+from app.utils.error_tracker import should_log_error
 
 # 使用自定义日志记录器
 logger = getLogger('app')
@@ -202,8 +203,31 @@ class RedisQueueHandler:
                 logger.debug(f"数据已添加到队列 [{self.queue_name}]: {task_key}")
                 return True
             except Exception as e:
-                logger.warning(f"[重试{attempt + 1}] Redis写入失败 [{self.queue_name}]: {e}")
-                await asyncio.sleep(1 + attempt)
+                error_msg = str(e)
+                
+                # 检查是否是 Redis 持久化错误
+                if "MISCONF" in error_msg or "save RDB" in error_msg:
+                    error_key = f"redis_misconf:{self.queue_name}"
+                    should_log, count = should_log_error(error_key)
+                    
+                    if should_log:
+                        if count > 1:
+                            logger.error(
+                                f"Redis持久化错误 [{self.queue_name}]: {error_msg} "
+                                f"(此错误在过去5分钟内已发生 {count} 次，请检查Redis配置和磁盘空间)"
+                            )
+                        else:
+                            logger.error(
+                                f"Redis持久化错误 [{self.queue_name}]: {error_msg} "
+                                f"建议解决方案: 1) 检查磁盘空间 2) 在redis.conf中设置 stop-writes-on-bgsave-error no"
+                            )
+                    
+                    # Redis持久化错误不重试，直接返回失败
+                    return False
+                else:
+                    # 其他错误，记录并重试
+                    logger.warning(f"[重试{attempt + 1}] Redis写入失败 [{self.queue_name}]: {error_msg}")
+                    await asyncio.sleep(1 + attempt)
         
         logger.error(f"最终写入失败 [{self.queue_name}]: {data}")
         return False
@@ -311,6 +335,24 @@ class RedisQueueHandler:
                 cache_items = []  # 需要缓存的记录
                 
                 for item in items:
+                    # 验证和清理 JSON 字段
+                    if 'data' in item and item['data'] is not None:
+                        try:
+                            # 如果 data 是字符串，尝试解析为 JSON
+                            if isinstance(item['data'], str):
+                                import json
+                                item['data'] = json.loads(item['data'])
+                            # 如果 data 是字典，验证可以序列化
+                            elif isinstance(item['data'], dict):
+                                import json
+                                json.dumps(item['data'])  # 验证可以序列化
+                        except (json.JSONDecodeError, TypeError) as e:
+                            logger.warning(
+                                f"[Worker-{worker_id}] 无效的 JSON 数据，已清空 data 字段: {e}, "
+                                f"原始数据: {str(item.get('data', ''))[:100]}"
+                            )
+                            item['data'] = None  # 清空无效的 JSON 数据
+                    
                     # 过滤掉None值，避免违反非空约束
                     # 同时排除 variable 和 balance_history，这两个字段由 balance 自动计算
                     filtered_item = {
@@ -478,7 +520,50 @@ class RedisQueueHandler:
                 return True
                 
             except Exception as db_error:
-                logger.error(f"[Worker-{worker_id}] 数据库操作失败 [{self.queue_name}]: {db_error}", exc_info=True)
+                error_msg = str(db_error)
+                
+                # 检查是否是 JSON 格式错误
+                if "Invalid JSON" in error_msg or "JSON" in error_msg:
+                    error_key = f"json_error:{self.queue_name}"
+                    should_log, count = should_log_error(error_key)
+                    
+                    if should_log:
+                        if count > 1:
+                            logger.error(
+                                f"[Worker-{worker_id}] JSON 格式错误 [{self.queue_name}]: {error_msg} "
+                                f"(此错误在过去5分钟内已发生 {count} 次，请检查数据源)"
+                            )
+                        else:
+                            logger.error(
+                                f"[Worker-{worker_id}] JSON 格式错误 [{self.queue_name}]: {error_msg}",
+                                exc_info=True
+                            )
+                            # 记录第一条有问题的数据样本
+                            if items:
+                                sample_data = items[0]
+                                logger.error(
+                                    f"[Worker-{worker_id}] 问题数据样本: "
+                                    f"account={sample_data.get('account', 'N/A')}, "
+                                    f"data={str(sample_data.get('data', 'N/A'))[:200]}"
+                                )
+                    
+                    # JSON 错误不重试，直接删除任务
+                    try:
+                        async with redis.pipeline() as delete_pipe:
+                            for key in keys_to_process:
+                                delete_pipe.delete(key)
+                            await delete_pipe.execute()
+                        logger.warning(
+                            f"[Worker-{worker_id}] 已删除 {len(keys_to_process)} 个无效 JSON 数据的任务"
+                        )
+                    except Exception as e:
+                        logger.error(f"[Worker-{worker_id}] 删除无效任务失败: {e}")
+                    
+                    return False
+                else:
+                    # 其他数据库错误，记录并重试
+                    logger.error(f"[Worker-{worker_id}] 数据库操作失败 [{self.queue_name}]: {error_msg}", exc_info=True)
+                
                 # 数据库操作失败，重新添加到队列
                 try:
                     current_time = time.time()
@@ -495,7 +580,20 @@ class RedisQueueHandler:
                 return False
                 
         except Exception as e:
-            logger.error(f"[Worker-{worker_id}] 处理批次失败 [{self.queue_name}]: {e}")
+            # 使用错误追踪器避免重复记录相同错误
+            error_msg = str(e)
+            error_key = f"{self.queue_name}:{error_msg[:100]}"  # 使用队列名和错误消息前100字符作为key
+            
+            should_log, count = should_log_error(error_key)
+            if should_log:
+                if count > 1:
+                    logger.error(
+                        f"[Worker-{worker_id}] 处理批次失败 [{self.queue_name}]: {error_msg} "
+                        f"(此错误在过去5分钟内已发生 {count} 次)"
+                    )
+                else:
+                    logger.error(f"[Worker-{worker_id}] 处理批次失败 [{self.queue_name}]: {error_msg}")
+            
             return False
     
     async def _worker_loop(self, worker_id: int):

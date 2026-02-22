@@ -22,13 +22,13 @@ import glob
 import os
 
 
-def cleanup_all_logs(log_dir: str = "logs", retention_days: int = 30):
+def cleanup_all_logs(log_dir: str = "logs", retention_days: int = 7):
     """
     清理所有日志文件
     
     Args:
         log_dir: 日志目录
-        retention_days: 保留天数
+        retention_days: 保留天数（默认7天）
     """
     print(f"开始清理日志目录: {log_dir}")
     print(f"保留天数: {retention_days}")
@@ -64,11 +64,11 @@ def cleanup_all_logs(log_dir: str = "logs", retention_days: int = 30):
 
 if __name__ == "__main__":
     # 可以通过命令行参数指定保留天数
-    retention_days = 30
+    retention_days = 7  # 默认保留7天
     if len(sys.argv) > 1:
         try:
             retention_days = int(sys.argv[1])
         except ValueError:
-            print(f"无效的天数参数: {sys.argv[1]}, 使用默认值 30 天")
+            print(f"无效的天数参数: {sys.argv[1]}, 使用默认值 7 天")
     
     cleanup_all_logs(retention_days=retention_days)
