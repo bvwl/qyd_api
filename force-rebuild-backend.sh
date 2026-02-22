@@ -30,11 +30,11 @@ docker rmi qyd_api-queue-worker:latest 2>/dev/null || echo "  (queue-worker 镜�
 
 echo ""
 echo "3. 强制重新构建镜像（不使用缓存）..."
-docker compose -f docker-compose.backend.yml build --no-cache backend-api queue-worker
+docker compose -f docker-compose.backend.yml build --no-cache backend-api queue-worker log-compressor
 
 echo ""
-echo "4. 启动后端服务..."
-docker compose -f docker-compose.backend.yml up -d backend-api queue-worker
+echo "4. 启动后端服务（包含日志压缩服务）..."
+docker compose -f docker-compose.backend.yml up -d backend-api queue-worker log-compressor
 
 echo ""
 echo "5. 等待服务启动..."
@@ -55,11 +55,17 @@ echo "--- Queue Worker ---"
 docker compose -f docker-compose.backend.yml logs --tail=20 queue-worker
 
 echo ""
+echo "9. 查看 log-compressor 日志..."
+echo "--- Log Compressor ---"
+docker compose -f docker-compose.backend.yml logs --tail=20 log-compressor
+
+echo ""
 echo "=== 完成 ==="
 echo ""
 echo "查看实时日志:"
 echo "  Backend API:    docker compose -f docker-compose.backend.yml logs -f backend-api"
 echo "  Queue Worker:   docker compose -f docker-compose.backend.yml logs -f queue-worker"
+echo "  Log Compressor: docker compose -f docker-compose.backend.yml logs -f log-compressor"
 echo "  所有服务:       docker compose -f docker-compose.backend.yml logs -f"
 echo ""
 echo "访问 API 文档: http://192.168.13.6:6080/docs"

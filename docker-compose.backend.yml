@@ -141,3 +141,20 @@ services:
       - ./logs:/app/logs
       - ./backend/status:/app/status
 
+  # 日志压缩服务（独立运行，避免影响主服务性能）
+  log-compressor:
+    build:
+      context: ./backend
+      target: log-compressor
+    container_name: qyd-log-compressor
+    restart: unless-stopped
+    network_mode: "host"
+    environment:
+      # 日志配置
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_RETENTION_DAYS=${LOG_RETENTION_DAYS:-30}
+      - LOG_COMPRESS_INTERVAL_HOURS=${LOG_COMPRESS_INTERVAL_HOURS:-2}
+      - LOG_COMPRESS_ON_STARTUP=${LOG_COMPRESS_ON_STARTUP:-1}
+    volumes:
+      # 共享日志目录
+      - ./logs:/app/logs

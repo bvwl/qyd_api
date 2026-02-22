@@ -21,7 +21,7 @@ from app.core.settings import get_tortoise_config
 from app import app as main_router
 from app.apis.v1.mail.outlook import auto_check_email_status
 from app.utils.log_middleware import LoggingMiddleware
-from app.utils.logs import getLogger, compress_all_logs
+from app.utils.logs import getLogger
 
 
 # 配置日志
@@ -45,31 +45,6 @@ async def keep_db_connection_alive() -> None:
         scheduler_logger.debug("数据库连接检查成功")
     except Exception as e:
         scheduler_logger.error(f"数据库连接检查失败: {e}", exc_info=True)
-
-
-async def compress_logs_task() -> None:
-    """
-    压缩旧日志文件的定时任务
-    每2小时执行一次，压缩所有未压缩的旧日志
-    
-    日志策略：
-    - 单个日志文件最大200MB，达到后自动分割
-    - 旧日志自动压缩为.gz格式并按日期组织
-    - 只保留最近7天的日志，超过7天自动删除
-    
-    注意：使用 run_in_executor 在线程池中执行，避免阻塞事件循环
-    """
-    try:
-        scheduler_logger.info("开始执行日志压缩任务...")
-        
-        # 在线程池中异步执行同步函数，避免阻塞事件循环
-        import asyncio
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, compress_all_logs)
-        
-        scheduler_logger.info("日志压缩任务完成")
-    except Exception as e:
-        scheduler_logger.error(f"日志压缩任务失败: {e}", exc_info=True)
 
 
 async def shutdown_handler() -> None:
@@ -122,9 +97,9 @@ async def lifespan(app: FastAPI):
     """
     app_logger.info("项目启动...")
 
-    # 启动时跳过日志压缩，由定时任务处理
-    # 避免启动时阻塞，特别是有大量旧日志文件时
-    app_logger.info("日志压缩将由定时任务处理（每2小时执行一次）")
+    # 日志压缩已移至独立服务（start_log_compressor.py）
+    # 在高并发环境下，避免多个Worker重复执行压缩任务
+    app_logger.info("日志压缩由独立服务处理: python start_log_compressor.py")
 
     # 初始化数据库连接
     try:
@@ -145,18 +120,6 @@ async def lifespan(app: FastAPI):
         misfire_grace_time=30,
     )
     scheduler_logger.info(f"已注册定时任务: 每 {db_check_interval} 分钟检查数据库连接")
-
-    # 日志压缩定时任务：每2小时执行一次
-    # 压缩旧日志并删除超过7天的日志文件
-    scheduler.add_job(
-        compress_logs_task,
-        IntervalTrigger(hours=2),
-        id="compress_logs",
-        name="压缩旧日志文件",
-        coalesce=True,
-        misfire_grace_time=300,  # 5分钟容错
-    )
-    scheduler_logger.info("已注册定时任务: 每 2 小时压缩旧日志文件（保留7天）")
 
     # 可选：自动检查邮箱状态
     enable_email_check = os.getenv("ENABLE_EMAIL_CHECK", "0").lower() in ("1", "true", "yes")
