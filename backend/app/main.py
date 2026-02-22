@@ -115,13 +115,9 @@ async def lifespan(app: FastAPI):
     """
     app_logger.info("项目启动...")
 
-    # 启动时立即压缩旧日志
-    try:
-        app_logger.info("检查并压缩旧日志文件...")
-        compress_all_logs()
-        app_logger.info("日志压缩检查完成")
-    except Exception as e:
-        app_logger.warning(f"日志压缩检查失败: {e}")
+    # 启动时跳过日志压缩，由定时任务处理
+    # 避免启动时阻塞，特别是有大量旧日志文件时
+    app_logger.info("日志压缩将由定时任务处理（每2小时执行一次）")
 
     # 初始化数据库连接
     try:
