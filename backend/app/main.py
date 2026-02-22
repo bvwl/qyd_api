@@ -56,10 +56,17 @@ async def compress_logs_task() -> None:
     - 单个日志文件最大200MB，达到后自动分割
     - 旧日志自动压缩为.gz格式并按日期组织
     - 只保留最近7天的日志，超过7天自动删除
+    
+    注意：使用 run_in_executor 在线程池中执行，避免阻塞事件循环
     """
     try:
         scheduler_logger.info("开始执行日志压缩任务...")
-        compress_all_logs()
+        
+        # 在线程池中异步执行同步函数，避免阻塞事件循环
+        import asyncio
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, compress_all_logs)
+        
         scheduler_logger.info("日志压缩任务完成")
     except Exception as e:
         scheduler_logger.error(f"日志压缩任务失败: {e}", exc_info=True)
