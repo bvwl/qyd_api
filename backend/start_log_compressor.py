@@ -45,6 +45,9 @@ def load_env_from_file(env_path: Path | None = None) -> None:
 # 加载环境变量
 load_env_from_file()
 
+# 禁用 Redis（日志压缩服务不需要）
+os.environ["REDIS_ENABLED"] = "0"
+
 # 导入日志工具
 from app.utils.logs import compress_all_logs, get_log_statistics
 
