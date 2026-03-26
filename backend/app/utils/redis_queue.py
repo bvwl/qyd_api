@@ -432,7 +432,7 @@ class RedisQueueHandler:
                         cache_items.append((key, "create"))
                 
                 # 4. 批量执行数据库操作（使用主库，在事务中）
-                async with in_transaction(connection_name="default"):
+                async with in_transaction(connection_name="default") as conn:
                     if updates:
                         # 获取模型的所有字段名（排除唯一字段和自动字段）
                         model_fields = set(self.model_class._meta.fields_map.keys())
@@ -446,15 +446,29 @@ class RedisQueueHandler:
                         
                         logger.debug(f"[Worker-{worker_id}] 批量更新字段: {update_fields}")
                         
-                        # 分批更新
+                        # 使用 execute_many 参数化批量 UPDATE：
+                        # Tortoise ORM 的 bulk_update 对 JSONField 使用 PyPika 字符串插值（非参数化），
+                        # 当 JSON 值含有反引号等特殊字符时会触发 MySQL 1064 语法错误。
+                        # execute_many 使用 %s 占位符（aiomysql 驱动层参数化），
+                        # 且每批只有一次 executemany 调用，性能接近 bulk_update。
+                        table_name = self.model_class._meta.db_table
+                        set_clause = ", ".join(f"`{f}` = %s" for f in update_fields)
+                        update_sql = f"UPDATE `{table_name}` SET {set_clause} WHERE `id` = %s"
+                        
+                        def _serialize_val(val: Any) -> Any:
+                            """将 dict/list 序列化为 JSON 字符串，其他类型直接返回"""
+                            if isinstance(val, (dict, list)):
+                                return json.dumps(val, ensure_ascii=False)
+                            return val
+                        
                         batch_size = 50
                         for i in range(0, len(updates), batch_size):
-                            batch_updates = updates[i:i + batch_size]
-                            if batch_updates:
-                                await self.model_class.bulk_update(
-                                    batch_updates, 
-                                    fields=update_fields
-                                )
+                            batch = updates[i:i + batch_size]
+                            params = [
+                                [_serialize_val(getattr(r, f)) for f in update_fields] + [r.id]
+                                for r in batch
+                            ]
+                            await conn.execute_many(update_sql, params)
                     
                     if creates:
                         # 分批创建
