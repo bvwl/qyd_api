@@ -16,7 +16,13 @@ from app.core.settings import (
     REDIS_MAX_CONNECTIONS, REDIS_TIMEOUT, REDIS_KEY_PREFIX, REDIS_ENABLED
 )
 from app.utils.logs import getLogger
-from app.utils.error_tracker import should_log_error
+
+try:
+    from app.utils.error_tracker import should_log_error
+except ModuleNotFoundError:
+    def should_log_error(error_key: str) -> tuple[bool, int]:
+        """error_tracker 模块缺失时降级为始终记录，避免队列进程启动失败"""
+        return True, 1
 
 # 使用自定义日志记录器
 logger = getLogger('app')
@@ -251,6 +257,10 @@ class RedisQueueHandler:
             condition_dict = {field: item[field] for field in self.unique_fields}
             conditions.append(Q(**condition_dict))
         return conditions
+
+    async def _filter_items_before_process(self, items: List[Dict], worker_id: int) -> List[Dict]:
+        """处理前过滤数据，子类可重写以做外键等业务校验"""
+        return items
     
     async def _process_batch(self, worker_id: int) -> bool:
         """
@@ -299,6 +309,24 @@ class RedisQueueHandler:
                     continue
             
             if not items:
+                return True
+
+            items = await self._filter_items_before_process(items, worker_id)
+            if not items:
+                # 子类过滤掉的任务视为已处理，后续会清理 Redis 中的任务数据。
+                try:
+                    async with redis.pipeline() as delete_pipe:
+                        for key in keys_to_process:
+                            delete_pipe.delete(key)
+                        await delete_pipe.execute()
+
+                    logger.warning(
+                        f"[Worker-{worker_id}] 已清理 {len(keys_to_process)} 个无效任务 [{self.queue_name}]"
+                    )
+                except Exception as delete_error:
+                    logger.warning(
+                        f"[Worker-{worker_id}] 无效任务清理失败 [{self.queue_name}]: {delete_error}"
+                    )
                 return True
             
             # 处理数据

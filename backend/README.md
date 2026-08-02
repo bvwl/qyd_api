@@ -1,652 +1,195 @@
-# QYD 后端服务
+# QYD 后端维护手册
 
-基于 FastAPI 的高性能异步后端服务，提供完整的RESTful API。支持每秒处理2000-15000条数据，具备企业级特性。
-
-## 🚀 快速部署
-
-### 方法一：一键部署（推荐）
-
-```bash
-bash quick_deploy.sh
-```
-
-### 方法二：手动部署
-
-```bash
-# 1. 安装依赖
-pip install -r requirements.txt
-
-# 2. 配置环境
-cp .env.example .env
-vim .env  # 配置数据库和 Redis
-
-# 3. 初始化数据库
-aerich init -t app.core.settings.TORTOISE_ORM
-aerich init-db
-python deploy_init.py
-
-# 4. 检查部署
-python check_deployment.py
-
-# 5. 启动服务
-python start.py
-```
-
-📚 **详细文档**:
-- [完整部署指南](DEPLOYMENT_GUIDE.md)
-- [快速参考](QUICK_DEPLOY_REFERENCE.md)
-- [部署总结](../DEPLOYMENT_SUMMARY.md)
-
----
+QYD 后端是基于 FastAPI 的异步 API 服务，负责用户与权限、项目、服务器、邮箱、XUI、统计、导出和后台队列等业务。本项目已经上线；生产变更应经过备份、验证和可回滚发布，禁止直接在生产库试跑历史迁移或修复脚本。
 
 ## 技术栈
 
-- **框架**: FastAPI (异步Web框架)
-- **ORM**: Tortoise ORM (异步ORM)
-- **数据库**: MySQL 8.0 (支持主从读写分离)
-- **缓存/队列**: Redis 7.0
-- **认证**: JWT (python-jose)
-- **密码加密**: bcrypt
-- **数据加密**: AES-CBC (Crypto.Cipher)
-- **数据验证**: Pydantic
-- **任务调度**: APScheduler
-- **日志**: 自定义日志系统 (按模块分类、自动轮转压缩、90天保留期)
-- **邮件集成**: Outlook API
-- **API文档**: Swagger UI / ReDoc (自动生成)
+- Python 3.11
+- FastAPI + Uvicorn
+- Tortoise ORM + MySQL
+- Redis（缓存与队列）
+- APScheduler（进程内定时任务）
+- JWT、bcrypt、AES
+- Pytest
 
-## 项目结构
+API 路由统一使用 `/v1` 前缀。服务启动后可访问 `/docs` 和 `/redoc`；生产是否开放由 `ENABLE_DOCS` 控制。
 
-```
+## 运行拓扑
+
+生产环境由三个独立进程组成：
+
+1. `python start.py`：FastAPI HTTP 服务。
+2. `python start_queue_worker.py`：处理项目账号与项目提现 Redis 队列。
+3. `python start_log_compressor.py`：独立压缩和清理日志。
+
+API 服务还会启动 APScheduler，用于数据库连接保活，以及按配置执行邮箱状态检查和项目统计同步。
+
+> 生产建议保持 `ENABLE_QUEUE_WORKERS=0`，由独立 Worker 消费队列。否则 API 内置 Worker 与独立 Worker 可能同时运行。
+
+## 目录说明
+
+```text
 backend/
 ├── app/
-│   ├── apis/              # API路由
-│   │   ├── deps.py        # 依赖注入 (JWT认证)
-│   │   └── v1/            # API v1版本
-│   │       ├── user/      # 用户相关API
-│   │       ├── project/   # 项目相关API
-│   │       ├── server/    # 服务器相关API
-│   │       └── mail/      # 邮箱相关API
-│   ├── core/              # 核心配置
-│   │   ├── settings.py    # 配置管理
-│   │   ├── database.py    # 数据库配置 (支持读写分离)
-│   │   ├── rd.py          # Redis配置
-│   │   ├── tools.py       # 工具函数 (密码加密等)
-│   │   └── verify.py      # 验证函数
-│   ├── crud/              # 数据库操作层
-│   ├── models/            # 数据库模型
-│   ├── schemas/           # Pydantic模型 (请求/响应)
-│   ├── utils/             # 工具类
-│   │   ├── jwt_tool.py    # JWT工具
-│   │   ├── time_tool.py   # 时间处理
-│   │   ├── logs.py        # 日志工具
-│   │   ├── redis_queue.py # Redis队列基类
-│   │   ├── project_account_queue.py  # 项目账号队列
-│   │   ├── project_crypto.py  # 项目账号加密工具
-│   │   └── aes_crypto.py  # AES加密工具
-│   ├── clients/           # 外部客户端 (Outlook等)
-│   ├── logs/              # 日志配置
-│   └── main.py            # 应用入口
-├── db/                    # 数据库脚本
-│   ├── init_roles_and_admin.py  # 初始化角色和管理员
-│   ├── init_routes.py     # 初始化路由权限
-│   └── README.md
-├── migrations/            # 数据库迁移
-├── logs/                  # 日志文件目录
-│   ├── api/2026/01/25/   # API日志（按年/月/日组织）
-│   ├── app/2026/01/25/   # 应用日志
-│   ├── database/2026/01/25/  # 数据库日志
-│   └── scheduler/2026/01/25/ # 调度器日志
-├── tests/                 # 测试文件
-│   ├── test_project_account_encryption.py  # 加密功能测试
-│   ├── test_queue_encryption.py  # 队列加密测试
-│   └── test_log_structure.py  # 日志结构测试
-├── scripts/               # 工具脚本
-├── .env.example           # 环境变量示例
-├── requirements.txt       # Python依赖
-├── start.py              # 启动脚本
-└── README.md             # 本文档
+│   ├── apis/          # FastAPI 路由与鉴权依赖
+│   ├── clients/       # Outlook、钱包、XUI 等外部客户端
+│   ├── core/          # 配置、数据库和通用校验
+│   ├── crud/          # 数据访问层
+│   ├── models/        # Tortoise ORM 模型
+│   ├── schemas/       # 请求与响应模型
+│   ├── utils/         # 队列、日志、加密、权限和统计工具
+│   └── main.py        # FastAPI 应用入口
+├── db/                # 历史 SQL/Python 数据库变更与初始化工具
+├── migrations/        # Aerich 迁移
+├── scripts/           # 运维与检查工具；执行前必须审阅
+├── tests/             # 回归、集成和性能测试
+├── Dockerfile
+├── requirements.txt
+├── start.py
+├── start_queue_worker.py
+└── start_log_compressor.py
 ```
 
-## 安装
+## 本地开发
 
-### 1. 安装Python依赖
-
-```bash
-pip install -r requirements.txt
-```
-
-### 2. 配置环境变量
+以下命令均在 `backend/` 目录执行。
 
 ```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
 cp .env.example .env
 ```
 
-编辑 `.env` 文件，配置以下内容：
+编辑 `.env`，至少配置 MySQL、JWT 和 Redis。不要复制或提交生产环境的真实凭据。
 
-```env
-# 数据库配置 (主库)
-DB_HOST=127.0.0.1
-DB_PORT=3307
-DB_USER=qyd
-DB_PASSWORD=your_password_here
-DB_NAME=qyd
-
-# 从库配置 (可选，用于读写分离)
-DB_SLAVE_HOSTS=127.0.0.1:3308,127.0.0.1:3309
-
-# Redis配置 (可选，用于队列处理)
-REDIS_HOST=127.0.0.1
-REDIS_PORT=6378
-REDIS_PASSWORD=redis_fNmAxZ
-REDIS_DB=0
-
-# Redis队列配置
-REDIS_QUEUE_BATCH_SIZE=100        # 批量处理大小
-REDIS_QUEUE_NUM_WORKERS=4         # 工作线程数
-REDIS_QUEUE_CACHE_EXPIRE=3600     # 缓存过期时间(秒)
-
-# JWT配置
-JWT_SECRET_KEY=your-secret-key-here
-JWT_ALGORITHM=HS256
-JWT_ACCESS_TOKEN_EXPIRE_DAYS=365
-
-# 服务配置
-HOST=0.0.0.0
-PORT=6080
-DEBUG=False
-WORKERS=1
-
-# CORS配置
-CORS_ORIGINS=http://localhost:3000,http://localhost:5173
-
-# 日志配置
-LOG_LEVEL=INFO
-```
-
-### 3. 初始化数据库
-
-```bash
-# 创建数据库表
-python -m aerich init -t app.core.settings.TORTOISE_ORM
-python -m aerich init-db
-
-# 初始化角色和管理员账号
-python db/init_roles_and_admin.py
-```
-
-这将创建：
-- 4个角色: ADMIN, GM, IT, MANUAL
-- 1个管理员账号: zhiyu / 2201101122@qq.com
-
-## 启动服务
-
-### 开发模式（单进程）
+启动 API：
 
 ```bash
 python start.py
 ```
 
-服务将在 `http://localhost:6080` 启动
-
-配置 `.env`：
-```bash
-APP_WORKERS=1
-ENABLE_QUEUE_WORKERS=1    # 开发环境可以启用队列处理
-```
-
-### 生产模式（分离队列处理）
-
-#### 标准性能（2000条/秒）
+按需另开终端启动队列和日志压缩：
 
 ```bash
-# 配置环境
-cp .env.high_performance .env
-
-# 终端1：启动HTTP服务
-python start.py
-
-# 终端2：启动队列处理
 python start_queue_worker.py
+python start_log_compressor.py
 ```
 
-#### 超高性能（10000+条/秒）
+默认 API 地址为 `http://127.0.0.1:6080`。
+
+## 配置
+
+### HTTP 服务
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `APP_HOST` | `0.0.0.0` | 监听地址 |
+| `APP_PORT` | `6080` | 监听端口 |
+| `APP_DEBUG` | `0` | 是否启用 reload |
+| `WORKERS` / `APP_WORKERS` | `1` | Uvicorn 进程数，`WORKERS` 优先 |
+| `APP_LIMIT_CONCURRENCY` | `10000` | 并发连接限制 |
+| `APP_BACKLOG` | `4096` | Socket backlog |
+| `APP_TIMEOUT_KEEP_ALIVE` | `5` | Keep-Alive 秒数 |
+| `ENABLE_DOCS` | `1` | 是否开放 Swagger/ReDoc |
+| `CORS_ORIGINS` | `*` | 允许的来源，多个值用逗号分隔 |
+
+生产环境应设置明确的 `CORS_ORIGINS`，并使用至少 32 位、随机生成的 `JWT_SECRET_KEY`。
+
+### MySQL
+
+主库使用 `DB_HOST`、`DB_PORT`、`DB_USER`、`DB_PASSWORD`、`DB_NAME`。连接池由 `DB_MINSIZE`、`DB_MAXSIZE`、`DB_POOL_RECYCLE` 和 `DB_CONNECT_TIMEOUT` 控制。
+
+设置 `DB_READ_WRITE_SPLIT=1` 后，可通过 `DB_SLAVE1_*`、`DB_SLAVE2_*` 配置两个从库。写操作始终走主库，读操作在健康从库间轮询并在异常时回退主库。
+
+### Redis 与队列
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `REDIS_ENABLED` | `1` | 是否启用 Redis |
+| `REDIS_HOST` / `REDIS_PORT` | `127.0.0.1:6379` | Redis 地址 |
+| `REDIS_PASSWORD` / `REDIS_DB` | 空 / `0` | 认证和数据库 |
+| `REDIS_KEY_PREFIX` | `qyd:` | Key 前缀 |
+| `REDIS_QUEUE_BATCH_SIZE` | `200` | 单批处理量 |
+| `REDIS_QUEUE_NUM_WORKERS` | `4` | 每个队列进程内的并发数 |
+| `QUEUE_WORKER_PROCESSES` | `1` | 独立队列进程数 |
+
+实际并发会随 `QUEUE_WORKER_PROCESSES × REDIS_QUEUE_NUM_WORKERS` 放大。调整前必须同时评估数据库连接池、Redis 连接数和外部接口限流。
+
+### 定时任务与日志
+
+- `DB_CHECK_INTERVAL_MINUTES`：数据库保活周期。
+- `ENABLE_EMAIL_CHECK`、`EMAIL_CHECK_INTERVAL_HOURS`：邮箱状态检查。
+- `ENABLE_STATS_SYNC`、`STATS_SYNC_INTERVAL_MINUTES`：项目统计同步。
+- `LOG_LEVEL`：日志级别。
+- `LOG_COMPRESS_INTERVAL_HOURS`、`LOG_RETENTION_DAYS`、`LOG_COMPRESS_ON_STARTUP`：独立日志压缩进程。
+
+> `WORKERS>1` 时，每个 API 进程都会创建 APScheduler，可能重复执行定时任务。提高 API Worker 数前，应先把定时任务迁到单独进程或保证任务具备分布式互斥。
+
+## Docker 部署
+
+仓库根目录提供应用栈 `docker-compose.yml`，也提供前后端分离的 Compose 文件。MySQL 和 Redis 均为外部服务，Compose 不会创建或管理它们；启动前必须正确配置 `DB_*` 与 `REDIS_*`。发布前先确认线上实际使用的文件，不要混用两套拓扑。以下 Docker 命令均在仓库根目录执行。
+
+只做配置校验：
 
 ```bash
-# 配置环境
-cp .env.ultra_high_performance .env
-
-# 终端1：启动HTTP服务
-python start.py
-
-# 终端2-4：启动3个队列进程
-python start_queue_worker.py &
-python start_queue_worker.py &
-python start_queue_worker.py &
+docker compose config --quiet
 ```
 
-#### 使用Supervisor管理（推荐）
+完整栈构建和启动：
 
 ```bash
-# 安装Supervisor
-sudo apt-get install supervisor
-
-# 配置文件示例见：
-# ../docs/performance/REDIS_QUEUE_SEPARATION_GUIDE.md
-
-# 启动服务
-sudo supervisorctl start qyd:*
+docker compose build
+docker compose up -d
 ```
 
-### 使用Docker
+后端分离部署：
 
 ```bash
-docker-compose up -d
+docker compose -f docker-compose.backend.yml build
+docker compose -f docker-compose.backend.yml up -d
 ```
 
-## API文档
+注意事项：
 
-启动服务后访问：
+- 当前 Docker 健康检查访问 `/docs`。若生产设置 `ENABLE_DOCS=0`，应先把健康检查改为独立健康端点，否则容器会被判为不健康。
+- 确认 `logs/`、`static/` 和数据库导出目录使用持久化卷或宿主机备份；重建容器前先验证数据不会随容器丢失。
+- 不要在未审阅的情况下运行名称含 `reset`、`cleanup`、`fix`、`migrate` 的历史脚本。
 
-- **Swagger UI**: http://localhost:6080/docs
-- **ReDoc**: http://localhost:6080/redoc
+## 数据库变更
 
-## 性能配置
+已上线数据库禁止使用“自动建表”代替迁移。每次模型或 Schema 调整至少执行：
 
-系统支持多种性能配置：
+1. 记录当前数据库版本与目标变更。
+2. 完成全量或可验证备份。
+3. 在生产副本上验证迁移和回滚。
+4. 审阅 SQL 的锁表、默认值、索引和数据转换影响。
+5. 在维护窗口执行，并观察 API、Worker 与数据库指标。
+6. 保留上一个应用镜像和对应数据库回滚方案。
 
-### 配置文件
+`db/` 中同时存在 SQL 与 Python 历史迁移，且当前 Aerich 迁移基线不完整。在重建可靠迁移基线并核对线上 Schema 前，不得整体删除或批量执行这些文件。
 
-| 文件 | 性能 | 适用场景 |
-|------|------|---------|
-| `.env.example` | 基础 | 开发环境 |
-| `.env.high_performance` | 2700条/秒 | 生产环境（标准） |
-| `.env.ultra_high_performance` | 12000条/秒 | 生产环境（高负载） |
+## 验证
 
-### 性能测试
+测试可能连接数据库、Redis 或外部服务，只能使用隔离环境和测试凭据：
 
 ```bash
-# 标准测试（10000条数据）
-python test_queue_performance.py
-
-# 超高性能测试（50000条数据）
-python test_ultra_performance.py
-
-# 清理测试数据
-python test_ultra_performance.py --cleanup
+python -m pytest tests
 ```
 
-### 性能监控
-
-```bash
-# 监控队列大小
-redis-cli ZCARD qyd:project_account_keys_zset
-
-# 监控数据库连接
-mysql -e "SHOW PROCESSLIST;" | wc -l
-
-# 监控Redis连接
-redis-cli INFO clients | grep connected_clients
-```
-
-详细的性能优化指南请参考：
-- [队列分离快速开始](../docs/performance/QUEUE_SEPARATION_QUICK_START.md)
-- [扩展到10000+条/秒](../docs/performance/SCALE_TO_10K_GUIDE.md)
-- [性能快速参考](../docs/performance/PERFORMANCE_QUICK_REFERENCE.md)
-
-## 核心功能
-
-### 1. JWT认证
-
-所有API（除了登录/注册）都需要JWT认证：
-
-```python
-# 在请求头中添加
-Authorization: Bearer <your_jwt_token>
-```
-
-JWT Token包含：
-- 用户ID
-- 邮箱
-- 角色列表
-- 过期时间
-
-### 2. 角色权限
-
-系统支持4种角色：
-
-- **ADMIN**: 管理员，拥有所有权限
-- **GM**: 项目管理员
-- **IT**: 技术人员
-- **MANUAL**: 手动操作员（默认角色）
-
-### 3. 密码加密
-
-使用 bcrypt 加密密码：
-
-```python
-from app.core.tools import hashing
-
-# 加密
-hashed = hashing.hash("password")
-
-# 验证
-is_valid = hashing.verify("password", hashed)
-```
-
-### 4. 日志系统
-
-日志按模块分类，自动轮转压缩，保留90天：
-
-- `logs/api/年/月/日/api.log.时间戳.gz` - API请求日志
-- `logs/app/年/月/日/app.log.时间戳.gz` - 应用日志
-- `logs/database/年/月/日/database.log.时间戳.gz` - 数据库日志
-- `logs/scheduler/年/月/日/scheduler.log.时间戳.gz` - 定时任务日志
-
-日志自动按小时轮转和压缩，超过90天自动删除。
-
-**测试日志结构**：
-```bash
-python test_log_structure.py
-```
-
-**整理旧日志**：
-```bash
-python scripts/organize_logs.py
-```
-
-### 5. 异常处理
-
-统一的异常处理顺序：
-
-```python
-try:
-    # 业务逻辑
-    pass
-except HTTPException:  # 先捕获HTTPException
-    raise
-except ValueError as e:  # 参数错误 -> 400
-    raise HTTPException(status_code=400, detail=str(e))
-except Exception as e:  # 其他错误 -> 500
-    raise HTTPException(status_code=500, detail=str(e))
-```
-
-### 6. 时间处理
-
-支持多种时间格式：
-
-- `YYYY-MM-DD`
-- `YYYY-MM-DD HH:mm:ss`
-- 13位时间戳
-
-```python
-from app.utils.time_tool import parse_time
-
-# 自动解析
-start_time = parse_time("2024-01-01")
-end_time = parse_time("2024-12-31", is_end=True)  # 自动设置为23:59:59
-```
-
-### 7. Redis队列批量处理
-
-支持大批量数据的异步处理：
-
-```python
-from app.utils.project_account_queue import project_account_queue
-
-# 添加任务到队列
-await project_account_queue.add_task({
-    "project_id": "xxx",
-    "account": "test",
-    # ... 其他字段
-})
-```
-
-特性：
-- **智能缓存**: 先检查Redis缓存，已处理的数据跳过
-- **读写分离**: 使用从库查询，主库更新/创建
-- **批量处理**: 可配置批量大小和工作线程数
-- **独立管道**: 缓存操作和任务清理使用独立管道
-- **自动过期**: 缓存1小时自动过期
-
-### 8. MySQL读写分离
-
-系统支持一主多从架构：
-
-- **主库**: 处理所有写操作 (INSERT, UPDATE, DELETE)
-- **从库**: 处理所有读操作 (SELECT)
-- **自动路由**: ORM自动根据操作类型选择数据库
-
-配置方式：
-```env
-# 主库
-DB_HOST=127.0.0.1
-DB_PORT=3307
-
-# 从库（多个用逗号分隔）
-DB_SLAVE_HOSTS=127.0.0.1:3308,127.0.0.1:3309
-```
-
-在代码中使用：
-```python
-# 读操作（自动使用从库）
-users = await User.all()
-
-# 写操作（自动使用主库）
-await User.create(email="test@example.com")
-
-# 显式指定使用主库
-users = await User.all().using_db(Tortoise.get_connection("default"))
-```
-
-### 9. 项目账号敏感数据加密
-
-系统支持项目账号敏感字段的自动加密：
-
-**加密规则**：
-- **加密字段**: `private_key`、`mnemonic`
-- **加密方式**: AES-CBC
-- **密钥**: MD5(项目名称 + "9527")
-- **IV**: MD5("9527" + 项目名称)[:16]
-- **递归加密**: 支持所有层级的嵌套对象和数组
-
-**权限控制**：
-- **ADMIN**: 可以解密所有项目
-- **项目所属人**: 可以解密自己的项目
-- **其他用户**: 只能看到密文
-
-**使用方式**：
-```python
-from app.utils.project_crypto import encrypt_sensitive_fields, decrypt_sensitive_fields
-
-# 加密（创建/更新时自动调用）
-encrypted_data = encrypt_sensitive_fields(data, project_name)
-
-# 解密（查询时根据权限自动调用）
-decrypted_data = decrypt_sensitive_fields(encrypted_data, project_name)
-```
-
-**测试加密功能**：
-```bash
-# 测试加密/解密
-python test_project_account_encryption.py
-
-# 测试队列加密
-python test_queue_encryption.py
-```
-
-**特性**：
-- ✅ 创建/更新时自动加密
-- ✅ 查询时根据权限自动解密
-- ✅ Redis队列数据自动加密
-- ✅ 每个项目使用独立密钥
-- ✅ 递归处理所有层级
-
-**⚠️ 重要提醒**：
-- 项目名称不能修改，否则无法解密旧数据
-- 现有数据不会自动加密，需要手动迁移
-
-详细文档：
-- [项目账号加密详细文档](../docs/encryption/PROJECT_ACCOUNT_ENCRYPTION.md)
-- [加密快速参考](../docs/encryption/PROJECT_ACCOUNT_ENCRYPTION_QUICK_REF.md)
-- [加密流程图](../docs/encryption/PROJECT_ACCOUNT_ENCRYPTION_FLOW.md)
-
-## API规范
-
-### 请求格式
-
-```json
-{
-  "page": 1,
-  "limit": 10,
-  "res_count": true,
-  "create_time_start": "2024-01-01",
-  "create_time_end": "2024-12-31"
-}
-```
-
-### 响应格式
-
-成功响应：
-
-```json
-{
-  "message": "成功",
-  "count": 100,
-  "num": 10,
-  "items": [...]
-}
-```
-
-错误响应：
-
-```json
-{
-  "detail": "错误信息"
-}
-```
-
-### HTTP状态码
-
-- `200` - 成功
-- `201` - 创建成功
-- `400` - 参数错误
-- `401` - 未认证
-- `403` - 无权限
-- `404` - 资源不存在或查询无数据
-- `500` - 服务器错误
-
-## 开发指南
-
-### 添加新的API
-
-1. 在 `app/models/` 创建数据库模型
-2. 在 `app/schemas/` 创建Pydantic模型
-3. 在 `app/crud/` 创建CRUD操作
-4. 在 `app/apis/v1/` 创建API路由
-5. 添加JWT认证依赖
-
-示例：
-
-```python
-from fastapi import APIRouter, Depends
-from app.apis.deps import get_current_user
-
-router = APIRouter()
-
-@router.get("/items")
-async def get_items(
-    current_user: dict = Depends(get_current_user)
-):
-    # 业务逻辑
-    pass
-```
-
-### 数据库迁移
-
-```bash
-# 生成迁移文件
-aerich migrate --name "description"
-
-# 应用迁移
-aerich upgrade
-```
-
-### 运行测试
-
-```bash
-# 运行所有测试
-pytest
-
-# 运行特定测试
-pytest tests/test_user.py
-
-# 查看覆盖率
-pytest --cov=app tests/
-```
-
-## 常见问题
-
-### 1. 数据库连接失败
-
-检查 `.env` 中的数据库配置是否正确，确保MySQL服务已启动。
-
-### 2. JWT Token过期
-
-默认Token有效期为365天，可在 `.env` 中修改 `JWT_ACCESS_TOKEN_EXPIRE_DAYS`。
-
-### 3. CORS错误
-
-在 `.env` 中添加前端地址到 `CORS_ORIGINS`。
-
-### 4. 日志文件过大
-
-日志自动按小时轮转，旧日志会被压缩。可以使用 `scripts/cleanup_logs.py` 清理旧日志。
-
-## 性能优化
-
-1. **数据库连接池**: Tortoise ORM自动管理
-2. **异步处理**: 所有IO操作都是异步的
-3. **查询优化**: 使用 `prefetch_related` 预加载关联数据
-4. **日志轮转**: 防止日志文件过大
-5. **定时任务**: 定期检查数据库连接
-
-## 安全建议
-
-1. ✅ 使用强密码作为 `JWT_SECRET_KEY`
-2. ✅ 生产环境设置 `DEBUG=False`
-3. ✅ 限制 `CORS_ORIGINS` 为特定域名
-4. ✅ 定期更新依赖包
-5. ✅ 使用HTTPS部署
-6. ✅ 定期备份数据库
-
-## 维护
-
-### 日志管理
-
-```bash
-# 查看日志
-tail -f logs/api.log
-
-# 清理旧日志
-python scripts/cleanup_logs.py
-```
-
-### 数据库备份
-
-```bash
-# 备份
-mysqldump -u qyd -p qyd > backup.sql
-
-# 恢复
-mysql -u qyd -p qyd < backup.sql
-```
-
-## 相关链接
-
-- [FastAPI文档](https://fastapi.tiangolo.com/)
-- [Tortoise ORM文档](https://tortoise.github.io/)
-- [Pydantic文档](https://docs.pydantic.dev/)
-
-## 更新日志
-
-查看 `docs/fixes/` 目录了解详细的修复和更新记录。
+发布后的最低验证项：
+
+- API 进程、队列 Worker、日志压缩进程均健康。
+- 登录、权限菜单和一个只读业务接口正常。
+- MySQL 主库/从库与 Redis 连接正常。
+- 项目账号、项目提现队列无持续积压。
+- 定时任务没有因多 Worker 重复执行。
+- 日志、上传文件与数据库导出落在持久化路径。
+
+## 安全与回滚
+
+- 禁止提交 `.env`、JWT、数据库/Redis 密码、Bearer Token 或管理员初始密码。
+- 所有 `/v1` API（登录等公开接口除外）使用 `Authorization: Bearer <token>`。
+- 若仓库历史中出现过真实凭据，仅删除文件不够，必须轮换线上凭据。
+- 发布前记录当前 Commit、镜像标签和数据库版本。
+- 应用问题优先回滚到上一镜像；数据库已变更时严格使用已验证的反向迁移或备份恢复方案。

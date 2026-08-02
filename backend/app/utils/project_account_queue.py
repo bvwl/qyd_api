@@ -6,6 +6,7 @@ from app.models.project import ProjectAccount, ProjectInfo
 from app.core.settings import REDIS_QUEUE_BATCH_SIZE, REDIS_QUEUE_NUM_WORKERS
 from app.utils.project_crypto import encrypt_sensitive_fields
 from typing import Dict, Any
+from uuid import UUID
 from app.utils.logs import getLogger
 
 logger = getLogger('app')
@@ -22,6 +23,50 @@ class ProjectAccountQueue(RedisQueueHandler):
             batch_size=REDIS_QUEUE_BATCH_SIZE,  # 从配置读取批量大小
             num_workers=REDIS_QUEUE_NUM_WORKERS  # 从配置读取工作线程数
         )
+
+    async def _filter_items_before_process(self, items: list[Dict[str, Any]], worker_id: int) -> list[Dict[str, Any]]:
+        """过滤 project_id 不存在的任务，避免外键错误导致队列反复重试"""
+        valid_project_ids = set()
+        invalid_items = []
+        for item in items:
+            project_id = item.get("project_id")
+            try:
+                valid_project_ids.add(str(UUID(str(project_id))))
+            except (TypeError, ValueError, AttributeError):
+                invalid_items.append(item)
+
+        if not valid_project_ids:
+            logger.warning(f"[Worker-{worker_id}] 批次缺少有效 project_id，已跳过 {len(items)} 条任务")
+            return []
+
+        existing_project_ids = {
+            str(project_id)
+            for project_id in await ProjectInfo.filter(id__in=list(valid_project_ids)).values_list("id", flat=True)
+        }
+
+        valid_items = []
+        for item in items:
+            try:
+                project_id = str(UUID(str(item.get("project_id"))))
+            except (TypeError, ValueError, AttributeError):
+                continue
+
+            if project_id in existing_project_ids:
+                valid_items.append(item)
+            else:
+                invalid_items.append(item)
+
+        if invalid_items:
+            samples = [
+                f"account={item.get('account')}, project_id={item.get('project_id')}"
+                for item in invalid_items[:5]
+            ]
+            logger.warning(
+                f"[Worker-{worker_id}] 跳过 {len(invalid_items)} 条 project_id 不存在的项目账号任务 "
+                f"[{self.queue_name}]: {samples}"
+            )
+
+        return valid_items
     
     async def add_to_queue(self, data: Dict[str, Any], retry: int = 3) -> bool:
         """
@@ -53,4 +98,3 @@ class ProjectAccountQueue(RedisQueueHandler):
 
 # 创建全局实例
 project_account_queue = ProjectAccountQueue()
-

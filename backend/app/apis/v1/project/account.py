@@ -654,9 +654,14 @@ async def post_or_put(
     try:
         from app.utils.project_account_queue import project_account_queue
         from app.core.settings import REDIS_ENABLED
+        from app.models.project import ProjectInfo
         
         if not REDIS_ENABLED:
             raise HTTPException(status_code=503, detail="Redis未启用，无法使用队列处理功能")
+
+        project_exists = await ProjectInfo.filter(id=item.project_id).exists()
+        if not project_exists:
+            raise HTTPException(status_code=404, detail="项目不存在")
         
         # 如果提供了 host，查询对应的 server_id（优先选择端口大于30000的）
         if item.host:
@@ -709,9 +714,22 @@ async def batch_upsert(
     try:
         from app.utils.project_account_queue import project_account_queue
         from app.core.settings import REDIS_ENABLED
+        from app.models.project import ProjectInfo
         
         if not REDIS_ENABLED:
             raise HTTPException(status_code=503, detail="Redis未启用，无法使用批量处理功能")
+
+        project_ids = {str(item.project_id) for item in items}
+        existing_project_ids = {
+            str(project_id)
+            for project_id in await ProjectInfo.filter(id__in=list(project_ids)).values_list("id", flat=True)
+        }
+        missing_project_ids = sorted(project_ids - existing_project_ids)
+        if missing_project_ids:
+            raise HTTPException(
+                status_code=404,
+                detail=f"项目不存在: {', '.join(missing_project_ids[:10])}"
+            )
         
         # 将数据添加到Redis队列
         success_count = 0
@@ -756,7 +774,6 @@ async def batch_upsert(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 
 
 

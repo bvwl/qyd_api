@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import List
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_serializer, computed_field
+from pydantic import BaseModel, Field, field_serializer, model_validator
 from app.models.project import Status, AccountType
 from app.utils.time_tool import CN_TZ
 from app.schemas.server.info import Base as ServerInfoBase
@@ -90,10 +90,11 @@ class Out(Base):
     # 关联的项目和服务器基础信息
     project: ProjectInfoBase = Field(..., description="项目信息")
     server: ServerInfoBase | None = Field(None, description="服务器信息")
+    proxy_url: str | None = Field(None, description="代理URL")
+    proxy_type: str | None = Field(None, description="代理类型")
 
-    @computed_field
-    @property
-    def proxy_url(self) -> str | None:
+    @model_validator(mode="after")
+    def fill_proxy_info(self):
         """
         根据服务器信息生成代理URL
         - 20000 <= port < 30000: http://username:password@host:port
@@ -101,7 +102,7 @@ class Out(Base):
         - 其他端口: 返回 None
         """
         if not self.server:
-            return None
+            return self
         
         # 使用 domain 优先，如果没有则使用 host
         host = self.server.domain or self.server.host
@@ -113,32 +114,13 @@ class Out(Base):
         
         # 根据端口范围判断协议
         if 20000 <= port < 30000:
-            return f"http://{username}:{password}@{host}:{port}"
+            self.proxy_type = "http"
+            self.proxy_url = f"http://{username}:{password}@{host}:{port}"
         elif 30000 <= port < 40000:
-            return f"socks5://{username}:{password}@{host}:{port}"
-        else:
-            return None
+            self.proxy_type = "socks5"
+            self.proxy_url = f"socks5://{username}:{password}@{host}:{port}"
 
-    @computed_field
-    @property
-    def proxy_type(self) -> str | None:
-        """
-        根据服务器端口判断代理类型
-        - 20000 <= port < 30000: http
-        - 30000 <= port < 40000: socks5
-        - 其他端口: None
-        """
-        if not self.server:
-            return None
-        
-        port = self.server.port
-        
-        if 20000 <= port < 30000:
-            return "http"
-        elif 30000 <= port < 40000:
-            return "socks5"
-        else:
-            return None
+        return self
 
     @field_serializer("create_time", "update_time")
     def format_datetime(self, dt: datetime) -> str:

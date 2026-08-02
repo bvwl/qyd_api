@@ -8,6 +8,7 @@ from uuid import UUID
 from fastapi import Request
 from app.models.user import UserLog
 from app.utils.logs import getLogger
+from app.utils.log_middleware import get_request_ip
 
 # 获取安全日志记录器
 security_logger = getLogger('security')
@@ -60,7 +61,7 @@ async def log_security_event(
         # 从request中提取信息
         if request:
             if not ip:
-                ip = request.client.host if request.client else None
+                ip, _ = get_request_ip(request)
             if not user_agent:
                 user_agent = request.headers.get('user-agent')
         
@@ -105,7 +106,7 @@ async def log_unauthorized_access(
         ip = None
         user_agent = None
         if request:
-            ip = request.client.host if request.client else None
+            ip, _ = get_request_ip(request)
             user_agent = request.headers.get('user-agent')
         
         description = f"越权访问: 尝试{operation}资源[{resource}]"
@@ -159,7 +160,7 @@ async def log_data_access_violation(
         ip = None
         user_agent = None
         if request:
-            ip = request.client.host if request.client else None
+            ip, _ = get_request_ip(request)
             user_agent = request.headers.get('user-agent')
         
         description = f"数据访问违规: 尝试{operation}他人的{resource_type}[{resource_id}]"
@@ -213,7 +214,7 @@ async def log_authentication_failure(
     """
     try:
         if request and not ip:
-            ip = request.client.host if request.client else None
+            ip, _ = get_request_ip(request)
         
         # 只记录到日志文件
         log_message = f"[LOGIN_FAILED] 登录失败: {email}, 原因: {reason}"
@@ -245,7 +246,7 @@ async def log_invalid_parameter(
     try:
         ip = None
         if request:
-            ip = request.client.host if request.client else None
+            ip, _ = get_request_ip(request)
         
         # 只记录到日志文件
         log_message = f"[ILLEGAL_PARAMETER] 非法参数: {parameter}={value}, 原因: {reason}"

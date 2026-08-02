@@ -81,7 +81,7 @@ class XuiInbound(BaseModel):
     accounts = fields.ManyToManyField(
         "models.ServerAccount",
         related_name="xui_inbounds",
-        through="xui_inbound_account",
+        through="xuiinbound_accounts",
         description='关联的服务器账号'
     )
 

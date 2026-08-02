@@ -11,6 +11,30 @@ from app.utils.logs import getLogger
 from app.utils.jwt_tool import JwtToken
 
 
+def get_request_ip(request: Request) -> tuple[str, str | None]:
+    """
+    获取真实调用方 IP。
+
+    优先级：
+    1. X-Forwarded-For 的第一个 IP（真实客户端）
+    2. X-Real-IP
+    3. CF-Connecting-IP / True-Client-IP（兼容 CDN）
+    4. request.client.host（直连或兜底）
+    """
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        ip_chain = [ip.strip() for ip in forwarded_for.split(",") if ip.strip()]
+        if ip_chain:
+            return ip_chain[0], " -> ".join(ip_chain)
+
+    for header_name in ("X-Real-IP", "CF-Connecting-IP", "True-Client-IP"):
+        header_ip = request.headers.get(header_name)
+        if header_ip:
+            return header_ip.strip(), None
+
+    return (request.client.host if request.client else "unknown"), None
+
+
 class LoggingMiddleware(BaseHTTPMiddleware):
     """
     API 请求日志中间件
@@ -27,7 +51,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         
         # 获取请求信息
         method = request.method
-        client_ip = request.client.host if request.client else "unknown"
+        client_ip, proxy_chain = get_request_ip(request)
         
         # 尝试从JWT Token中获取用户ID
         user_id = "server"  # 默认为server
@@ -64,6 +88,8 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             
             # 添加IP地址
             log_parts.append(f"IP={client_ip}")
+            if proxy_chain and proxy_chain != client_ip:
+                log_parts.append(f"代理链={proxy_chain}")
             
             # 添加请求信息
             log_parts.append(f"{method} {request.url.path}")

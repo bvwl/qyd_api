@@ -144,6 +144,8 @@ export interface ProjectAccount {
   project?: Project
   server_id?: string
   server?: ServerInfo
+  proxy_url?: string
+  proxy_type?: string
   create_time: string
   update_time: string
 }

@@ -1,162 +1,152 @@
-# 后端服务器专用 Docker Compose 配置
-# 用于部署 Backend API + Queue Worker
-# 注意：Redis 使用外部已部署的服务器，不在此启动
-# 使用 host 网络模式以便直接访问宿主机代理
+# 后端分离部署：Backend API + Queue Worker + 日志压缩
+# MySQL、Redis 与宿主机代理均为外部服务，因此保留 host 网络模式。
 
-version: '3.8'
+x-backend-environment: &backend-environment
+  TZ: Asia/Shanghai
+
+  # 宿主机代理；可在 .env 中覆盖或留空
+  HTTP_PROXY: "${HTTP_PROXY:-http://127.0.0.1:7890}"
+  HTTPS_PROXY: "${HTTPS_PROXY:-http://127.0.0.1:7890}"
+  ALL_PROXY: "${ALL_PROXY:-socks5h://127.0.0.1:7891}"
+  NO_PROXY: "${NO_PROXY:-localhost,127.0.0.1,::1}"
+  http_proxy: "${HTTP_PROXY:-http://127.0.0.1:7890}"
+  https_proxy: "${HTTPS_PROXY:-http://127.0.0.1:7890}"
+  all_proxy: "${ALL_PROXY:-socks5h://127.0.0.1:7891}"
+  no_proxy: "${NO_PROXY:-localhost,127.0.0.1,::1}"
+
+  # MySQL 主库
+  DB_HOST: "${DB_HOST:-192.168.1.30}"
+  DB_PORT: "${DB_PORT:-3306}"
+  DB_USER: "${DB_USER:-qyd}"
+  DB_PASSWORD: "${DB_PASSWORD:?请在 .env 中配置 DB_PASSWORD}"
+  DB_NAME: "${DB_NAME:-qyd}"
+  DB_MINSIZE: "${DB_MINSIZE:-5}"
+  DB_MAXSIZE: "${DB_MAXSIZE:-20}"
+  DB_ECHO: "${DB_ECHO:-0}"
+  DB_POOL_RECYCLE: "${DB_POOL_RECYCLE:-3600}"
+  DB_CONNECT_TIMEOUT: "${DB_CONNECT_TIMEOUT:-10}"
+
+  # MySQL 读写分离
+  DB_READ_WRITE_SPLIT: "${DB_READ_WRITE_SPLIT:-0}"
+  DB_SLAVE1_HOST: "${DB_SLAVE1_HOST:-${DB_HOST:-192.168.1.30}}"
+  DB_SLAVE1_PORT: "${DB_SLAVE1_PORT:-3306}"
+  DB_SLAVE1_USER: "${DB_SLAVE1_USER:-${DB_USER:-qyd}}"
+  DB_SLAVE1_PASSWORD: "${DB_SLAVE1_PASSWORD:-${DB_PASSWORD}}"
+  DB_SLAVE1_NAME: "${DB_SLAVE1_NAME:-${DB_NAME:-qyd}}"
+  DB_SLAVE1_MINSIZE: "${DB_SLAVE1_MINSIZE:-5}"
+  DB_SLAVE1_MAXSIZE: "${DB_SLAVE1_MAXSIZE:-20}"
+  DB_SLAVE2_HOST: "${DB_SLAVE2_HOST:-${DB_HOST:-192.168.1.30}}"
+  DB_SLAVE2_PORT: "${DB_SLAVE2_PORT:-3306}"
+  DB_SLAVE2_USER: "${DB_SLAVE2_USER:-${DB_USER:-qyd}}"
+  DB_SLAVE2_PASSWORD: "${DB_SLAVE2_PASSWORD:-${DB_PASSWORD}}"
+  DB_SLAVE2_NAME: "${DB_SLAVE2_NAME:-${DB_NAME:-qyd}}"
+  DB_SLAVE2_MINSIZE: "${DB_SLAVE2_MINSIZE:-5}"
+  DB_SLAVE2_MAXSIZE: "${DB_SLAVE2_MAXSIZE:-20}"
+
+  # 外部 Redis
+  REDIS_ENABLED: "${REDIS_ENABLED:-1}"
+  REDIS_HOST: "${REDIS_HOST:-192.168.1.20}"
+  REDIS_PORT: "${REDIS_PORT:-6379}"
+  REDIS_PASSWORD: "${REDIS_PASSWORD:?请在 .env 中配置 REDIS_PASSWORD}"
+  REDIS_DB: "${REDIS_DB:-0}"
+  REDIS_MAX_CONNECTIONS: "${REDIS_MAX_CONNECTIONS:-50}"
+  REDIS_TIMEOUT: "${REDIS_TIMEOUT:-5}"
+  REDIS_KEY_PREFIX: "${REDIS_KEY_PREFIX:-qyd:}"
+
+  # 队列、JWT 与日志
+  REDIS_QUEUE_BATCH_SIZE: "${REDIS_QUEUE_BATCH_SIZE:-200}"
+  REDIS_QUEUE_NUM_WORKERS: "${REDIS_QUEUE_NUM_WORKERS:-4}"
+  REDIS_QUEUE_CACHE_EXPIRE: "${REDIS_QUEUE_CACHE_EXPIRE:-3600}"
+  JWT_SECRET_KEY: "${JWT_SECRET_KEY:?请在 .env 中配置 JWT_SECRET_KEY}"
+  JWT_ALGORITHM: "${JWT_ALGORITHM:-HS256}"
+  LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+  LOG_RETENTION_DAYS: "${LOG_RETENTION_DAYS:-30}"
+
+x-backend-volumes: &backend-volumes
+  - ./logs:/app/logs
+  - ./backend/status:/app/status
+  - ./backend/static:/app/static
+  - ./backend/backups:/app/backups
+
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "${DOCKER_LOG_MAX_SIZE:-10m}"
+    max-file: "${DOCKER_LOG_MAX_FILES:-3}"
+    compress: "true"
 
 services:
-  # 后端 API 服务
   backend-api:
     build:
       context: ./backend
       target: backend-api
     container_name: qyd-backend-api
     restart: unless-stopped
-    network_mode: "host"  # 使用 host 网络模式，直接访问宿主机代理
+    init: true
+    network_mode: host
     environment:
-      # 代理配置（host 网络模式下直接使用 127.0.0.1）
-      - HTTP_PROXY=http://127.0.0.1:7890
-      - HTTPS_PROXY=http://127.0.0.1:7890
-      - ALL_PROXY=socks5h://127.0.0.1:7891
-      - NO_PROXY=localhost,127.0.0.1,::1
-      - http_proxy=http://127.0.0.1:7890
-      - https_proxy=http://127.0.0.1:7890
-      - all_proxy=socks5h://127.0.0.1:7891
-      - no_proxy=localhost,127.0.0.1,::1
-      
-      # 数据库配置
-      - DB_HOST=${DB_HOST:-192.168.1.30}
-      - DB_PORT=${DB_PORT:-3306}
-      - DB_USER=${DB_USER:-qyd}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_NAME=${DB_NAME:-qyd}
-      - DB_MINSIZE=${DB_MINSIZE:-5}
-      - DB_MAXSIZE=${DB_MAXSIZE:-20}
-      
-      # 读写分离配置
-      - DB_READ_WRITE_SPLIT=${DB_READ_WRITE_SPLIT:-0}
-      - DB_SLAVE1_HOST=${DB_SLAVE1_HOST}
-      - DB_SLAVE1_PORT=${DB_SLAVE1_PORT:-3306}
-      - DB_SLAVE1_USER=${DB_SLAVE1_USER:-${DB_USER}}
-      - DB_SLAVE1_PASSWORD=${DB_SLAVE1_PASSWORD:-${DB_PASSWORD}}
-      - DB_SLAVE1_NAME=${DB_SLAVE1_NAME:-${DB_NAME}}
-      
-      # Redis 配置（使用外部 Redis 服务器）
-      - REDIS_ENABLED=${REDIS_ENABLED:-1}
-      - REDIS_HOST=${REDIS_HOST:-192.168.1.20}
-      - REDIS_PORT=${REDIS_PORT:-6379}
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_password}
-      - REDIS_DB=${REDIS_DB:-0}
-      - REDIS_MAX_CONNECTIONS=${REDIS_MAX_CONNECTIONS:-50}
-      
-      # Redis 队列配置
-      - REDIS_QUEUE_BATCH_SIZE=${REDIS_QUEUE_BATCH_SIZE:-200}
-      - REDIS_QUEUE_NUM_WORKERS=${REDIS_QUEUE_NUM_WORKERS:-4}
-      - REDIS_QUEUE_CACHE_EXPIRE=${REDIS_QUEUE_CACHE_EXPIRE:-3600}
-      
-      # JWT 配置
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
-      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
-      - JWT_EXPIRE_TIME=${JWT_EXPIRE_TIME:-86400}
-      
-      # 服务配置
-      - HOST=0.0.0.0
-      - PORT=6080
-      - DEBUG=${DEBUG:-0}
-      - WORKERS=${WORKERS:-1}
-      
-      # CORS 配置（允许前端服务器访问）
-      - CORS_ORIGINS=${CORS_ORIGINS:-http://192.168.1.10,http://192.168.1.10:80}
-      
-      # 日志配置
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - LOG_RETENTION_DAYS=${LOG_RETENTION_DAYS:-90}
-    volumes:
-      # 日志映射到宿主机
-      - ./logs:/app/logs
-      - ./backend/status:/app/status
+      <<: *backend-environment
+      APP_HOST: 0.0.0.0
+      APP_PORT: "6080"
+      APP_DEBUG: "${APP_DEBUG:-0}"
+      WORKERS: "${WORKERS:-1}"
+      APP_LIMIT_CONCURRENCY: "${APP_LIMIT_CONCURRENCY:-10000}"
+      APP_BACKLOG: "${APP_BACKLOG:-4096}"
+      APP_TIMEOUT_KEEP_ALIVE: "${APP_TIMEOUT_KEEP_ALIVE:-5}"
+      ENABLE_QUEUE_WORKERS: "0"
+      ENABLE_DOCS: "${ENABLE_DOCS:-1}"
+      CORS_ORIGINS: "${CORS_ORIGINS:-http://192.168.1.10,http://192.168.1.10:80}"
+      JWT_EXPIRE_TIME: "${JWT_EXPIRE_TIME:-86400}"
+      DB_CHECK_INTERVAL_MINUTES: "${DB_CHECK_INTERVAL_MINUTES:-30}"
+      ENABLE_EMAIL_CHECK: "${ENABLE_EMAIL_CHECK:-0}"
+      EMAIL_CHECK_INTERVAL_HOURS: "${EMAIL_CHECK_INTERVAL_HOURS:-1}"
+      ENABLE_STATS_SYNC: "${ENABLE_STATS_SYNC:-1}"
+      STATS_SYNC_INTERVAL_MINUTES: "${STATS_SYNC_INTERVAL_MINUTES:-60}"
+      SHUTDOWN_WAIT_SECONDS: "${SHUTDOWN_WAIT_SECONDS:-0.5}"
+    volumes: *backend-volumes
     healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:6080/docs', timeout=5)"]
+      test:
+        - CMD
+        - python
+        - -c
+        - "import socket; s = socket.create_connection(('127.0.0.1', 6080), 5); s.close()"
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+    stop_grace_period: 30s
+    logging: *default-logging
 
-  # 队列 Worker 服务
   queue-worker:
     build:
       context: ./backend
       target: queue-worker
     container_name: qyd-queue-worker
     restart: unless-stopped
-    network_mode: "host"  # 使用 host 网络模式，直接访问宿主机代理
+    init: true
+    network_mode: host
     environment:
-      # 代理配置（host 网络模式下直接使用 127.0.0.1）
-      - HTTP_PROXY=http://127.0.0.1:7890
-      - HTTPS_PROXY=http://127.0.0.1:7890
-      - ALL_PROXY=socks5h://127.0.0.1:7891
-      - NO_PROXY=localhost,127.0.0.1,::1
-      - http_proxy=http://127.0.0.1:7890
-      - https_proxy=http://127.0.0.1:7890
-      - all_proxy=socks5h://127.0.0.1:7891
-      - no_proxy=localhost,127.0.0.1,::1
-      
-      # 数据库配置
-      - DB_HOST=${DB_HOST:-192.168.1.30}
-      - DB_PORT=${DB_PORT:-3306}
-      - DB_USER=${DB_USER:-qyd}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_NAME=${DB_NAME:-qyd}
-      - DB_MINSIZE=${DB_MINSIZE:-5}
-      - DB_MAXSIZE=${DB_MAXSIZE:-20}
-      
-      # 读写分离配置
-      - DB_READ_WRITE_SPLIT=${DB_READ_WRITE_SPLIT:-0}
-      - DB_SLAVE1_HOST=${DB_SLAVE1_HOST}
-      - DB_SLAVE1_PORT=${DB_SLAVE1_PORT:-3306}
-      
-      # Redis 配置（使用外部 Redis 服务器）
-      - REDIS_ENABLED=${REDIS_ENABLED:-1}
-      - REDIS_HOST=${REDIS_HOST:-192.168.1.20}
-      - REDIS_PORT=${REDIS_PORT:-6379}
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_password}
-      - REDIS_DB=${REDIS_DB:-0}
-      - REDIS_MAX_CONNECTIONS=${REDIS_MAX_CONNECTIONS:-50}
-      
-      # Redis 队列配置
-      - REDIS_QUEUE_BATCH_SIZE=${REDIS_QUEUE_BATCH_SIZE:-200}
-      - REDIS_QUEUE_NUM_WORKERS=${REDIS_QUEUE_NUM_WORKERS:-4}
-      - REDIS_QUEUE_CACHE_EXPIRE=${REDIS_QUEUE_CACHE_EXPIRE:-3600}
-      # 多进程模式：启动 N 个进程各占一个 CPU 核（默认 1，单进程向后兼容）
-      - QUEUE_WORKER_PROCESSES=${QUEUE_WORKER_PROCESSES:-1}
-      
-      # JWT 配置
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
-      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
-      
-      # 日志配置
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - LOG_RETENTION_DAYS=${LOG_RETENTION_DAYS:-90}
-    volumes:
-      # 日志映射到宿主机
-      - ./logs:/app/logs
-      - ./backend/status:/app/status
+      <<: *backend-environment
+      QUEUE_WORKER_PROCESSES: "${QUEUE_WORKER_PROCESSES:-1}"
+    volumes: *backend-volumes
+    stop_grace_period: 60s
+    logging: *default-logging
 
-  # 日志压缩服务（独立运行，避免影响主服务性能）
   log-compressor:
     build:
       context: ./backend
       target: log-compressor
     container_name: qyd-log-compressor
     restart: unless-stopped
-    network_mode: "host"
+    init: true
+    network_mode: host
     environment:
-      # 日志配置
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - LOG_RETENTION_DAYS=${LOG_RETENTION_DAYS:-30}
-      - LOG_COMPRESS_INTERVAL_HOURS=${LOG_COMPRESS_INTERVAL_HOURS:-2}
-      - LOG_COMPRESS_ON_STARTUP=${LOG_COMPRESS_ON_STARTUP:-1}
+      TZ: Asia/Shanghai
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+      LOG_RETENTION_DAYS: "${LOG_RETENTION_DAYS:-30}"
+      LOG_COMPRESS_INTERVAL_HOURS: "${LOG_COMPRESS_INTERVAL_HOURS:-2}"
+      LOG_COMPRESS_ON_STARTUP: "${LOG_COMPRESS_ON_STARTUP:-1}"
     volumes:
-      # 共享日志目录
       - ./logs:/app/logs
+    stop_grace_period: 30s
+    logging: *default-logging

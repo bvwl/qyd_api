@@ -11,6 +11,8 @@
 """
 
 import copy
+import base64
+import binascii
 from typing import Any
 from app.core.tools import aes_encrypt_project, aes_decrypt_project
 
@@ -109,11 +111,20 @@ def decrypt_password(encrypted_password: str, account: str) -> str:
     """
     if not encrypted_password:
         return encrypted_password
+
+    try:
+        encrypted_bytes = base64.b64decode(encrypted_password, validate=True)
+    except (binascii.Error, ValueError):
+        # 历史数据可能是明文或旧格式，直接原样返回，避免日志刷屏。
+        return encrypted_password
+
+    if len(encrypted_bytes) == 0 or len(encrypted_bytes) % 16 != 0:
+        # AES-CBC 密文长度必须是 16 字节倍数；不满足则视为明文/旧格式。
+        return encrypted_password
     
     try:
         return aes_decrypt_project(encrypted_password, account)
-    except Exception as e:
-        print(f"解密 password 失败: {e}")
+    except Exception:
         return encrypted_password
 
 

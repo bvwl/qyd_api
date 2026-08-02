@@ -54,5 +54,16 @@ CREATE TABLE IF NOT EXISTS `xui_inbound_account` (
   FOREIGN KEY (`serveraccount_id`) REFERENCES `proxy_account` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='XUI 入站和账号关系表';
 
+-- 4. 创建 Tortoise 默认命名的关系表（兼容线上运行时查询）
+-- 旧脚本使用 xui_inbound_account / xui_inbound_id；
+-- 当前 Tortoise 关系查询使用 xuiinbound_accounts / xuiinbound_id。
+CREATE TABLE IF NOT EXISTS `xuiinbound_accounts` (
+  `xuiinbound_id` CHAR(36) NOT NULL COMMENT '入站 ID',
+  `serveraccount_id` CHAR(36) NOT NULL COMMENT '账号 ID',
+  PRIMARY KEY (`xuiinbound_id`, `serveraccount_id`),
+  FOREIGN KEY (`xuiinbound_id`) REFERENCES `xui_inbound` (`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`serveraccount_id`) REFERENCES `proxy_account` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='XUI 入站和账号关系表（Tortoise默认命名兼容）';
+
 -- 完成
 SELECT 'XUI 表创建完成！' AS message;
