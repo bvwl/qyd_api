@@ -4,6 +4,7 @@ Redis队列处理工具
 """
 import asyncio
 import json
+import logging
 import time
 from datetime import datetime
 from typing import Dict, List, Any, Optional, Callable
@@ -15,7 +16,7 @@ from app.core.settings import (
     REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, REDIS_DB,
     REDIS_MAX_CONNECTIONS, REDIS_TIMEOUT, REDIS_KEY_PREFIX, REDIS_ENABLED
 )
-from app.utils.logs import getLogger
+from app.utils.logs import getLogger, safe_repr
 
 try:
     from app.utils.error_tracker import should_log_error
@@ -188,7 +189,7 @@ class RedisQueueHandler:
         
         # 检查必要字段
         if not all(field in data for field in self.unique_fields):
-            logger.error(f"数据缺少必要字段 [{self.queue_name}]: {data}")
+            logger.error("数据缺少必要字段 [%s]: %s", self.queue_name, safe_repr(data))
             return False
         
         # 生成唯一key
@@ -235,7 +236,7 @@ class RedisQueueHandler:
                     logger.warning(f"[重试{attempt + 1}] Redis写入失败 [{self.queue_name}]: {error_msg}")
                     await asyncio.sleep(1 + attempt)
         
-        logger.error(f"最终写入失败 [{self.queue_name}]: {data}")
+        logger.error("最终写入失败 [%s]: %s", self.queue_name, safe_repr(data))
         return False
     
     async def get_queue_size(self) -> int:
@@ -304,7 +305,12 @@ class RedisQueueHandler:
                     items.append(item)
                     keys_to_process.append(task_keys[i])
                 except json.JSONDecodeError:
-                    logger.warning(f"[Worker-{worker_id}] 无效数据格式 [{self.queue_name}]: {result}")
+                    logger.warning(
+                        "[Worker-%s] 无效数据格式 [%s]: %s",
+                        worker_id,
+                        self.queue_name,
+                        safe_repr(result),
+                    )
                     await redis.delete(task_keys[i])
                     continue
             
@@ -390,7 +396,13 @@ class RedisQueueHandler:
                     key = tuple(str(item[field]) for field in self.unique_fields)
                     
                     # 调试日志
-                    logger.debug(f"[Worker-{worker_id}] 处理数据 key={key}, existing_keys={list(existing_records.keys())}")
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug(
+                            "[Worker-%s] 处理数据 key=%s, existing_keys=%s",
+                            worker_id,
+                            safe_repr(key),
+                            safe_repr(existing_records.keys()),
+                        )
                     
                     if key in existing_records:
                         # 更新现有记录 - 只更新非空字段

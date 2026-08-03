@@ -11,7 +11,7 @@ from app.schemas.base import BaseOut
 from app.utils.time_tool import parse_time
 from app.core.tools import aes_encrypt, aes_decrypt
 from app.clients.xui import XuiClient
-from app.utils.logs import getLogger
+from app.utils.logs import getLogger, safe_repr
 
 logger = getLogger('app')
 
@@ -222,7 +222,11 @@ class XuiInboundCRUD:
                 result = await self.create(inbound_data)
                 results.append(result)
             except Exception as e:
-                logger.error(f'批量创建入站失败: {inbound_data.dict()}, 错误: {e}')
+                logger.error(
+                    '批量创建入站失败: data=%s, 错误=%s',
+                    safe_repr(inbound_data.dict()),
+                    safe_repr(e),
+                )
                 # 继续处理下一个
         
         return results

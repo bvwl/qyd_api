@@ -39,12 +39,10 @@ def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """
     处理所有未捕获异常并返回统一错误响应
     """
-    import traceback
-
-    traceback.print_exc()
+    # 异常已由 LoggingMiddleware 统一记录；这里仅生成响应，避免重复堆栈。
     return JSONResponse(
         status_code=500,
-        content={"detail": f"Internal Server Error: {str(exc)}"},
+        content={"detail": "Internal Server Error"},
     )
 
 

@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta
-from loguru import logger
 from fastapi import APIRouter, Body, HTTPException, Query, BackgroundTasks, Depends
 from app.clients.outlook import AzureAuthManager
 from app.schemas.mail.info import EmailType

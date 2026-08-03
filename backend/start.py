@@ -69,9 +69,13 @@ def run_server() -> None:
         reload=reload,
         workers=workers,
         log_level=log_level,
+        # 访问日志由 LoggingMiddleware 采样记录，避免 uvicorn 再逐请求输出一份。
+        access_log=os.getenv("UVICORN_ACCESS_LOG", "0").lower() in ("1", "true", "yes"),
         http="httptools",
-        limit_concurrency=int(os.getenv("APP_LIMIT_CONCURRENCY", "10000")),
-        backlog=int(os.getenv("APP_BACKLOG", "4096")),
+        # 限制同时驻留内存的请求数；QPS 应通过多进程/多实例扩展，而不是
+        # 让单进程堆积一万个等待中的请求对象。
+        limit_concurrency=int(os.getenv("APP_LIMIT_CONCURRENCY", "1000")),
+        backlog=int(os.getenv("APP_BACKLOG", "1024")),
         timeout_keep_alive=int(os.getenv("APP_TIMEOUT_KEEP_ALIVE", "5")),
     )
 

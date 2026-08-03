@@ -2,14 +2,16 @@ import time
 import base64
 import hashlib
 import os
-import traceback
 from urllib.parse import urlencode, parse_qs, urlparse
 from typing import Tuple, Dict, List
 from pydantic import BaseModel, Field
 from app.models.mail import EmailInfo
-from loguru import logger
 from app.utils.retry import async_retry
 from app.utils.req import Req
+from app.utils.logs import getLogger, safe_repr
+
+
+logger = getLogger("app")
 
 
 # 定义结果模型
@@ -309,7 +311,7 @@ class AzureAuthManager(Req):
                 await email_info.save()
             return 0
             
-        logger.success(f"[{self.email}] ✅ Token 刷新成功！")
+        logger.info(f"[{self.email}] Token 刷新成功")
         access_token = content.get("access_token")
         refresh_token = content.get("refresh_token")
         
@@ -442,7 +444,7 @@ class AzureAuthManager(Req):
         elif status_code != 202:
             logger.error(f"[{self.email}] ❌ 响应状态码: {status_code}")
             return 0
-        logger.success(f"[{self.email}] ✅ 邮件发送成功！")
+        logger.info(f"[{self.email}] 邮件发送成功")
         return 1
 
     # 获取邮件主逻辑
@@ -506,7 +508,12 @@ class AzureAuthManager(Req):
             return 0
         except Exception as e:
             # 打印完整堆栈，便于定位类似 'str' object is not callable 之类的错误
-            logger.error(f"[{self.email}] get_emails_main 发生异常: {e}\n{traceback.format_exc()}")
+            logger.error(
+                "[%s] get_emails_main 发生异常: %s",
+                self.email,
+                safe_repr(e),
+                exc_info=True,
+            )
             return 0
 
     # 发送邮件主逻辑

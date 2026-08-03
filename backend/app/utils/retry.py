@@ -1,7 +1,10 @@
 import asyncio
 from functools import wraps
 import time
-from loguru import logger
+from app.utils.logs import getLogger, safe_repr
+
+
+logger = getLogger("app")
 
 
 def retry(max_retries: int = 3, delay: float = 1.0, backoff: float = 1.0):
@@ -30,9 +33,15 @@ def retry(max_retries: int = 3, delay: float = 1.0, backoff: float = 1.0):
                 except Exception as e:
                     retries += 1
                     if retries >= max_retries:
-                        logger.warning(f"函数 {func.__name__} 在尝试了 {max_retries} 次后失败，错误信息: {e}")
+                        logger.warning(
+                            "函数 %s 在尝试了 %d 次后失败，错误信息: %s",
+                            func.__name__, max_retries, safe_repr(e),
+                        )
                         return None  # 重试次数用尽后返回 None
-                    logger.warning(f"正在重试 {func.__name__} {retries + 1}/{max_retries} 因错误: {e}")
+                    logger.warning(
+                        "正在重试 %s %d/%d 因错误: %s",
+                        func.__name__, retries + 1, max_retries, safe_repr(e),
+                    )
                     time.sleep(current_delay)
                     current_delay *= backoff
 
@@ -69,9 +78,15 @@ def async_retry(max_retries: int = 3, delay: float = 1.0, backoff: float = 1.0):
                 except Exception as e:
                     retries += 1
                     if retries >= max_retries:
-                        logger.warning(f"函数 {func.__name__} 在尝试了 {max_retries} 次后失败，错误信息: {e}")
+                        logger.warning(
+                            "函数 %s 在尝试了 %d 次后失败，错误信息: %s",
+                            func.__name__, max_retries, safe_repr(e),
+                        )
                         return None  # 重试次数用尽后返回 None
-                    logger.warning(f"正在重试 {func.__name__} {retries + 1}/{max_retries} 因错误: {e}")
+                    logger.warning(
+                        "正在重试 %s %d/%d 因错误: %s",
+                        func.__name__, retries + 1, max_retries, safe_repr(e),
+                    )
 
                 await asyncio.sleep(current_delay)  # 异步延迟
                 current_delay *= backoff  # 根据backoff递增延迟

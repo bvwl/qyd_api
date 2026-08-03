@@ -15,9 +15,10 @@ from app.schemas.xui.user import (
 from app.schemas.base import BaseOut
 from app.crud.xui.user import xui_inbound_account_crud
 from app.apis.deps import get_current_user, get_admin_user
-from loguru import logger
+from app.utils.logs import getLogger, safe_repr
 
 app = APIRouter()
+logger = getLogger("app")
 
 
 # 后台任务：添加账号到所有入站
@@ -27,10 +28,15 @@ async def add_account_to_all_inbounds_task(account_id: UUID):
     """
     try:
         logger.info(f'开始后台任务：添加账号到所有入站, account_id={account_id}')
-        result = await xui_inbound_account_crud.add_account_to_all_inbounds(account_id)
-        logger.info(f'后台任务完成：添加账号到所有入站, account_id={account_id}, 结果={result}')
+        await xui_inbound_account_crud.add_account_to_all_inbounds(account_id)
+        logger.info('后台任务完成：添加账号到所有入站, account_id=%s', account_id)
     except Exception as e:
-        logger.error(f'后台任务失败：添加账号到所有入站, account_id={account_id}, 错误={str(e)}', exc_info=True)
+        logger.error(
+            '后台任务失败：添加账号到所有入站, account_id=%s, 错误=%s',
+            account_id,
+            safe_repr(e),
+            exc_info=True,
+        )
 
 
 # 后台任务：从所有入站删除账号
@@ -40,10 +46,15 @@ async def remove_account_from_all_inbounds_task(account_id: UUID):
     """
     try:
         logger.info(f'开始后台任务：从所有入站删除账号, account_id={account_id}')
-        result = await xui_inbound_account_crud.remove_account_from_all_inbounds(account_id)
-        logger.info(f'后台任务完成：从所有入站删除账号, account_id={account_id}, 结果={result}')
+        await xui_inbound_account_crud.remove_account_from_all_inbounds(account_id)
+        logger.info('后台任务完成：从所有入站删除账号, account_id=%s', account_id)
     except Exception as e:
-        logger.error(f'后台任务失败：从所有入站删除账号, account_id={account_id}, 错误={str(e)}', exc_info=True)
+        logger.error(
+            '后台任务失败：从所有入站删除账号, account_id=%s, 错误=%s',
+            account_id,
+            safe_repr(e),
+            exc_info=True,
+        )
 
 
 
@@ -311,4 +322,3 @@ async def remove_account_from_all_inbounds(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-

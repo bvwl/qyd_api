@@ -1,83 +1,223 @@
 import logging
 import os
+import re
+import reprlib
 from logging import Logger
 from concurrent_log_handler import ConcurrentRotatingFileHandler
 import gzip
 import shutil
 import glob
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
 
+_BACKEND_DIR = Path(__file__).resolve().parents[2]
+_SENSITIVE_KEYS = frozenset({
+    "password", "passwd", "token", "access_token", "refresh_token",
+    "authorization", "secret", "key", "api_key",
+})
+
+
+def _default_log_dir() -> str:
+    configured_log_dir = os.getenv("LOG_DIR")
+    if configured_log_dir:
+        return str(Path(configured_log_dir).expanduser())
+    return str(_BACKEND_DIR / "logs")
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(name: str, default: int, minimum: int = 1) -> int:
+    try:
+        return max(minimum, int(os.getenv(name, str(default))))
+    except (TypeError, ValueError):
+        return default
+
+
+def _log_level(name: str, fallback: str = "INFO") -> int:
+    level_name = os.getenv(name, fallback).upper()
+    return getattr(logging, level_name, getattr(logging, fallback, logging.INFO))
+
+
+def safe_repr(value, max_length: int | None = None) -> str:
+    """生成有界 repr，避免日志格式化复制完整的大对象。"""
+    limit = max_length or _env_int("LOG_MAX_VALUE_LENGTH", 1024, minimum=64)
+    formatter = reprlib.Repr()
+    formatter.maxstring = limit
+    formatter.maxother = limit
+    formatter.maxlist = 20
+    formatter.maxtuple = 20
+    formatter.maxset = 20
+    formatter.maxfrozenset = 20
+    formatter.maxdict = 20
+    result = formatter.repr(value)
+    if len(result) > limit:
+        suffix = "...<truncated>"
+        return f"{result[:max(0, limit - len(suffix))]}{suffix}"[-limit:]
+    return result
+
+
+def sanitize_mapping(values: dict | None) -> dict:
+    """过滤敏感字段，并限制单个日志字段的长度。"""
+    if not values:
+        return {}
+    safe_values = {}
+    max_value_length = _env_int("LOG_MAX_VALUE_LENGTH", 1024, minimum=64)
+    for key, value in values.items():
+        key_text = str(key)
+        if key_text.lower() in _SENSITIVE_KEYS:
+            safe_values[key_text] = "***"
+        elif isinstance(value, str) and len(value) > max_value_length:
+            safe_values[key_text] = f"{value[:max_value_length]}...<truncated>"
+        else:
+            safe_values[key_text] = value
+    return safe_values
+
+
+class BoundedFormatter(logging.Formatter):
+    """限制单条日志长度，防止异常或请求参数生成超大日志。"""
+
+    def __init__(self, *args, max_length: int = 8192, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.max_length = max_length
+
+    def format(self, record: logging.LogRecord) -> str:
+        message = super().format(record)
+        if len(message) <= self.max_length:
+            return message
+        suffix = f"...<truncated {len(message) - self.max_length} chars>"
+        prefix_length = max(0, self.max_length - len(suffix))
+        return f"{message[:prefix_length]}{suffix}"[-self.max_length:]
+
+
 def getLogger(name: str = 'root') -> Logger:
     """
-    创建一个按文件大小滚动（200MB）、支持多进程安全、自动压缩日志的 Logger
+    创建支持多进程滚动的 Logger。
+
+    日志直接同步写入有界滚动文件，不使用无界内存队列。所有级别、文件
+    大小和保留数量均可通过环境变量配置。
     :param name: 日志器名称
     :return: 单例 Logger 对象
     """
-    logger: Logger = logging.getLogger(name)
-    logger.setLevel(logging.DEBUG)
+    normalized_name = name or "root"
+    logger: Logger = logging.getLogger(normalized_name)
+    logger_level = _log_level("LOG_LEVEL", "INFO")
+    logger.setLevel(logger_level)
+    # 自定义 handler 已经负责输出；禁止继续传播到 root，避免控制台重复日志。
+    logger.propagate = False
 
-    if not logger.handlers:
+    managed_handlers = [
+        handler for handler in logger.handlers
+        if getattr(handler, "_qyd_managed_handler", False)
+    ]
+    if not managed_handlers:
         # 控制台输出
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(logging.DEBUG)
+        console_handler = None
+        if _env_bool("LOG_ENABLE_CONSOLE", True):
+            console_handler = logging.StreamHandler()
+            console_handler.setLevel(_log_level("LOG_CONSOLE_LEVEL", logging.getLevelName(logger_level)))
+            console_handler._qyd_managed_handler = True
 
         # 日志目录
-        log_dir = "logs"
-        os.makedirs(log_dir, exist_ok=True)
+        configured_log_dir = os.getenv("LOG_DIR")
+        log_dir = Path(configured_log_dir).expanduser() if configured_log_dir else _BACKEND_DIR / "logs"
+        file_handler = None
+        if _env_bool("LOG_ENABLE_FILE", True):
+            log_dir.mkdir(parents=True, exist_ok=True)
 
-        # 日志文件路径
-        log_file = os.path.join(log_dir, f"{name}.log")
+            # logger 名称不能影响日志目录结构。
+            safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", normalized_name)
+            log_file = log_dir / f"{safe_name}.log"
 
-        # 文件处理器：按文件大小滚动，单个文件最大200MB，保留7天
-        # 假设每天产生约1GB日志，7天约7GB，需要约35个200MB的文件
-        file_handler = ConcurrentRotatingFileHandler(
-            filename=log_file,
-            mode='a',
-            maxBytes=200 * 1024 * 1024,  # 200MB
-            backupCount=50,               # 保留50个备份文件（约10GB，足够7天使用）
-            encoding='utf-8',
-            use_gzip=False  # 不使用内置压缩，我们自己处理
-        )
+            # 默认每类日志最多约 200MB（20MB * 当前文件及 9 个备份）。
+            file_handler = ConcurrentRotatingFileHandler(
+                filename=str(log_file),
+                mode="a",
+                maxBytes=_env_int("LOG_MAX_BYTES", 20 * 1024 * 1024),
+                backupCount=_env_int("LOG_BACKUP_COUNT", 9),
+                encoding="utf-8",
+                delay=True,
+                use_gzip=False,
+            )
+            file_handler.setLevel(_log_level("LOG_FILE_LEVEL", logging.getLevelName(logger_level)))
+            file_handler._qyd_managed_handler = True
 
         # 设置 Formatter - 简化格式，去掉路径信息
-        formatter = logging.Formatter(
+        max_message_length = _env_int("LOG_MAX_MESSAGE_LENGTH", 8192, minimum=256)
+        formatter = BoundedFormatter(
             fmt="【{name}】{levelname} {asctime} {message}",
             datefmt="%Y-%m-%d %H:%M:%S",
-            style="{"
+            style="{",
+            max_length=max_message_length,
         )
-        console_formatter = logging.Formatter(
+        console_formatter = BoundedFormatter(
             fmt="{levelname} {asctime} {message}",
             datefmt="%Y-%m-%d %H:%M:%S",
-            style="{"
+            style="{",
+            max_length=max_message_length,
         )
 
-        file_handler.setFormatter(formatter)
-        console_handler.setFormatter(console_formatter)
+        if file_handler:
+            file_handler.setFormatter(formatter)
+            logger.addHandler(file_handler)
+        if console_handler:
+            console_handler.setFormatter(console_formatter)
+            logger.addHandler(console_handler)
 
-        logger.addHandler(console_handler)
-        logger.addHandler(file_handler)
-
-        # 注意：日志压缩由 main.py 中的启动任务和定时任务统一处理
-        # 不在这里执行，避免每次创建 logger 都重复压缩
+    else:
+        # 配置热加载/测试修改环境变量后，再次获取 logger 时同步级别。
+        for handler in managed_handlers:
+            if isinstance(handler, logging.StreamHandler) and not isinstance(
+                handler, ConcurrentRotatingFileHandler
+            ):
+                handler.setLevel(_log_level("LOG_CONSOLE_LEVEL", logging.getLevelName(logger_level)))
+            else:
+                handler.setLevel(_log_level("LOG_FILE_LEVEL", logging.getLevelName(logger_level)))
 
     return logger
 
 
-def _compress_and_organize_logs(log_dir: str, name: str):
+def _compress_and_organize_logs(
+    log_dir: str,
+    name: str,
+    min_age_seconds: int = 0,
+    compress_level: int = 3,
+) -> int:
     """
     将旧日志压缩并按照 日志名称/年/月/日 的目录结构组织
     例如: logs/api/2026/02/22/api.log.1.gz
     """
     pattern = os.path.join(log_dir, f"{name}.log.*")
+    compressed_count = 0
+    now = time.time()
     for filepath in glob.glob(pattern):
-        if filepath.endswith('.gz'):
+        if filepath.endswith((".gz", ".tmp")):
             continue
         
+        claimed_path = None
         try:
+            source_stat = os.stat(filepath)
+            # 刚轮转的文件仍可能被多进程 handler 重命名，等待其稳定后再压缩。
+            if now - source_stat.st_mtime < min_age_seconds:
+                continue
+
+            # 先原子改名认领文件，避免多压缩进程重复处理，也避免滚动过程中
+            # 删除一个刚刚复用同名的新文件。上次异常遗留的认领文件可直接续压。
+            if ".compressing-" in filepath:
+                claimed_path = filepath
+            else:
+                claimed_path = f"{filepath}.compressing-{os.getpid()}-{time.time_ns()}"
+                os.rename(filepath, claimed_path)
+                source_stat = os.stat(claimed_path)
+
             # 使用文件修改时间来组织目录结构
-            file_mtime = datetime.fromtimestamp(os.path.getmtime(filepath))
+            file_mtime = datetime.fromtimestamp(source_stat.st_mtime)
             year = file_mtime.strftime('%Y')
             month = file_mtime.strftime('%m')
             day = file_mtime.strftime('%d')
@@ -87,29 +227,59 @@ def _compress_and_organize_logs(log_dir: str, name: str):
             os.makedirs(target_dir, exist_ok=True)
             
             # 压缩文件
-            filename = os.path.basename(filepath)
+            filename = os.path.basename(filepath).split(".compressing-", 1)[0]
             gz_filename = filename + '.gz'
             target_path = os.path.join(target_dir, gz_filename)
             
             # 如果目标文件已存在，添加时间戳避免覆盖
             if os.path.exists(target_path):
-                timestamp = file_mtime.strftime('%H%M%S')
+                timestamp = time.time_ns()
                 gz_filename = f"{filename}.{timestamp}.gz"
                 target_path = os.path.join(target_dir, gz_filename)
-            
-            with open(filepath, 'rb') as f_in:
-                with gzip.open(target_path, 'wb') as f_out:
-                    shutil.copyfileobj(f_in, f_out)
-            
+
+            # 先写临时文件，完整成功后再原子发布，失败时不会留下损坏的 .gz。
+            temp_path = f"{target_path}.{os.getpid()}.tmp"
+            try:
+                with open(claimed_path, "rb") as f_in, open(temp_path, "wb") as raw_out:
+                    with gzip.GzipFile(
+                        filename="",
+                        mode="wb",
+                        compresslevel=min(9, max(1, compress_level)),
+                        fileobj=raw_out,
+                        mtime=int(source_stat.st_mtime),
+                    ) as f_out:
+                        shutil.copyfileobj(f_in, f_out, length=1024 * 1024)
+
+                os.replace(temp_path, target_path)
+                os.utime(target_path, (source_stat.st_atime, source_stat.st_mtime))
+            except Exception:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+                raise
+
             # 删除原文件
-            os.remove(filepath)
-            print(f"日志已压缩并移动: {filepath} -> {target_path}")
+            os.remove(claimed_path)
+            compressed_count += 1
                 
         except Exception as e:
+            # 如果本轮已认领但尚未产生同名新滚动文件，尽量恢复原名。
+            if claimed_path and claimed_path != filepath and os.path.exists(claimed_path):
+                try:
+                    if not os.path.exists(filepath):
+                        os.rename(claimed_path, filepath)
+                except OSError:
+                    pass
             print(f"日志压缩失败: {filepath}, 原因: {e}")
 
+    return compressed_count
 
-def compress_old_logs(log_dir: str = None, name: str = "root"):
+
+def compress_old_logs(
+    log_dir: str = None,
+    name: str = "root",
+    min_age_seconds: int = 0,
+    compress_level: int = 3,
+) -> int:
     """
     压缩旧的日志文件（公共接口）
     
@@ -118,12 +288,15 @@ def compress_old_logs(log_dir: str = None, name: str = "root"):
         name: 日志器名称
     """
     if log_dir is None:
-        log_dir = "logs"
+        log_dir = _default_log_dir()
     
-    _compress_and_organize_logs(log_dir, name)
+    return _compress_and_organize_logs(log_dir, name, min_age_seconds, compress_level)
 
 
-def compress_all_logs(log_dir: str = None):
+def compress_all_logs(
+    log_dir: str = None,
+    min_age_seconds: int | None = None,
+) -> int:
     """
     压缩所有日志模块的旧日志文件，并按目录结构组织
     
@@ -131,81 +304,32 @@ def compress_all_logs(log_dir: str = None):
         log_dir: 日志目录，如果不指定则使用默认目录
     """
     if log_dir is None:
-        log_dir = "logs"
+        log_dir = _default_log_dir()
+    if min_age_seconds is None:
+        min_age_seconds = _env_int("LOG_COMPRESS_MIN_AGE_SECONDS", 300, minimum=0)
+    compress_level = _env_int("LOG_COMPRESS_LEVEL", 3)
     
     if not os.path.exists(log_dir):
-        return
+        return 0
     
-    # 获取所有日志模块名称
+    # 同时从当前日志和滚动日志识别模块，避免当前文件暂时不存在时漏压缩。
     logger_names = set()
     for filename in os.listdir(log_dir):
-        if filename.endswith('.log'):
-            # 提取模块名（去掉.log后缀）
-            logger_name = filename[:-4]
-            logger_names.add(logger_name)
+        if ".log" in filename and not filename.endswith((".gz", ".tmp")):
+            logger_names.add(filename.split(".log", 1)[0])
     
     # 压缩每个模块的旧日志
     compressed_count = 0
-    processed_files = set()  # 记录已处理的文件，避免重复
-    
     for logger_name in logger_names:
-        pattern = os.path.join(log_dir, f"{logger_name}.log.*")
-        for filepath in glob.glob(pattern):
-            # 跳过已压缩的文件
-            if filepath.endswith('.gz'):
-                continue
-            
-            # 跳过已处理的文件（避免重复）
-            if filepath in processed_files:
-                continue
-            
-            # 检查文件是否存在（避免并发问题）
-            if not os.path.exists(filepath):
-                continue
-            
-            processed_files.add(filepath)
-            
-            try:
-                # 使用文件修改时间来组织目录结构
-                file_mtime = datetime.fromtimestamp(os.path.getmtime(filepath))
-                year = file_mtime.strftime('%Y')
-                month = file_mtime.strftime('%m')
-                day = file_mtime.strftime('%d')
-                
-                # 创建目标目录
-                target_dir = os.path.join(log_dir, logger_name, year, month, day)
-                os.makedirs(target_dir, exist_ok=True)
-                
-                # 压缩文件
-                filename = os.path.basename(filepath)
-                gz_filename = filename + '.gz'
-                target_path = os.path.join(target_dir, gz_filename)
-                
-                # 如果目标文件已存在，添加时间戳避免覆盖
-                if os.path.exists(target_path):
-                    timestamp = file_mtime.strftime('%H%M%S')
-                    gz_filename = f"{filename}.{timestamp}.gz"
-                    target_path = os.path.join(target_dir, gz_filename)
-                
-                with open(filepath, 'rb') as f_in:
-                    with gzip.open(target_path, 'wb') as f_out:
-                        shutil.copyfileobj(f_in, f_out)
-                
-                os.remove(filepath)
-                compressed_count += 1
-                print(f"日志已压缩并移动: {filepath} -> {target_path}")
-                    
-            except FileNotFoundError:
-                # 文件已被其他进程处理，跳过
-                continue
-            except Exception as e:
-                print(f"日志压缩失败: {filepath}, 原因: {e}")
+        compressed_count += _compress_and_organize_logs(
+            log_dir,
+            logger_name,
+            min_age_seconds=min_age_seconds,
+            compress_level=compress_level,
+        )
     
-    if compressed_count > 0:
-        print(f"成功压缩并组织 {compressed_count} 个日志文件")
-    
-    # 同时清理超过7天的压缩日志
-    delete_old_compressed_logs(log_dir, days=7)
+    # 压缩与删除解耦：这里不自动批量删除归档文件。
+    return compressed_count
 
 
 def log_api_call(logger: Logger, user_id: str = None, endpoint: str = None, method: str = None, params: dict = None, response_status: int = None, client_ip: str = None):
@@ -237,11 +361,9 @@ def log_api_call(logger: Logger, user_id: str = None, endpoint: str = None, meth
             log_parts.append(f"接口={endpoint}")
             
         if params:
-            # 过滤敏感信息
-            safe_params = {k: v for k, v in params.items() 
-                          if k.lower() not in ['password', 'token', 'secret', 'key']}
+            safe_params = sanitize_mapping(params)
             if safe_params:
-                log_parts.append(f"参数={safe_params}")
+                log_parts.append(f"参数={safe_repr(safe_params)}")
         
         if response_status:
             log_parts.append(f"状态码={response_status}")
@@ -264,7 +386,7 @@ def delete_old_compressed_logs(log_dir: str = None, days: int = 7):
     """
     try:
         if log_dir is None:
-            log_dir = "logs"
+            log_dir = _default_log_dir()
         
         log_path = Path(log_dir)
         if not log_path.exists():
@@ -327,7 +449,7 @@ def get_log_statistics(log_dir: str = None):
         dict: 统计信息
     """
     if log_dir is None:
-        log_dir = "logs"
+        log_dir = _default_log_dir()
     
     log_path = Path(log_dir)
     if not log_path.exists():

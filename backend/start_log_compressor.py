@@ -5,9 +5,10 @@
 
 功能：
 1. 每2小时压缩旧日志文件
-2. 删除超过7天的压缩日志
+2. 等待轮转文件稳定后再原子压缩
 3. 按日期组织日志目录结构
-4. 支持优雅关闭
+4. 压缩与归档删除解耦
+5. 支持优雅关闭
 
 使用方式：
   python start_log_compressor.py
@@ -16,9 +17,9 @@ import os
 import sys
 import signal
 import asyncio
+import functools
 import logging
 from pathlib import Path
-from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
@@ -54,7 +55,7 @@ from app.utils.logs import compress_all_logs, get_log_statistics
 
 # 配置基础日志
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
@@ -67,46 +68,41 @@ class LogCompressorService:
     def __init__(self):
         self.scheduler = AsyncIOScheduler()
         self.running = False
+        self.compress_interval = max(1, int(os.getenv("LOG_COMPRESS_INTERVAL_HOURS", "2")))
+        self.min_age_seconds = max(0, int(os.getenv("LOG_COMPRESS_MIN_AGE_SECONDS", "300")))
         
     async def compress_logs_task(self) -> None:
         """
         压缩旧日志文件的定时任务
         
         日志策略：
-        - 单个日志文件最大200MB，达到后自动分割
+        - 单个日志文件达到配置上限后自动分割
         - 旧日志自动压缩为.gz格式并按日期组织
-        - 只保留最近7天的日志，超过7天自动删除
+        - 压缩与归档删除解耦，服务本身不执行批量删除
         """
         try:
-            logger.info("=" * 60)
-            logger.info("开始执行日志压缩任务...")
-            logger.info(f"执行时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            
             # 显示压缩前的统计信息
             stats_before = get_log_statistics()
-            logger.info(f"压缩前统计:")
-            logger.info(f"  总文件数: {stats_before['total_files']}")
-            logger.info(f"  总大小: {stats_before['total_size'] / 1024 / 1024:.2f} MB")
-            logger.info(f"  已压缩文件: {stats_before['compressed_files']}")
             
             # 在线程池中异步执行同步函数，避免阻塞事件循环
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, compress_all_logs)
+            loop = asyncio.get_running_loop()
+            compress_job = functools.partial(
+                compress_all_logs,
+                min_age_seconds=self.min_age_seconds,
+            )
+            compressed_count = await loop.run_in_executor(None, compress_job)
             
             # 显示压缩后的统计信息
             stats_after = get_log_statistics()
-            logger.info(f"压缩后统计:")
-            logger.info(f"  总文件数: {stats_after['total_files']}")
-            logger.info(f"  总大小: {stats_after['total_size'] / 1024 / 1024:.2f} MB")
-            logger.info(f"  已压缩文件: {stats_after['compressed_files']}")
-            
             # 计算节省的空间
             saved_space = stats_before['total_size'] - stats_after['total_size']
-            if saved_space > 0:
-                logger.info(f"  节省空间: {saved_space / 1024 / 1024:.2f} MB")
-            
-            logger.info("日志压缩任务完成")
-            logger.info("=" * 60)
+            logger.info(
+                "日志压缩完成 files=%d before=%.2fMB after=%.2fMB saved=%.2fMB",
+                compressed_count,
+                stats_before['total_size'] / 1024 / 1024,
+                stats_after['total_size'] / 1024 / 1024,
+                max(0, saved_space) / 1024 / 1024,
+            )
             
         except Exception as e:
             logger.error(f"日志压缩任务失败: {e}", exc_info=True)
@@ -117,18 +113,11 @@ class LogCompressorService:
             logger.warning("服务已在运行中")
             return
         
-        logger.info("=" * 60)
-        logger.info("日志压缩服务启动中...")
-        logger.info("=" * 60)
-        
-        # 读取配置
-        compress_interval = int(os.getenv("LOG_COMPRESS_INTERVAL_HOURS", "2"))
-        retention_days = int(os.getenv("LOG_RETENTION_DAYS", "7"))
-        
-        logger.info(f"配置信息:")
-        logger.info(f"  压缩间隔: 每 {compress_interval} 小时")
-        logger.info(f"  保留天数: {retention_days} 天")
-        logger.info(f"  日志目录: logs/")
+        logger.info(
+            "日志压缩服务启动 interval=%dh min_age=%ds",
+            self.compress_interval,
+            self.min_age_seconds,
+        )
         
         # 启动时立即执行一次压缩（可选）
         run_on_startup = os.getenv("LOG_COMPRESS_ON_STARTUP", "1").lower() in ("1", "true", "yes")
@@ -141,7 +130,7 @@ class LogCompressorService:
         # 注册定时任务
         self.scheduler.add_job(
             self.compress_logs_task,
-            IntervalTrigger(hours=compress_interval),
+            IntervalTrigger(hours=self.compress_interval),
             id="compress_logs",
             name="压缩旧日志文件",
             coalesce=True,  # 如果错过了执行时间，只执行一次
@@ -152,18 +141,13 @@ class LogCompressorService:
         self.scheduler.start()
         self.running = True
         
-        logger.info("=" * 60)
         logger.info("日志压缩服务已启动")
-        logger.info(f"下次执行时间: {datetime.now().replace(microsecond=0)}")
-        logger.info("按 Ctrl+C 停止服务")
-        logger.info("=" * 60)
     
     async def stop(self):
         """停止服务"""
         if not self.running:
             return
         
-        logger.info("=" * 60)
         logger.info("正在停止日志压缩服务...")
         
         # 关闭调度器
@@ -173,7 +157,6 @@ class LogCompressorService:
         
         self.running = False
         logger.info("日志压缩服务已停止")
-        logger.info("=" * 60)
 
 
 # 全局服务实例

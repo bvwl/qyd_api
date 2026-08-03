@@ -4,9 +4,10 @@
 """
 
 import functools
+import logging
 import time
 from typing import Callable
-from app.utils.logs import getLogger
+from app.utils.logs import getLogger, safe_repr
 
 
 def log_function_call(logger_name: str = None, log_args: bool = False, log_result: bool = False):
@@ -37,26 +38,41 @@ def log_function_call(logger_name: str = None, log_args: bool = False, log_resul
             func_name = func.__name__
             
             # 记录函数调用
-            if log_args:
-                logger.debug(f"调用函数 {func_name} 参数=args{args} kwargs={kwargs}")
-            else:
-                logger.debug(f"调用函数 {func_name}")
+            if logger.isEnabledFor(logging.DEBUG):
+                if log_args:
+                    logger.debug(
+                        "调用函数 %s 参数=args%s kwargs=%s",
+                        func_name,
+                        safe_repr(args),
+                        safe_repr(kwargs),
+                    )
+                else:
+                    logger.debug("调用函数 %s", func_name)
             
             try:
                 result = await func(*args, **kwargs)
                 elapsed = time.time() - start_time
                 
-                if log_result:
-                    logger.debug(f"函数 {func_name} 完成 耗时={elapsed:.3f}s 结果={result}")
-                else:
-                    logger.debug(f"函数 {func_name} 完成 耗时={elapsed:.3f}s")
+                if logger.isEnabledFor(logging.DEBUG):
+                    if log_result:
+                        logger.debug(
+                            "函数 %s 完成 耗时=%.3fs 结果=%s",
+                            func_name,
+                            elapsed,
+                            safe_repr(result),
+                        )
+                    else:
+                        logger.debug("函数 %s 完成 耗时=%.3fs", func_name, elapsed)
                 
                 return result
                 
             except Exception as e:
                 elapsed = time.time() - start_time
                 logger.error(
-                    f"函数 {func_name} 异常 耗时={elapsed:.3f}s 错误={str(e)}",
+                    "函数 %s 异常 耗时=%.3fs 错误=%s",
+                    func_name,
+                    elapsed,
+                    safe_repr(e),
                     exc_info=True
                 )
                 raise
@@ -67,26 +83,41 @@ def log_function_call(logger_name: str = None, log_args: bool = False, log_resul
             func_name = func.__name__
             
             # 记录函数调用
-            if log_args:
-                logger.debug(f"调用函数 {func_name} 参数=args{args} kwargs={kwargs}")
-            else:
-                logger.debug(f"调用函数 {func_name}")
+            if logger.isEnabledFor(logging.DEBUG):
+                if log_args:
+                    logger.debug(
+                        "调用函数 %s 参数=args%s kwargs=%s",
+                        func_name,
+                        safe_repr(args),
+                        safe_repr(kwargs),
+                    )
+                else:
+                    logger.debug("调用函数 %s", func_name)
             
             try:
                 result = func(*args, **kwargs)
                 elapsed = time.time() - start_time
                 
-                if log_result:
-                    logger.debug(f"函数 {func_name} 完成 耗时={elapsed:.3f}s 结果={result}")
-                else:
-                    logger.debug(f"函数 {func_name} 完成 耗时={elapsed:.3f}s")
+                if logger.isEnabledFor(logging.DEBUG):
+                    if log_result:
+                        logger.debug(
+                            "函数 %s 完成 耗时=%.3fs 结果=%s",
+                            func_name,
+                            elapsed,
+                            safe_repr(result),
+                        )
+                    else:
+                        logger.debug("函数 %s 完成 耗时=%.3fs", func_name, elapsed)
                 
                 return result
                 
             except Exception as e:
                 elapsed = time.time() - start_time
                 logger.error(
-                    f"函数 {func_name} 异常 耗时={elapsed:.3f}s 错误={str(e)}",
+                    "函数 %s 异常 耗时=%.3fs 错误=%s",
+                    func_name,
+                    elapsed,
+                    safe_repr(e),
                     exc_info=True
                 )
                 raise
@@ -124,7 +155,9 @@ def log_exception(logger_name: str = None):
                 return await func(*args, **kwargs)
             except Exception as e:
                 logger.error(
-                    f"函数 {func.__name__} 发生异常: {str(e)}",
+                    "函数 %s 发生异常: %s",
+                    func.__name__,
+                    safe_repr(e),
                     exc_info=True
                 )
                 raise
@@ -135,7 +168,9 @@ def log_exception(logger_name: str = None):
                 return func(*args, **kwargs)
             except Exception as e:
                 logger.error(
-                    f"函数 {func.__name__} 发生异常: {str(e)}",
+                    "函数 %s 发生异常: %s",
+                    func.__name__,
+                    safe_repr(e),
                     exc_info=True
                 )
                 raise

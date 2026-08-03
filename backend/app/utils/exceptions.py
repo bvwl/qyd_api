@@ -4,7 +4,7 @@ from fastapi.exceptions import HTTPException, RequestValidationError
 from fastapi.responses import JSONResponse
 from .logs import getLogger
 
-logger = getLogger(os.environ.get('APP_NAME'))
+logger = getLogger(os.environ.get('APP_NAME') or 'app')
 
 
 def global_http_exception_handler(request: Request, exc):
