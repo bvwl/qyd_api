@@ -161,7 +161,7 @@ const ServerList = () => {
 
     Modal.confirm({
       title: '批量删除确认',
-      content: `确定要删除选中的 ${selectedRowKeys.length} 个服务器吗？`,
+      content: `确定要删除选中的 ${selectedRowKeys.length} 个代理吗？关联的项目账号和邮箱将保留，仅解除代理关联。`,
       okText: '确定',
       cancelText: '取消',
       onOk: async () => {
@@ -408,7 +408,8 @@ const ServerList = () => {
                 编辑
               </Button>
               <Popconfirm
-                title="确定删除该服务器吗？"
+                title="确定删除该代理吗？"
+                description="关联的项目账号和邮箱将保留，仅解除代理关联。"
                 onConfirm={() => handleDelete(record.id)}
                 okText="确定"
                 cancelText="取消"

@@ -32,6 +32,7 @@ class EmailInfo(BaseModel):
         related_name="email_infos",
         description='代理信息',
         null=True,
+        on_delete=fields.SET_NULL,
     )
 
     class Meta:

@@ -119,8 +119,13 @@ class ProjectAccount(BaseModel):
     balance_history = fields.JSONField(null=True, description="历史余额（可根据需要拆分为独立流水表）")
 
     project = fields.ForeignKeyField("models.ProjectInfo", related_name="accounts", description="所属项目")
-    server = fields.ForeignKeyField("models.ServerInfo", related_name="project_accounts", null=True,
-                                    description="关联服务器信息")
+    server = fields.ForeignKeyField(
+        "models.ServerInfo",
+        related_name="project_accounts",
+        null=True,
+        on_delete=fields.SET_NULL,
+        description="关联服务器信息",
+    )
 
     class Meta:
         table = "project_account"

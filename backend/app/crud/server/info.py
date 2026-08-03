@@ -224,7 +224,18 @@ class CRUD:
         res = await ServerInfo.get_or_none(id=id)
         if not res:
             raise HTTPException(status_code=404, detail='数据不存在')
-        await res.delete()
+
+        # 删除代理节点时只解除关联，保留项目账号和邮箱业务数据。
+        # 显式置空可兼容尚未执行 SET NULL 外键迁移的部署环境。
+        from tortoise.transactions import in_transaction
+        from app.models.mail import EmailInfo
+        from app.models.project import ProjectAccount
+
+        async with in_transaction(connection_name="default") as connection:
+            await ProjectAccount.filter(server_id=id).using_db(connection).update(server_id=None)
+            await EmailInfo.filter(server_id=id).using_db(connection).update(server_id=None)
+            await ServerInfo.filter(id=id).using_db(connection).delete()
+
         return BaseOut(message='成功', count=1)
 
     # 创建或更新
