@@ -64,6 +64,7 @@ async def test_api_token_authentication_returns_user_and_roles(monkeypatch):
     result = await deps.get_current_user_or_token(
         request=request,
         credentials=None,
+        authorization=None,
         api_token="api-token",
     )
 
@@ -85,6 +86,7 @@ async def test_revoked_api_token_is_rejected(monkeypatch):
         await deps.get_current_user_or_token(
             request=make_request(),
             credentials=None,
+            authorization=None,
             api_token="revoked-token",
         )
 
@@ -105,6 +107,7 @@ async def test_inactive_api_token_user_is_rejected(monkeypatch):
         await deps.get_current_user_or_token(
             request=make_request(),
             credentials=None,
+            authorization=None,
             api_token="api-token",
         )
 
@@ -127,9 +130,63 @@ async def test_jwt_authentication_still_works(monkeypatch):
         credentials=HTTPAuthorizationCredentials(
             scheme="Bearer", credentials="jwt-token"
         ),
+        authorization="Bearer jwt-token",
         api_token=None,
     )
 
     assert result["user_id"] == payload["id"]
     assert result["roles"] == ["ADMIN"]
     assert request.state.auth_type == "jwt"
+
+
+@pytest.mark.asyncio
+async def test_api_token_in_bearer_authorization_falls_back_to_database(monkeypatch):
+    user = FakeUser()
+    token_obj = SimpleNamespace(user=user)
+
+    monkeypatch.setattr(
+        deps.JwtToken,
+        "verify_token",
+        lambda token: (_ for _ in ()).throw(ValueError("not a JWT")),
+    )
+    monkeypatch.setattr(
+        deps.UserToken,
+        "filter",
+        lambda **kwargs: FakeTokenQuery(token_obj),
+    )
+    request = make_request()
+
+    result = await deps.get_current_user_or_token(
+        request=request,
+        credentials=HTTPAuthorizationCredentials(
+            scheme="Bearer", credentials="stored-api-token"
+        ),
+        authorization="Bearer stored-api-token",
+        api_token=None,
+    )
+
+    assert result["user_id"] == user.id
+    assert request.state.auth_type == "api_token"
+
+
+@pytest.mark.asyncio
+async def test_api_token_can_be_direct_authorization_value(monkeypatch):
+    user = FakeUser()
+    token_obj = SimpleNamespace(user=user)
+    captured = {}
+
+    def fake_filter(**kwargs):
+        captured.update(kwargs)
+        return FakeTokenQuery(token_obj)
+
+    monkeypatch.setattr(deps.UserToken, "filter", fake_filter)
+
+    result = await deps.get_current_user_or_token(
+        request=make_request(),
+        credentials=None,
+        authorization="stored-api-token",
+        api_token=None,
+    )
+
+    assert captured == {"token": "stored-api-token", "status": Status.OK}
+    assert result["user_id"] == user.id

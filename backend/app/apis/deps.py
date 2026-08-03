@@ -24,15 +24,34 @@ def _set_request_user(request: Request, user_id: str, auth_type: str) -> None:
     request.state.auth_type = auth_type
 
 
+def _get_authorization_token(authorization: Optional[str]) -> Optional[str]:
+    """兼容 Authorization: Bearer/Token/ApiKey xxx 以及直接放 Token。"""
+    if not authorization:
+        return None
+
+    value = authorization.strip()
+    if not value:
+        return None
+
+    scheme_and_token = value.split(None, 1)
+    if len(scheme_and_token) == 1:
+        return scheme_and_token[0]
+    if scheme_and_token[0].lower() in {"bearer", "token", "apikey", "api-key"}:
+        return scheme_and_token[1].strip() or None
+    return None
+
+
 async def get_current_user_or_token(
     request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
     api_token: Optional[str] = Header(None, alias="API-TOKEN"),
 ):
     """
     同时支持：
     1. JWT Token（Authorization: Bearer xxx）
-    2. 用户生成的 API Token（API-TOKEN: xxx）
+    2. 用户生成的 API Token（Authorization: Bearer xxx）
+    3. 兼容 API-TOKEN: xxx 和 Authorization: xxx
 
     API Token 必须仍存在于数据库、状态有效，且所属用户未被停用。
     """
@@ -55,12 +74,24 @@ async def get_current_user_or_token(
             # 同时提供 API-TOKEN 时允许回退；否则在下方统一返回 401。
             pass
 
+    token_candidates = []
     if api_token and api_token.strip():
+        token_candidates.append(api_token.strip())
+    authorization_token = _get_authorization_token(authorization)
+    if authorization_token and authorization_token not in token_candidates:
+        token_candidates.append(authorization_token)
+
+    token_obj = None
+    for token_candidate in token_candidates:
         token_obj = await (
-            UserToken.filter(token=api_token.strip(), status=Status.OK)
+            UserToken.filter(token=token_candidate, status=Status.OK)
             .select_related("user")
             .first()
         )
+        if token_obj:
+            break
+
+    if token_candidates:
         if not token_obj:
             raise HTTPException(status_code=401, detail="Invalid API Token")
 
@@ -78,7 +109,7 @@ async def get_current_user_or_token(
         _set_request_user(request, user_info["user_id"], "api_token")
         return user_info
 
-    if credentials:
+    if credentials or authorization:
         raise HTTPException(status_code=401, detail="Invalid token")
     raise HTTPException(status_code=401, detail="Authentication required")
 
