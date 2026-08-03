@@ -4,7 +4,7 @@ import { Table, Button, Modal, Form, Input, InputNumber, App, Space, Popconfirm,
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, HistoryOutlined, CopyOutlined, BarChartOutlined, DownloadOutlined } from '@ant-design/icons'
 import type { ProjectAccount, Project } from '@/types'
 import { AccountType, Status } from '@/types'
-import { getProjectAccountList, createProjectAccount, updateProjectAccount, deleteProjectAccount, getProjectList, getProjectAccountStats, exportAllProjectStats, exportTodayProjectStats } from '@/api/project'
+import { getProjectAccountList, createProjectAccount, updateProjectAccount, deleteProjectAccount, getAvailableProjectsForStats, getProjectAccountStats, exportAllProjectStats, exportTodayProjectStats } from '@/api/project'
 import { useUserStore } from '@/store/useUserStore'
 import { copyToClipboard } from '@/utils/format'
 import { Dayjs } from 'dayjs'
@@ -26,7 +26,8 @@ const ProjectAccountList = () => {
   const [statsModalVisible, setStatsModalVisible] = useState(false)
   const [currentHistoryAccount, setCurrentHistoryAccount] = useState<ProjectAccount | null>(null)
   const [editingAccount, setEditingAccount] = useState<ProjectAccount | null>(null)
-  const [projectList, setProjectList] = useState<Project[]>([])
+  const [projectList, setProjectList] = useState<Array<Pick<Project, 'id' | 'name'>>>([])
+  const [projectListLoading, setProjectListLoading] = useState(false)
   const [searchProjectId, setSearchProjectId] = useState<string>()
   const [searchAccount, setSearchAccount] = useState('')
   const [searchAccountType, setSearchAccountType] = useState<number>()
@@ -118,17 +119,19 @@ const ProjectAccountList = () => {
   }
 
   const fetchProjectList = async () => {
+    setProjectListLoading(true)
     try {
-      const res = await getProjectList({
-        page: 1,
-        limit: 100,
-      })
-      setProjectList(res.items || [])
+      // 使用不分页的可用项目接口，避免只加载前 100 个项目。
+      // 该接口会根据当前用户权限返回全部可关联项目。
+      const res = await getAvailableProjectsForStats()
+      setProjectList(res.data || [])
       return true  // 返回成功状态
     } catch (error) {
       setProjectList([])
       message.error('加载项目列表失败')
       return false  // 返回失败状态
+    } finally {
+      setProjectListLoading(false)
     }
   }
 
@@ -542,6 +545,10 @@ const ProjectAccountList = () => {
               placeholder="选择项目（必选）"
               value={searchProjectId}
               onChange={setSearchProjectId}
+              onOpenChange={(open) => {
+                if (open) void fetchProjectList()
+              }}
+              loading={projectListLoading}
               style={{ width: 200 }}
               allowClear
               showSearch
@@ -744,6 +751,10 @@ const ProjectAccountList = () => {
           >
             <Select
               placeholder="请选择项目"
+              onOpenChange={(open) => {
+                if (open) void fetchProjectList()
+              }}
+              loading={projectListLoading}
               showSearch
               filterOption={(input, option) =>
                 (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
