@@ -82,6 +82,8 @@ class XuiInbound(BaseModel):
         "models.ServerAccount",
         related_name="xui_inbounds",
         through="xuiinbound_accounts",
+        forward_key="xuiinbound_id",
+        backward_key="serveraccount_id",
         description='关联的服务器账号'
     )
 

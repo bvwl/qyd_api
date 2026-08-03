@@ -88,6 +88,10 @@ class LoggingMiddleware:
     @staticmethod
     def _get_user_id(request: Request) -> str:
         """仅在确实要写日志时解析 token，避免每个成功请求重复做 JWT 校验。"""
+        authenticated_user_id = getattr(request.state, "user_id", None)
+        if authenticated_user_id:
+            return str(authenticated_user_id)[:128]
+
         try:
             auth_header = request.headers.get("Authorization", "")
             if auth_header.startswith("Bearer "):
